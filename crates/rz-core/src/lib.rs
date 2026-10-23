@@ -68,6 +68,29 @@ pub trait ArchiveReader: Send {
     }
     /// Opens one entry for reading. The returned reader borrows the archive.
     fn open<'a>(&'a mut self, entry: &Entry) -> Result<Box<dyn Read + 'a>>;
+
+    /// Visits every entry with its data stream (empty for directories and links).
+    ///
+    /// This is the fast path for bulk work: sequential formats such as tar and
+    /// solid 7z decode the archive once instead of once per entry. The visitor
+    /// may leave a stream partly unread; the implementation skips the rest.
+    /// Entries are not guaranteed to arrive in archive order.
+    fn for_each(
+        &mut self,
+        visit: &mut dyn FnMut(&Entry, &mut dyn Read) -> Result<()>,
+    ) -> Result<()> {
+        for entry in self.entries()? {
+            let mut data = self.open(&entry)?;
+            visit(&entry, &mut data)?;
+        }
+        Ok(())
+    }
+
+    /// Opens an independent reader on the same archive, so several threads can
+    /// extract at once. `None` for formats that cannot be read in parallel.
+    fn reopen(&self) -> Option<Result<Box<dyn ArchiveReader>>> {
+        None
+    }
 }
 
 /// Metadata for an entry about to be written.
@@ -81,10 +104,27 @@ pub struct NewEntry {
     pub modified: Option<i64>,
 }
 
+/// A file to be added: its metadata and a readable, thread-movable data stream.
+pub type FileSource<'a> = (NewEntry, Box<dyn Read + Send + 'a>);
+
 pub trait ArchiveWriter: Send {
     fn add_dir(&mut self, entry: &NewEntry) -> Result<()>;
     /// Copies `src` into the archive as one file entry.
     fn add_file(&mut self, entry: &NewEntry, src: &mut dyn Read) -> Result<()>;
+    /// Adds many files at once, in iterator order.
+    ///
+    /// Backends override this to do better than one-by-one: 7z packs the files
+    /// into one solid block, zip compresses several files on different threads.
+    fn add_files<'a>(
+        &mut self,
+        files: &mut dyn Iterator<Item = Result<FileSource<'a>>>,
+    ) -> Result<()> {
+        for item in files {
+            let (entry, mut src) = item?;
+            self.add_file(&entry, &mut src)?;
+        }
+        Ok(())
+    }
     /// Writes trailing structures and flushes everything to disk.
     fn finish(self: Box<Self>) -> Result<()>;
 }
@@ -94,6 +134,10 @@ pub struct CreateOptions {
     /// 0 stores without compression, 9 is the smallest output.
     pub level: u32,
     pub password: Option<String>,
+    /// Worker threads; 0 means one per available CPU.
+    pub threads: usize,
+    /// Upper bound for data held in memory by parallel workers.
+    pub memory_budget: u64,
 }
 
 impl Default for CreateOptions {
@@ -101,7 +145,18 @@ impl Default for CreateOptions {
         Self {
             level: 6,
             password: None,
+            threads: 0,
+            memory_budget: 256 << 20,
         }
+    }
+}
+
+/// Resolves a user-facing thread setting (`0` = automatic) to a real count.
+pub fn resolve_threads(requested: usize) -> usize {
+    if requested > 0 {
+        requested
+    } else {
+        std::thread::available_parallelism().map_or(1, |n| n.get())
     }
 }
 

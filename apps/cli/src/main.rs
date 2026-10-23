@@ -3,16 +3,18 @@
 use rz_core::{CancelToken, CreateOptions, EntryKind, Error, NoProgress, Result};
 use rz_engine::{compress, extract, ExtractOptions, Overwrite};
 use rz_formats::OutputFormat;
-use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 const USAGE: &str = "RustZIP\n\n\
 Usage:\n  \
-rz a <archive> <path>... [-l 0-9] [-p password]   create (.zip .tar .tar.gz .tgz)\n  \
-rz l <archive>                                    list contents\n  \
-rz x <archive> [-o dir] [-p password] [-y|-n]     extract (-y replace, -n skip existing)\n  \
-rz t <archive> [-p password]                      test integrity\n";
+rz a <archive> <path>... [-l 0-9] [-p password] [-t threads]   create\n  \
+rz l <archive> [-p password]                                   list contents\n  \
+rz x <archive> [-o dir] [-p password] [-t threads] [-y|-n]     extract (-y replace, -n skip existing)\n  \
+rz t <archive> [-p password]                                   test integrity\n\n\
+Create formats: .zip .7z .tar .tar.gz .tar.xz .tar.zst .tar.bz2 (and .tgz .txz .tzst .tbz2)\n\
+                .gz .xz .zst .bz2 (one file)\n\
+Read formats:   all of the above\n";
 
 #[derive(Default)]
 struct Args {
@@ -20,6 +22,7 @@ struct Args {
     out: Option<PathBuf>,
     password: Option<String>,
     level: Option<u32>,
+    threads: Option<usize>,
     overwrite: Option<Overwrite>,
 }
 
@@ -42,6 +45,15 @@ fn parse(args: &[String]) -> std::result::Result<Args, String> {
                         .ok()
                         .filter(|l| *l <= 9)
                         .ok_or_else(|| format!("-l expects 0-9, got {v}"))?,
+                );
+            }
+            "-t" => {
+                let v = value("-t")?;
+                a.threads = Some(
+                    v.parse::<usize>()
+                        .ok()
+                        .filter(|t| (1..=256).contains(t))
+                        .ok_or_else(|| format!("-t expects 1-256, got {v}"))?,
                 );
             }
             "-y" => a.overwrite = Some(Overwrite::Replace),
@@ -79,7 +91,7 @@ fn run(args: &[String]) -> std::result::Result<(), String> {
     };
     let result = match cmd.as_str() {
         "a" => add(&archive, &a),
-        "l" => list(&archive),
+        "l" => list(&archive, &a),
         "x" => extract_cmd(&archive, &a),
         "t" => test(&archive, &a),
         other => return Err(format!("unknown command {other}\n\n{USAGE}")),
@@ -93,11 +105,15 @@ fn add(archive: &Path, a: &Args) -> Result<()> {
         return Err(Error::Unsupported("nothing to add".into()));
     }
     let format = OutputFormat::from_path(archive).ok_or_else(|| {
-        Error::Unsupported("cannot create this format; use .zip, .tar, .tar.gz or .tgz".into())
+        Error::Unsupported(
+            "cannot create this format; use .zip, .7z, .tar.gz, .tar.xz, .tar.zst, .tar.bz2, .gz, .xz, .zst or .bz2".into(),
+        )
     })?;
     let opts = CreateOptions {
         level: a.level.unwrap_or(6),
         password: a.password.clone(),
+        threads: a.threads.unwrap_or(0),
+        ..CreateOptions::default()
     };
     let rep = compress(
         &sources,
@@ -118,8 +134,11 @@ fn add(archive: &Path, a: &Args) -> Result<()> {
     Ok(())
 }
 
-fn list(path: &Path) -> Result<()> {
+fn list(path: &Path, a: &Args) -> Result<()> {
     let mut r = rz_formats::open(path)?;
+    if let Some(pw) = &a.password {
+        r.set_password(pw)?;
+    }
     let entries = r.entries()?;
     let mut total = 0u64;
     println!("{:>12}  Name", "Size");
@@ -148,6 +167,7 @@ fn extract_cmd(archive: &Path, a: &Args) -> Result<()> {
     let opts = ExtractOptions {
         overwrite: a.overwrite.unwrap_or(Overwrite::Error),
         password: a.password.clone(),
+        threads: a.threads.unwrap_or(0),
         ..ExtractOptions::default()
     };
     let rep = extract(&mut *r, &dest, &opts, &CancelToken::new(), &mut NoProgress)?;
@@ -158,27 +178,30 @@ fn extract_cmd(archive: &Path, a: &Args) -> Result<()> {
     Ok(())
 }
 
+/// Reads every file through the decoder and checks its checksum, writing nothing.
 fn test(path: &Path, a: &Args) -> Result<()> {
     let mut r = rz_formats::open(path)?;
     if let Some(pw) = &a.password {
         r.set_password(pw)?;
     }
-    let entries = r.entries()?;
     let mut buf = vec![0u8; 256 * 1024];
-    let mut bytes = 0u64;
-    for e in entries.iter().filter(|e| e.kind == EntryKind::File) {
-        let mut src = r.open(e)?;
+    let (mut entries, mut bytes) = (0u64, 0u64);
+    r.for_each(&mut |e, data| {
+        entries += 1;
+        if e.kind != EntryKind::File {
+            return Ok(());
+        }
         loop {
-            let n = src
+            let n = data
                 .read(&mut buf)
                 .map_err(|err| Error::Corrupt(format!("{}: {err}", e.path)))?;
             if n == 0 {
-                break;
+                return Ok(());
             }
             bytes += n as u64;
         }
-    }
-    println!("OK: {} entries, {} bytes verified", entries.len(), bytes);
+    })?;
+    println!("OK: {entries} entries, {bytes} bytes verified");
     Ok(())
 }
 
@@ -192,12 +215,15 @@ mod tests {
 
     #[test]
     fn parses_flags_and_positionals() {
-        let a = parse(&s(&["x.zip", "-o", "out", "-p", "pw", "-l", "9", "-y"])).ok();
-        let a = a.unwrap_or_default();
+        let a = parse(&s(&[
+            "x.zip", "-o", "out", "-p", "pw", "-l", "9", "-t", "4", "-y",
+        ]))
+        .unwrap_or_default();
         assert_eq!(a.positional, vec!["x.zip"]);
         assert_eq!(a.out, Some(PathBuf::from("out")));
         assert_eq!(a.password.as_deref(), Some("pw"));
         assert_eq!(a.level, Some(9));
+        assert_eq!(a.threads, Some(4));
         assert_eq!(a.overwrite, Some(Overwrite::Replace));
     }
 
@@ -205,6 +231,7 @@ mod tests {
     fn rejects_bad_input() {
         assert!(parse(&s(&["-l", "10"])).is_err());
         assert!(parse(&s(&["-l", "x"])).is_err());
+        assert!(parse(&s(&["-t", "0"])).is_err());
         assert!(parse(&s(&["-o"])).is_err());
         assert!(parse(&s(&["--nope"])).is_err());
     }

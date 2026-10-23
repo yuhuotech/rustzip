@@ -39,7 +39,9 @@ fn no_args_prints_usage_and_succeeds() {
 
 #[test]
 fn add_list_test_extract_round_trip_for_every_format() {
-    for ext in ["zip", "tar", "tar.gz", "tgz"] {
+    for ext in [
+        "zip", "7z", "tar", "tar.gz", "tgz", "tar.xz", "tar.zst", "tar.bz2",
+    ] {
         let tmp = tempfile::tempdir().unwrap();
         sample(tmp.path());
         let archive = tmp.path().join(format!("out.{ext}"));
@@ -151,6 +153,102 @@ fn extract_blocks_path_traversal() {
 }
 
 #[test]
+fn single_file_formats_round_trip_through_the_cli() {
+    for ext in ["gz", "xz", "zst", "bz2"] {
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("log.txt");
+        fs::write(&file, "one line\n".repeat(5000)).unwrap();
+        let archive = tmp.path().join(format!("log.txt.{ext}"));
+        let o = rz(&["a", p(&archive), p(&file)]);
+        assert!(o.status.success(), "{ext}: {:?}", s(&o));
+        let o = rz(&["t", p(&archive)]);
+        assert!(o.status.success(), "{ext}: {:?}", s(&o));
+        let out = tmp.path().join("out");
+        let o = rz(&["x", p(&archive), "-o", p(&out)]);
+        assert!(o.status.success(), "{ext}: {:?}", s(&o));
+        assert_eq!(
+            fs::read_to_string(out.join("log.txt")).unwrap(),
+            "one line\n".repeat(5000),
+            "{ext}"
+        );
+    }
+}
+
+#[test]
+fn encrypted_7z_lists_only_with_the_password() {
+    let tmp = tempfile::tempdir().unwrap();
+    sample(tmp.path());
+    let archive = tmp.path().join("secret.7z");
+    let o = rz(&[
+        "a",
+        p(&archive),
+        p(&tmp.path().join("proj")),
+        "-p",
+        "pw",
+        "-t",
+        "2",
+    ]);
+    assert!(o.status.success(), "{:?}", s(&o));
+
+    let o = rz(&["l", p(&archive)]);
+    assert!(!o.status.success());
+    assert!(s(&o).1.to_lowercase().contains("password"));
+
+    let o = rz(&["l", p(&archive), "-p", "pw"]);
+    assert!(o.status.success(), "{:?}", s(&o));
+    assert!(s(&o).0.contains("proj/readme.txt"));
+
+    let o = rz(&["t", p(&archive), "-p", "pw"]);
+    assert!(o.status.success(), "{:?}", s(&o));
+}
+
+#[test]
+fn thread_count_does_not_change_the_result() {
+    let tmp = tempfile::tempdir().unwrap();
+    sample(tmp.path());
+    for threads in ["1", "4"] {
+        let archive = tmp.path().join(format!("t{threads}.zip"));
+        let out = tmp.path().join(format!("o{threads}"));
+        let src = tmp.path().join("proj");
+        assert!(rz(&["a", p(&archive), p(&src), "-t", threads])
+            .status
+            .success());
+        assert!(rz(&["x", p(&archive), "-o", p(&out), "-t", threads])
+            .status
+            .success());
+        assert_eq!(
+            fs::read_to_string(out.join("proj/docs/说明.md")).unwrap(),
+            "# 中文文件名"
+        );
+    }
+    assert!(!rz(&["a", "x.zip", "y", "-t", "0"]).status.success());
+}
+
+#[test]
+fn single_file_formats_reject_folders_and_passwords_clearly() {
+    let tmp = tempfile::tempdir().unwrap();
+    sample(tmp.path());
+    let o = rz(&[
+        "a",
+        p(&tmp.path().join("x.gz")),
+        p(&tmp.path().join("proj")),
+    ]);
+    assert!(!o.status.success());
+    assert!(s(&o).1.contains("one file"));
+    assert!(!tmp.path().join("x.gz").exists());
+
+    let o = rz(&[
+        "a",
+        p(&tmp.path().join("y.tar.gz")),
+        p(&tmp.path().join("proj")),
+        "-p",
+        "pw",
+    ]);
+    assert!(!o.status.success());
+    assert!(s(&o).1.contains("cannot be encrypted"));
+}
+
+#[test]
 fn reports_clear_errors() {
     let tmp = tempfile::tempdir().unwrap();
     let junk = tmp.path().join("junk.zip");
@@ -162,7 +260,8 @@ fn reports_clear_errors() {
     let o = rz(&["l", p(&tmp.path().join("missing.zip"))]);
     assert!(!o.status.success());
 
-    let o = rz(&["a", p(&tmp.path().join("x.7z")), p(&junk)]);
+    // RAR is read-only by design.
+    let o = rz(&["a", p(&tmp.path().join("x.rar")), p(&junk)]);
     assert!(!o.status.success());
     assert!(s(&o).1.contains("cannot create"));
 

@@ -1,12 +1,10 @@
 use crate::timeutil::{civil_to_unix, unix_to_civil};
-use rz_core::{
-    ArchiveReader, ArchiveWriter, Caps, CreateOptions, Entry, EntryKind, Error, NewEntry, Result,
-};
+use rz_core::{ArchiveReader, Caps, Entry, EntryKind, Error, Result};
 use std::fs::File;
-use std::io::{BufWriter, Read};
+use std::io::Read;
+use std::path::{Path, PathBuf};
 use zip::result::ZipError;
-use zip::write::SimpleFileOptions;
-use zip::{AesMode, CompressionMethod, DateTime, ZipArchive, ZipWriter};
+use zip::{DateTime, ZipArchive};
 
 pub(crate) fn map_err(e: ZipError) -> Error {
     match e {
@@ -20,14 +18,16 @@ pub(crate) fn map_err(e: ZipError) -> Error {
 
 pub struct ZipReader {
     archive: ZipArchive<File>,
+    path: PathBuf,
     password: Option<Vec<u8>>,
 }
 
 impl ZipReader {
-    pub fn new(file: File) -> Result<Self> {
+    pub fn new(file: File, path: &Path) -> Result<Self> {
         let archive = ZipArchive::new(file).map_err(map_err)?;
         Ok(Self {
             archive,
+            path: path.to_path_buf(),
             password: None,
         })
     }
@@ -44,7 +44,7 @@ fn dos_to_unix(dt: DateTime) -> i64 {
     )
 }
 
-fn unix_to_dos(t: i64) -> Option<DateTime> {
+pub(crate) fn unix_to_dos(t: i64) -> Option<DateTime> {
     let (y, mo, d, h, mi, s) = unix_to_civil(t);
     // DOS time only covers 1980..=2107 with two-second resolution.
     let y = u16::try_from(y)
@@ -97,6 +97,15 @@ impl ArchiveReader for ZipReader {
         Ok(())
     }
 
+    fn reopen(&self) -> Option<Result<Box<dyn ArchiveReader>>> {
+        let open = || -> Result<Box<dyn ArchiveReader>> {
+            let mut r = ZipReader::new(File::open(&self.path)?, &self.path)?;
+            r.password.clone_from(&self.password);
+            Ok(Box::new(r))
+        };
+        Some(open())
+    }
+
     fn open<'a>(&'a mut self, entry: &Entry) -> Result<Box<dyn Read + 'a>> {
         let f = match (&self.password, entry.encrypted) {
             (Some(pw), true) => self.archive.by_index_decrypt(entry.index, pw),
@@ -104,69 +113,6 @@ impl ArchiveReader for ZipReader {
         }
         .map_err(map_err)?;
         Ok(Box::new(f))
-    }
-}
-
-pub struct ZipOut {
-    writer: ZipWriter<BufWriter<File>>,
-    level: u32,
-    password: Option<String>,
-}
-
-impl ZipOut {
-    pub fn new(file: File, opts: &CreateOptions) -> Self {
-        Self {
-            writer: ZipWriter::new(BufWriter::with_capacity(256 * 1024, file)),
-            level: opts.level.min(9),
-            password: opts.password.clone().filter(|p| !p.is_empty()),
-        }
-    }
-
-    fn base_options(&self, e: &NewEntry) -> SimpleFileOptions {
-        let mut o = SimpleFileOptions::default().large_file(e.size >= u64::from(u32::MAX));
-        o = if self.level == 0 {
-            o.compression_method(CompressionMethod::Stored)
-        } else {
-            o.compression_method(CompressionMethod::Deflated)
-                .compression_level(Some(i64::from(self.level)))
-        };
-        if let Some(mode) = e.unix_mode {
-            o = o.unix_permissions(mode & 0o777);
-        }
-        if let Some(dt) = e.modified.and_then(unix_to_dos) {
-            o = o.last_modified_time(dt);
-        }
-        o
-    }
-}
-
-impl ArchiveWriter for ZipOut {
-    fn add_dir(&mut self, e: &NewEntry) -> Result<()> {
-        let opts = self.base_options(e);
-        self.writer
-            .add_directory(e.name.as_str(), opts)
-            .map_err(map_err)
-    }
-
-    fn add_file(&mut self, e: &NewEntry, src: &mut dyn Read) -> Result<()> {
-        let opts = self.base_options(e);
-        match &self.password {
-            Some(pw) => self.writer.start_file(
-                e.name.as_str(),
-                opts.with_aes_encryption(AesMode::Aes256, pw),
-            ),
-            None => self.writer.start_file(e.name.as_str(), opts),
-        }
-        .map_err(map_err)?;
-        std::io::copy(src, &mut self.writer)?;
-        Ok(())
-    }
-
-    fn finish(self: Box<Self>) -> Result<()> {
-        let mut inner = self.writer.finish().map_err(map_err)?;
-        std::io::Write::flush(&mut inner)?;
-        inner.get_ref().sync_all()?;
-        Ok(())
     }
 }
 

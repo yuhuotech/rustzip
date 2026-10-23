@@ -89,11 +89,39 @@ fn compression_bomb_is_stopped_by_ratio_limit() {
     let out = tmp.path().join("out");
     let opts = ExtractOptions {
         max_ratio: 50,
+        ratio_check_above: 0,
         ..ExtractOptions::default()
     };
     let res = common::unpack(&archive, &out, &opts);
     assert!(matches!(res, Err(Error::LimitExceeded(_))), "{res:?}");
     assert!(!out.join("zeros.bin").exists());
+}
+
+#[test]
+fn small_highly_compressible_entries_are_allowed_by_default() {
+    let tmp = tempfile::tempdir().unwrap();
+    let archive = tmp.path().join("zeros.zip");
+    zip_with(
+        &archive,
+        &[("zeros.bin", &vec![0u8; 8 * 1024 * 1024])],
+        SimpleFileOptions::default().compression_method(CompressionMethod::Deflated),
+    );
+    let out = tmp.path().join("out");
+    common::unpack(&archive, &out, &ExtractOptions::default()).unwrap();
+    assert_eq!(fs::metadata(out.join("zeros.bin")).unwrap().len(), 8 << 20);
+}
+
+#[test]
+fn entry_larger_than_its_header_claims_is_cut_off() {
+    // A stream that yields more bytes than the declared size must not be written in full.
+    let tmp = tempfile::tempdir().unwrap();
+    let archive = tmp.path().join("single.gz");
+    let big = tmp.path().join("big.txt");
+    fs::write(&big, "x".repeat(100_000)).unwrap();
+    pack(&big, &archive, &CreateOptions::default()).unwrap();
+    let mut r = rz_formats::open(&archive).unwrap();
+    let entries = r.entries().unwrap();
+    assert_eq!(entries[0].size, 100_000);
 }
 
 #[test]
@@ -224,12 +252,24 @@ fn damaged_and_foreign_files_give_clear_errors() {
     fs::write(&empty, b"").unwrap();
     assert!(rz_formats::open(&empty).is_err());
 
+    // A 7z signature with nothing behind it is a truncated archive.
     let seven = tmp.path().join("a.7z");
     fs::write(&seven, [0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c, 0, 4]).unwrap();
     assert!(matches!(
         rz_formats::open(&seven).err(),
-        Some(Error::Unsupported(_))
+        Some(Error::Corrupt(_) | Error::Io(_))
     ));
+
+    // Without the `rar` feature the format is recognised but reported as unsupported.
+    #[cfg(not(feature = "rar"))]
+    {
+        let rar = tmp.path().join("a.rar");
+        fs::write(&rar, b"Rar!\x1a\x07\x01\x00rest").unwrap();
+        assert!(matches!(
+            rz_formats::open(&rar).err(),
+            Some(Error::Unsupported(_))
+        ));
+    }
 
     // A real zip cut in half has no central directory.
     let src = make_tree(tmp.path());
@@ -248,9 +288,13 @@ fn mutated_archives_never_panic() {
         max_total: 64 << 20,
         ..ExtractOptions::default()
     };
-    for ext in ["zip", "tar", "tar.gz"] {
+    for ext in ["zip", "7z", "tar", "tar.gz", "tar.xz", "tar.zst", "tar.bz2"] {
         let archive = tmp.path().join(format!("m.{ext}"));
-        pack(&src, &archive, &CreateOptions::default()).unwrap();
+        let create = CreateOptions {
+            threads: 2,
+            ..CreateOptions::default()
+        };
+        pack(&src, &archive, &create).unwrap();
         let original = fs::read(&archive).unwrap();
         let mut rng = 0x1234_5678_9abc_def0_u64;
         let mut next = move || {

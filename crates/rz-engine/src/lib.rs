@@ -2,6 +2,7 @@
 
 mod compress;
 mod extract;
+mod progress;
 mod safe_path;
 
 pub use compress::{compress, CompressReport};

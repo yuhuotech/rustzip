@@ -1,35 +1,28 @@
-use flate2::read::GzDecoder;
-use flate2::write::GzEncoder;
-use flate2::Compression;
+use crate::codec::{Compression, Sink};
 use rz_core::{
     ArchiveReader, ArchiveWriter, Caps, CreateOptions, Entry, EntryKind, Error, NewEntry, Result,
 };
 use std::fs::File;
-use std::io::{BufReader, BufWriter, Read, Write};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
-/// tar is a sequential format, so each `open` rescans from the start.
-/// Good enough for single entries; bulk extraction will use one streaming pass.
+/// tar is a sequential format. `entries` and `for_each` each make one pass over
+/// the file; `open` rescans, so bulk work should go through `for_each`.
 pub struct TarReader {
     path: PathBuf,
-    gzip: bool,
+    comp: Compression,
 }
 
 impl TarReader {
-    pub fn new(path: &Path, gzip: bool) -> Self {
+    pub fn new(path: &Path, comp: Compression) -> Self {
         Self {
             path: path.to_path_buf(),
-            gzip,
+            comp,
         }
     }
 
-    fn stream(&self) -> Result<Box<dyn Read>> {
-        let file = BufReader::with_capacity(256 * 1024, File::open(&self.path)?);
-        if self.gzip {
-            Ok(Box::new(GzDecoder::new(file)))
-        } else {
-            Ok(Box::new(file))
-        }
+    fn stream(&self) -> Result<Box<dyn Read + Send>> {
+        self.comp.reader(File::open(&self.path)?)
     }
 }
 
@@ -37,12 +30,40 @@ fn corrupt(e: std::io::Error) -> Error {
     Error::Corrupt(e.to_string())
 }
 
+fn describe<R: Read>(index: usize, item: &tar::Entry<'_, R>) -> Result<Entry> {
+    let header = item.header();
+    let kind = match header.entry_type() {
+        t if t.is_dir() => EntryKind::Dir,
+        t if t.is_symlink() || t.is_hard_link() => EntryKind::Symlink,
+        t if t.is_file() || t.is_contiguous() => EntryKind::File,
+        // Devices, FIFOs and metadata records are never extracted.
+        _ => EntryKind::Symlink,
+    };
+    let path = item
+        .path()
+        .map_err(corrupt)?
+        .to_string_lossy()
+        .replace('\\', "/");
+    Ok(Entry {
+        index,
+        path,
+        kind,
+        size: item.size(),
+        packed_size: None,
+        modified: header.mtime().ok().and_then(|t| i64::try_from(t).ok()),
+        encrypted: false,
+        unix_mode: header.mode().ok(),
+    })
+}
+
 impl ArchiveReader for TarReader {
     fn format_name(&self) -> &'static str {
-        if self.gzip {
-            "tar.gz"
-        } else {
-            "tar"
+        match self.comp {
+            Compression::None => "tar",
+            Compression::Gzip => "tar.gz",
+            Compression::Xz => "tar.xz",
+            Compression::Zstd => "tar.zst",
+            Compression::Bzip2 => "tar.bz2",
         }
     }
 
@@ -58,28 +79,7 @@ impl ArchiveReader for TarReader {
         let mut archive = tar::Archive::new(self.stream()?);
         let mut out = Vec::new();
         for (index, item) in archive.entries().map_err(corrupt)?.enumerate() {
-            let item = item.map_err(corrupt)?;
-            let header = item.header();
-            let kind = match header.entry_type() {
-                t if t.is_dir() => EntryKind::Dir,
-                t if t.is_symlink() || t.is_hard_link() => EntryKind::Symlink,
-                _ => EntryKind::File,
-            };
-            let path = item
-                .path()
-                .map_err(corrupt)?
-                .to_string_lossy()
-                .replace('\\', "/");
-            out.push(Entry {
-                index,
-                path,
-                kind,
-                size: header.size().map_err(corrupt)?,
-                packed_size: None,
-                modified: header.mtime().ok().and_then(|t| i64::try_from(t).ok()),
-                encrypted: false,
-                unix_mode: header.mode().ok(),
-            });
+            out.push(describe(index, &item.map_err(corrupt)?)?);
         }
         Ok(out)
     }
@@ -96,26 +96,18 @@ impl ArchiveReader for TarReader {
         }
         Err(Error::Corrupt(format!("entry {} not found", entry.index)))
     }
-}
 
-enum Sink {
-    Plain(BufWriter<File>),
-    Gzip(GzEncoder<BufWriter<File>>),
-}
-
-impl Write for Sink {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        match self {
-            Sink::Plain(w) => w.write(buf),
-            Sink::Gzip(w) => w.write(buf),
+    fn for_each(
+        &mut self,
+        visit: &mut dyn FnMut(&Entry, &mut dyn Read) -> Result<()>,
+    ) -> Result<()> {
+        let mut archive = tar::Archive::new(self.stream()?);
+        for (index, item) in archive.entries().map_err(corrupt)?.enumerate() {
+            let mut item = item.map_err(corrupt)?;
+            let entry = describe(index, &item)?;
+            visit(&entry, &mut item)?;
         }
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        match self {
-            Sink::Plain(w) => w.flush(),
-            Sink::Gzip(w) => w.flush(),
-        }
+        Ok(())
     }
 }
 
@@ -124,21 +116,13 @@ pub struct TarOut {
 }
 
 impl TarOut {
-    pub fn new(file: File, gzip: bool, opts: &CreateOptions) -> Result<Self> {
+    pub fn new(file: File, comp: Compression, opts: &CreateOptions) -> Result<Self> {
         if opts.password.as_deref().is_some_and(|p| !p.is_empty()) {
             return Err(Error::Unsupported(
                 "tar archives cannot be encrypted; use zip or 7z".into(),
             ));
         }
-        let buffered = BufWriter::with_capacity(256 * 1024, file);
-        let sink = if gzip {
-            Sink::Gzip(GzEncoder::new(
-                buffered,
-                Compression::new(opts.level.min(9)),
-            ))
-        } else {
-            Sink::Plain(buffered)
-        };
+        let sink = comp.writer(file, opts.level, opts.threads)?;
         Ok(Self {
             builder: tar::Builder::new(sink),
         })
@@ -175,13 +159,6 @@ impl ArchiveWriter for TarOut {
     }
 
     fn finish(self: Box<Self>) -> Result<()> {
-        let sink = self.builder.into_inner()?;
-        let mut buffered = match sink {
-            Sink::Plain(w) => w,
-            Sink::Gzip(w) => w.finish()?,
-        };
-        buffered.flush()?;
-        buffered.get_ref().sync_all()?;
-        Ok(())
+        self.builder.into_inner()?.finish()
     }
 }

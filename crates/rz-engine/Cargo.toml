@@ -20,5 +20,8 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 name = "throughput"
 harness = false
 
+[features]
+rar = ["rz-formats/rar"]
+
 [lints]
 workspace = true

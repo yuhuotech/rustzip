@@ -26,6 +26,9 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+      # The optional RAR reader builds the unRAR C++ sources.
+      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - run: cargo test --workspace --all-features
 
   bench-smoke:
     name: bench (smoke)
@@ -37,3 +40,5 @@ jobs:
           toolchain: 1.96.0
       - uses: Swatinem/rust-cache@v2
       - run: cargo bench -p rz-engine
+        env:
+          RZ_BENCH_MB: "32"

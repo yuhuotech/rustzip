@@ -15,5 +15,9 @@ rz-engine.workspace = true
 tempfile = "3"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 
+[features]
+# Read-only RAR support; see crates/rz-formats for the license note.
+rar = ["rz-formats/rar"]
+
 [lints]
 workspace = true

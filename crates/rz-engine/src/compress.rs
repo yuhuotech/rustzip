@@ -1,5 +1,6 @@
+use crate::progress::Tracker;
 use rz_core::{
-    ArchiveWriter, CancelToken, CreateOptions, Error, NewEntry, Progress, ProgressSink, Result,
+    ArchiveWriter, CancelToken, CreateOptions, Error, FileSource, NewEntry, ProgressSink, Result,
 };
 use rz_formats::OutputFormat;
 use rz_platform::{mode_of, mtime_of, same_file};
@@ -121,25 +122,40 @@ fn walk(
     Ok(())
 }
 
-/// Wraps a source file so cancellation is noticed mid-file and progress is reported.
-struct Tracked<'a> {
-    inner: File,
-    cancel: &'a CancelToken,
-    progress: &'a mut dyn ProgressSink,
-    state: &'a mut Progress,
+/// A source file that is opened on first read and closed at its end, so a
+/// backend holding thousands of pending sources does not run out of descriptors.
+struct SourceFile<'a> {
+    path: &'a Path,
+    file: Option<File>,
+    done: bool,
+    tracker: &'a Tracker<'a>,
 }
 
-impl Read for Tracked<'_> {
+impl Read for SourceFile<'_> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        if self.cancel.is_cancelled() {
+        if self.done {
+            return Ok(0);
+        }
+        if self.tracker.is_cancelled() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::Interrupted,
                 "cancelled",
             ));
         }
-        let n = self.inner.read(buf)?;
-        self.state.bytes_done += n as u64;
-        self.progress.update(*self.state);
+        if self.file.is_none() {
+            self.file = Some(File::open(self.path)?);
+        }
+        let n = match self.file.as_mut() {
+            Some(f) => f.read(buf)?,
+            None => 0,
+        };
+        if n == 0 {
+            self.file = None;
+            self.done = true;
+            self.tracker.file_done();
+        } else {
+            self.tracker.add_bytes(n as u64);
+        }
         Ok(n)
     }
 }
@@ -153,37 +169,41 @@ fn write_all(
     progress: &mut dyn ProgressSink,
     report: &mut CompressReport,
 ) -> Result<()> {
+    let bytes_total = items.iter().map(|i| i.meta.size).sum();
+    let tracker = Tracker::new(progress, cancel, items.len() as u64, bytes_total);
     let mut writer: Box<dyn ArchiveWriter> = rz_formats::create(tmp, format, opts)?;
-    let mut state = Progress {
-        files_total: items.len() as u64,
-        bytes_total: items.iter().map(|i| i.meta.size).sum(),
-        ..Progress::default()
-    };
-    for item in items {
+
+    // Directories first: extractors then create parents before their contents.
+    for item in items.iter().filter(|i| i.is_dir) {
         cancel.check()?;
-        if item.is_dir {
-            writer.add_dir(&item.meta)?;
-            report.dirs += 1;
-        } else {
-            let mut src = Tracked {
-                inner: File::open(&item.abs)?,
-                cancel,
-                progress,
-                state: &mut state,
-            };
-            if let Err(e) = writer.add_file(&item.meta, &mut src) {
-                // A cancelled read surfaces as an I/O error from the format backend.
-                return Err(if cancel.is_cancelled() {
-                    Error::Cancelled
-                } else {
-                    e
-                });
-            }
-            report.files += 1;
-            report.bytes += item.meta.size;
-        }
-        state.files_done += 1;
-        progress.update(state);
+        writer.add_dir(&item.meta)?;
+        report.dirs += 1;
+        tracker.file_done();
     }
-    writer.finish()
+
+    let tracker_ref = &tracker;
+    let mut files = items.iter().filter(|i| !i.is_dir).map(|item| {
+        let src: Box<dyn Read + Send + '_> = Box::new(SourceFile {
+            path: &item.abs,
+            file: None,
+            done: false,
+            tracker: tracker_ref,
+        });
+        let pair: Result<FileSource<'_>> = Ok((item.meta.clone(), src));
+        pair
+    });
+    if let Err(e) = writer.add_files(&mut files) {
+        // A cancelled read surfaces as an I/O error from the format backend.
+        return Err(if cancel.is_cancelled() {
+            Error::Cancelled
+        } else {
+            e
+        });
+    }
+    cancel.check()?;
+    writer.finish()?;
+    report.files = items.iter().filter(|i| !i.is_dir).count() as u64;
+    report.bytes = bytes_total;
+    tracker.finish();
+    Ok(())
 }

@@ -104,5 +104,7 @@ pub fn assert_same_tree(expected: &Path, actual: &Path, label: &str) {
         let my = rz_platform::mtime_of(&fs::metadata(y).unwrap());
         assert_eq!(mx, my, "{label}: mtime of {x:?}");
     }
-    assert!(actual.join("empty-dir").is_dir(), "{label}: empty dir lost");
+    if expected.join("empty-dir").is_dir() {
+        assert!(actual.join("empty-dir").is_dir(), "{label}: empty dir lost");
+    }
 }
