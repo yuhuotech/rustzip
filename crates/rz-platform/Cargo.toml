@@ -1,0 +1,13 @@
+[package]
+name = "rz-platform"
+description = "RustZIP platform layer: permissions and timestamps"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true

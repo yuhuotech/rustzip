@@ -1,0 +1,484 @@
+<title>RustZIP 界面设计稿</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: 三栏主窗口(位置 / 文件列表 / 详情),顶部标签页管理多个压缩包;压缩与任务为独立面板 */
+:root {
+  --bg: #e9edf1;
+  --win: #ffffff;
+  --panel: #f5f7f9;
+  --line: #e2e7ec;
+  --fg: #121c26;
+  --fg2: #56677a;
+  --fg3: #8896a4;
+  --accent: #0d9b82;
+  --accent-ink: #ffffff;
+  --accent-soft: #dff4ee;
+  --hover: #eef2f5;
+  --warn: #c98200;
+  --danger: #d23f3f;
+  --shadow: 0 24px 60px -24px rgba(18, 28, 38, .35), 0 2px 6px rgba(18, 28, 38, .06);
+  --font: "Geist", "PingFang SC", "Microsoft YaHei UI", "Noto Sans CJK SC", system-ui, sans-serif;
+  --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --r-win: 14px;
+  --r-ctl: 8px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #080c10; --win: #11171d; --panel: #0d1318; --line: #212b34;
+    --fg: #e7eef4; --fg2: #98a8b6; --fg3: #64737f;
+    --accent: #2fd3a7; --accent-ink: #04231b; --accent-soft: #11342c; --hover: #18212a;
+    --warn: #e5a62a; --danger: #ef6b6b;
+    --shadow: 0 24px 60px -20px rgba(0, 0, 0, .7), 0 0 0 1px rgba(255, 255, 255, .02);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #080c10; --win: #11171d; --panel: #0d1318; --line: #212b34;
+  --fg: #e7eef4; --fg2: #98a8b6; --fg3: #64737f;
+  --accent: #2fd3a7; --accent-ink: #04231b; --accent-soft: #11342c; --hover: #18212a;
+  --warn: #e5a62a; --danger: #ef6b6b;
+  --shadow: 0 24px 60px -20px rgba(0, 0, 0, .7), 0 0 0 1px rgba(255, 255, 255, .02);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 14px; line-height: 1.5;
+  padding-block: 28px 56px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+button { font: inherit; color: inherit; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+svg.i { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.wrap { max-width: 1120px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+
+/* 顶部切换 */
+.bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.bar h1 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: .01em; }
+.bar h1 span { color: var(--fg3); font-weight: 400; margin-left: 8px; }
+.seg { display: inline-flex; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 3px; gap: 2px; }
+.seg button { border: 0; background: transparent; padding: 6px 14px; border-radius: 7px; color: var(--fg2); font-weight: 500; }
+.seg button[aria-pressed="true"], .seg button[aria-selected="true"] { background: var(--win); color: var(--fg); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+.tools { display: flex; gap: 10px; align-items: center; }
+.ghost { border: 1px solid var(--line); background: var(--win); border-radius: var(--r-ctl); padding: 6px 12px; color: var(--fg2); display: inline-flex; gap: 6px; align-items: center; }
+.ghost:hover { background: var(--hover); color: var(--fg); }
+
+/* 窗口 */
+.win { background: var(--win); border: 1px solid var(--line); border-radius: var(--r-win); box-shadow: var(--shadow); overflow: hidden; }
+.title { display: flex; align-items: center; gap: 14px; padding: 8px 12px 0; background: var(--panel); border-bottom: 1px solid var(--line); }
+.dots { display: flex; gap: 7px; padding-bottom: 8px; }
+.dots i { width: 11px; height: 11px; border-radius: 50%; background: var(--line); }
+.tabs { display: flex; gap: 2px; align-items: flex-end; min-width: 0; overflow: hidden; }
+.tab { display: flex; align-items: center; gap: 8px; padding: 7px 14px; border-radius: 9px 9px 0 0; color: var(--fg2); font-size: 13px; white-space: nowrap; }
+.tab.on { background: var(--win); color: var(--fg); box-shadow: 0 1px 0 var(--win), 0 0 0 1px var(--line); }
+.tab small { color: var(--fg3); }
+.tab.plus { padding: 7px 10px; color: var(--fg3); }
+
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.btn { display: inline-flex; align-items: center; gap: 7px; border: 1px solid transparent; background: transparent; border-radius: var(--r-ctl); padding: 7px 12px; font-weight: 500; color: var(--fg); }
+.btn:hover { background: var(--hover); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover { filter: brightness(1.06); }
+.btn.line { border-color: var(--line); background: var(--win); }
+.btn.danger { color: var(--danger); }
+.sep { width: 1px; height: 20px; background: var(--line); margin: 0 6px; }
+.grow { flex: 1; }
+.search { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 9px; padding: 6px 10px; color: var(--fg3); background: var(--panel); min-width: 200px; }
+.search input { border: 0; background: transparent; outline: 0; color: var(--fg); font: inherit; width: 100%; min-width: 0; }
+.search kbd { font-family: var(--mono); font-size: 11px; border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; }
+
+.main { display: grid; grid-template-columns: 196px minmax(0, 1fr) 288px; min-height: 440px; }
+.side { background: var(--panel); border-right: 1px solid var(--line); padding: 14px 10px; display: flex; flex-direction: column; gap: 18px; }
+.side h4 { margin: 0 8px 6px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--fg3); font-weight: 500; }
+.nav { display: flex; align-items: center; gap: 9px; padding: 7px 9px; border-radius: 8px; color: var(--fg2); width: 100%; border: 0; background: transparent; text-align: left; }
+.nav:hover { background: var(--hover); }
+.nav.on { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
+.nav em { margin-left: auto; font-style: normal; font-family: var(--mono); font-size: 11px; color: var(--fg3); }
+.center { display: flex; flex-direction: column; min-width: 0; }
+.crumb { display: flex; align-items: center; gap: 6px; padding: 10px 16px; color: var(--fg2); font-size: 13px; border-bottom: 1px solid var(--line); min-width: 0; overflow: hidden; white-space: nowrap; }
+.crumb b { color: var(--fg); font-weight: 600; }
+.crumb span.s { color: var(--fg3); }
+.tbl { overflow: auto; flex: 1; max-height: 420px; }
+.row { display: grid; grid-template-columns: minmax(0, 1fr) 92px 92px 150px; align-items: center; gap: 12px; padding: 0 16px; height: 38px; border-bottom: 1px solid transparent; cursor: default; }
+.row.h { position: sticky; top: 0; background: var(--win); z-index: 1; height: 34px; font-size: 12px; color: var(--fg3); border-bottom-color: var(--line); }
+.row:not(.h):hover { background: var(--hover); }
+.row[aria-selected="true"] { background: var(--accent-soft); }
+.row .n { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.row .n span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .num, .row .dt { font-family: var(--mono); font-size: 12px; color: var(--fg2); font-variant-numeric: tabular-nums; }
+.row .num { text-align: right; }
+.fi { width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; font-family: var(--mono); font-size: 8.5px; font-weight: 500; flex: none; text-transform: uppercase; }
+.fi.dir { background: var(--accent-soft); color: var(--accent); }
+.fi.img { background: color-mix(in srgb, #3b82f6 16%, transparent); color: #3b82f6; }
+.fi.doc { background: color-mix(in srgb, #f59e0b 18%, transparent); color: var(--warn); }
+.fi.code { background: color-mix(in srgb, #8b5cf6 16%, transparent); color: #8b5cf6; }
+.fi.bin { background: var(--hover); color: var(--fg2); }
+.lock { color: var(--fg3); margin-left: 2px; }
+
+.insp { border-left: 1px solid var(--line); padding: 18px; display: flex; flex-direction: column; gap: 16px; background: var(--win); min-width: 0; }
+.prev { aspect-ratio: 16 / 10; border-radius: 10px; background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 22%, var(--panel)), var(--panel)); display: grid; place-items: center; color: var(--accent); border: 1px solid var(--line); }
+.prev .fi { width: 52px; height: 52px; font-size: 14px; border-radius: 14px; }
+.insp h3 { margin: 0; font-size: 15px; font-weight: 600; word-break: break-all; }
+.insp p { margin: 2px 0 0; color: var(--fg3); font-size: 12px; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; font-size: 13px; margin: 0; }
+.kv dt { color: var(--fg3); }
+.kv dd { margin: 0; text-align: right; font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; min-width: 0; overflow-wrap: anywhere; }
+.status { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; padding: 9px 16px; border-top: 1px solid var(--line); background: var(--panel); font-size: 12px; color: var(--fg2); }
+.status .ok { color: var(--accent); display: inline-flex; gap: 6px; align-items: center; }
+.status .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.pill { font-family: var(--mono); font-size: 11px; padding: 1px 8px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); }
+
+/* 压缩面板 */
+.sheet { max-width: 780px; margin: 0 auto; }
+.sh-head { padding: 20px 24px 14px; display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.sh-head h2 { margin: 0; font-size: 18px; font-weight: 600; }
+.sh-head p { margin: 2px 0 0; color: var(--fg3); font-size: 13px; }
+.sh-body { padding: 4px 24px 22px; display: flex; flex-direction: column; gap: 20px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { display: inline-flex; align-items: center; gap: 8px; padding: 5px 10px 5px 6px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); font-size: 13px; }
+.f { display: grid; gap: 6px; min-width: 0; }
+.f label, .lbl { font-size: 12px; color: var(--fg3); font-weight: 500; }
+.in { width: 100%; border: 1px solid var(--line); background: var(--win); border-radius: var(--r-ctl); padding: 8px 11px; color: var(--fg); font: inherit; }
+.in:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
+.nm { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }
+.presets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.pre { text-align: left; border: 1px solid var(--line); background: var(--win); border-radius: 12px; padding: 12px 14px; display: grid; gap: 4px; }
+.pre b { font-size: 14px; font-weight: 600; }
+.pre span { color: var(--fg3); font-size: 12px; }
+.pre[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent) inset; }
+.adv { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 20px; }
+.rng { display: flex; align-items: center; gap: 12px; }
+.rng input { flex: 1; accent-color: var(--accent); min-width: 0; }
+.rng output { font-family: var(--mono); font-size: 12px; min-width: 24px; text-align: right; }
+.sw { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.sw:last-child { border-bottom: 0; }
+.sw small { display: block; color: var(--fg3); font-size: 12px; }
+.tg { width: 36px; height: 22px; border-radius: 99px; border: 0; background: var(--line); position: relative; flex: none; transition: background .15s; }
+.tg::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.tg[aria-checked="true"] { background: var(--accent); }
+.tg[aria-checked="true"]::after { transform: translateX(14px); }
+.sh-foot { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; justify-content: space-between; padding: 14px 24px; border-top: 1px solid var(--line); background: var(--panel); }
+.est { display: flex; flex-direction: column; }
+.est b { font-family: var(--mono); font-size: 16px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.est span { font-size: 12px; color: var(--fg3); }
+.bar-est { height: 6px; width: 180px; max-width: 100%; border-radius: 99px; background: var(--line); overflow: hidden; margin-top: 6px; }
+.bar-est i { display: block; height: 100%; background: var(--accent); border-radius: 99px; transition: width .25s; }
+
+/* 任务 */
+.tasks { max-width: 780px; margin: 0 auto; }
+.task { padding: 16px 24px; border-bottom: 1px solid var(--line); display: grid; gap: 10px; }
+.task:last-of-type { border-bottom: 0; }
+.t-top { display: flex; align-items: center; gap: 12px; }
+.t-ic { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); flex: none; }
+.t-ti { min-width: 0; flex: 1; }
+.t-ti b { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t-ti span { font-size: 12px; color: var(--fg3); font-family: var(--mono); }
+.prog { height: 6px; background: var(--line); border-radius: 99px; overflow: hidden; }
+.prog i { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
+.t-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; font-size: 12px; color: var(--fg2); font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.icon-b { border: 1px solid var(--line); background: var(--win); border-radius: 8px; width: 32px; height: 32px; display: grid; place-items: center; color: var(--fg2); }
+.icon-b:hover { background: var(--hover); color: var(--fg); }
+.toast { margin: 16px 24px 22px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px; background: var(--fg); color: var(--bg); }
+.toast .ok { width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; flex: none; }
+.toast div { flex: 1; min-width: 160px; }
+.toast small { display: block; opacity: .65; font-family: var(--mono); font-size: 12px; }
+.toast button { border: 0; background: color-mix(in srgb, var(--bg) 18%, transparent); color: var(--bg); padding: 6px 12px; border-radius: 8px; font-weight: 500; }
+
+/* 规范 */
+.spec { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.card { background: var(--win); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; min-width: 0; }
+.card h4 { margin: 0 0 12px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--fg3); font-weight: 500; }
+.sw-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.sw-c { width: 44px; height: 44px; border-radius: 10px; border: 1px solid var(--line); }
+.card ul { margin: 0; padding-left: 18px; color: var(--fg2); font-size: 13px; display: grid; gap: 4px; }
+
+@media (max-width: 980px) {
+  .main { grid-template-columns: 180px minmax(0, 1fr); }
+  .insp { display: none; }
+}
+@media (max-width: 720px) {
+  .main { grid-template-columns: minmax(0, 1fr); }
+  .side { display: none; }
+  .row { grid-template-columns: minmax(0, 1fr) 80px; }
+  .row .pk, .row .dt { display: none; }
+  .presets, .adv { grid-template-columns: minmax(0, 1fr); }
+  .dots { display: none; }
+  .search { min-width: 0; flex: 1; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <div class="bar">
+    <h1>RustZIP<span>界面设计稿 · 交互可点</span></h1>
+    <div class="tools">
+      <div class="seg" role="tablist" aria-label="界面">
+        <button role="tab" aria-selected="true" data-s="browse">浏览</button>
+        <button role="tab" aria-selected="false" data-s="compress">新建压缩</button>
+        <button role="tab" aria-selected="false" data-s="tasks">任务</button>
+      </div>
+      <button class="ghost" id="theme" aria-label="切换明暗主题"></button>
+    </div>
+  </div>
+
+  <!-- 浏览 -->
+  <section class="win" id="s-browse">
+    <div class="title">
+      <div class="dots" aria-hidden="true"><i></i><i></i><i></i></div>
+      <div class="tabs">
+        <div class="tab on"><span data-i="archive"></span>项目备份_2026-10.7z</div>
+        <div class="tab">photos.zip <small>已加密</small></div>
+        <div class="tab plus" aria-hidden="true"><span data-i="plus"></span></div>
+      </div>
+    </div>
+    <div class="toolbar">
+      <button class="btn primary"><span data-i="extract"></span>解压到…</button>
+      <button class="btn"><span data-i="plus"></span>添加</button>
+      <button class="btn"><span data-i="check"></span>测试</button>
+      <button class="btn danger"><span data-i="trash"></span>删除</button>
+      <span class="sep"></span>
+      <button class="btn"><span data-i="eye"></span>预览</button>
+      <span class="grow"></span>
+      <label class="search"><span data-i="search"></span><input id="q" placeholder="在压缩包内搜索" aria-label="在压缩包内搜索"><kbd>Ctrl F</kbd></label>
+    </div>
+    <div class="main">
+      <aside class="side">
+        <div>
+          <h4>位置</h4>
+          <button class="nav on"><span data-i="archive"></span>当前压缩包</button>
+          <button class="nav"><span data-i="clock"></span>最近打开<em>12</em></button>
+          <button class="nav"><span data-i="star"></span>常用位置</button>
+        </div>
+        <div>
+          <h4>快速操作</h4>
+          <button class="nav"><span data-i="convert"></span>转换格式</button>
+          <button class="nav"><span data-i="wrench"></span>修复压缩包</button>
+          <button class="nav"><span data-i="key"></span>密码本<em>3</em></button>
+        </div>
+      </aside>
+      <div class="center">
+        <div class="crumb"><span data-i="archive"></span><span>项目备份_2026-10.7z</span><span class="s">/</span><span>src</span><span class="s">/</span><b>assets</b></div>
+        <div class="tbl" id="tbl" role="grid" aria-label="压缩包内容"></div>
+      </div>
+      <aside class="insp" id="insp"></aside>
+    </div>
+    <div class="status">
+      <span class="ok"><span data-i="shield"></span>校验通过</span>
+      <span class="mono" id="count">128,402 项</span>
+      <span class="mono">3.2 GB → 1.1 GB</span>
+      <span class="pill">压缩率 34%</span>
+      <span class="grow"></span>
+      <span class="mono">7z · LZMA2 · 固实 · AES-256</span>
+    </div>
+  </section>
+
+  <!-- 新建压缩 -->
+  <section class="win sheet" id="s-compress" hidden>
+    <div class="sh-head">
+      <div><h2>新建压缩</h2><p>已选 3 项,共 3.2 GB</p></div>
+      <button class="icon-b" aria-label="关闭"><span data-i="x"></span></button>
+    </div>
+    <div class="sh-body">
+      <div class="chips">
+        <span class="chip"><span class="fi dir">dir</span>src</span>
+        <span class="chip"><span class="fi dir">dir</span>docs</span>
+        <span class="chip"><span class="fi doc">md</span>README.md</span>
+      </div>
+      <div class="f">
+        <label for="nm">文件名与格式</label>
+        <div class="nm">
+          <input class="in" id="nm" value="项目备份_2026-10" autocomplete="off">
+          <div class="seg" id="fmt" role="group" aria-label="格式">
+            <button aria-pressed="true">7z</button><button aria-pressed="false">zip</button><button aria-pressed="false">tar.zst</button>
+          </div>
+        </div>
+      </div>
+      <div class="f">
+        <span class="lbl">预设</span>
+        <div class="presets" id="presets">
+          <button class="pre" aria-pressed="false" data-r="52" data-t="18"><b>极速</b><span>优先速度,体积稍大</span></button>
+          <button class="pre" aria-pressed="true" data-r="34" data-t="42"><b>均衡</b><span>推荐,速度与体积兼顾</span></button>
+          <button class="pre" aria-pressed="false" data-r="27" data-t="130"><b>最小体积</b><span>适合长期归档</span></button>
+        </div>
+      </div>
+      <div class="adv">
+        <div class="f"><label for="dict">字典大小</label>
+          <select class="in" id="dict"><option>16 MB</option><option selected>64 MB</option><option>256 MB</option></select></div>
+        <div class="f"><label for="split">分卷</label>
+          <select class="in" id="split"><option>不分卷</option><option>700 MB(光盘)</option><option>4 GB(FAT32)</option></select></div>
+        <div class="f"><label for="thr">线程数</label>
+          <div class="rng"><input type="range" id="thr" min="1" max="16" value="8"><output id="thro">8</output></div></div>
+        <div class="f"><label for="pw">密码</label>
+          <input class="in" id="pw" type="password" placeholder="留空则不加密" autocomplete="new-password"></div>
+      </div>
+      <div>
+        <div class="sw"><div>加密文件名<small>7z 支持,别人无法看到压缩包内的文件列表</small></div><button class="tg" role="switch" aria-checked="true" aria-label="加密文件名"></button></div>
+        <div class="sw"><div>跨平台兼容<small>使用 UTF-8 文件名,不保存系统专有属性</small></div><button class="tg" role="switch" aria-checked="false" aria-label="跨平台兼容"></button></div>
+        <div class="sw"><div>完成后删除源文件<small>会先校验压缩包,通过后才删除</small></div><button class="tg" role="switch" aria-checked="false" aria-label="完成后删除源文件"></button></div>
+      </div>
+    </div>
+    <div class="sh-foot">
+      <div class="est"><b id="est">约 1.1 GB · 42 秒</b><span>预计体积与用时,基于 8 线程</span><div class="bar-est"><i id="estb" style="width:34%"></i></div></div>
+      <div style="display:flex;gap:8px"><button class="btn line">取消</button><button class="btn primary" id="go"><span data-i="archive"></span>开始压缩</button></div>
+    </div>
+  </section>
+
+  <!-- 任务 -->
+  <section class="win tasks" id="s-tasks" hidden>
+    <div class="sh-head"><div><h2>任务</h2><p>2 个进行中 · 1 个已完成</p></div><button class="ghost">清除已完成</button></div>
+    <div class="task">
+      <div class="t-top"><span class="t-ic" data-i="archive"></span><div class="t-ti"><b>项目备份_2026-10.7z</b><span>压缩 · 3 项 · 均衡</span></div>
+        <button class="icon-b" aria-label="暂停"><span data-i="pause"></span></button><button class="icon-b" aria-label="取消"><span data-i="x"></span></button></div>
+      <div class="prog"><i data-p="64" data-v="0.18" style="width:64%"></i></div>
+      <div class="t-meta"><span data-l>2.0 GB / 3.2 GB</span><span data-sp>412 MB/s</span><span>剩余 约 3 秒</span></div>
+    </div>
+    <div class="task">
+      <div class="t-top"><span class="t-ic" data-i="extract"></span><div class="t-ti"><b>photos.zip</b><span>解压到 ~/图片/2026 · 1,284 个文件</span></div>
+        <button class="icon-b" aria-label="暂停"><span data-i="pause"></span></button><button class="icon-b" aria-label="取消"><span data-i="x"></span></button></div>
+      <div class="prog"><i data-p="31" data-v="0.1" style="width:31%"></i></div>
+      <div class="t-meta"><span data-l>398 / 1,284 个文件</span><span data-sp>1.2 GB/s</span><span>剩余 约 5 秒</span></div>
+    </div>
+    <div class="toast">
+      <span class="ok"><span data-i="check"></span></span>
+      <div><b>解压完成</b><small>logs-2026.tar.zst · 8,402 个文件 · 用时 6.2 秒</small></div>
+      <button>打开文件夹</button>
+    </div>
+  </section>
+
+  <!-- 规范 -->
+  <div class="spec">
+    <div class="card"><h4>色彩</h4>
+      <div class="sw-row">
+        <div class="sw-c" style="background:var(--accent)" title="主色"></div>
+        <div class="sw-c" style="background:var(--accent-soft)" title="主色浅底"></div>
+        <div class="sw-c" style="background:var(--win)" title="窗口"></div>
+        <div class="sw-c" style="background:var(--panel)" title="面板"></div>
+        <div class="sw-c" style="background:var(--fg)" title="文字"></div>
+      </div>
+    </div>
+    <div class="card"><h4>字体与形状</h4>
+      <ul><li>界面字体跟随系统(苹方 / 微软雅黑 / 思源黑体)</li><li>数字、路径、大小统一等宽并对齐</li><li>窗口圆角 14,控件 8,列表行高 38</li></ul>
+    </div>
+    <div class="card"><h4>原则</h4>
+      <ul><li>一个强调色,只用于主操作和选中态</li><li>默认只露出常用选项,高级项折叠</li><li>明暗主题跟随系统</li></ul>
+    </div>
+  </div>
+</div>
+
+<script>
+const P = {
+  archive: '<path d="M3 7l2-3h14l2 3M3 7h18v13H3zM10 12h4"/>',
+  extract: '<path d="M12 3v12M7 10l5 5 5-5M4 20h16"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+  check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  eye: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  star: '<path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.2 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/>',
+  convert: '<path d="M4 8h13l-3-3M20 16H7l3 3"/>',
+  wrench: '<path d="M14 6a4 4 0 005 5l-9 9a2 2 0 01-3-3l9-9a4 4 0 01-2-2z"/>',
+  key: '<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M16 7l3 3"/>',
+  shield: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/>',
+  x: '<path d="M6 6l12 12M18 6L6 18"/>',
+  pause: '<path d="M8 5v14M16 5v14"/>',
+  lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M5 19l1.5-1.5M17.5 6.5L19 5"/>',
+  moon: '<path d="M20 14.5A8 8 0 019.5 4 8 8 0 1020 14.5z"/>'
+};
+const ic = n => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${P[n]}</svg>`;
+const fill = root => root.querySelectorAll('[data-i]').forEach(e => { e.innerHTML = ic(e.dataset.i); });
+fill(document);
+
+/* 切换界面 */
+const screens = ['browse', 'compress', 'tasks'];
+document.querySelectorAll('.seg [data-s]').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('.seg [data-s]').forEach(x => x.setAttribute('aria-selected', x === b));
+  screens.forEach(s => { document.getElementById('s-' + s).hidden = s !== b.dataset.s; });
+}));
+
+/* 主题 */
+const root = document.documentElement, tbtn = document.getElementById('theme');
+const isDark = () => root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+const paintTheme = () => { tbtn.innerHTML = ic(isDark() ? 'sun' : 'moon') + (isDark() ? '浅色' : '深色'); };
+tbtn.addEventListener('click', () => { root.dataset.theme = isDark() ? 'light' : 'dark'; paintTheme(); });
+paintTheme();
+
+/* 文件列表 */
+const files = [
+  ['components', 'dir', '—', '—', '2026-10-21 18:04', '文件夹'],
+  ['icons', 'dir', '—', '—', '2026-10-18 09:12', '文件夹'],
+  ['fonts', 'dir', '—', '—', '2026-09-30 22:40', '文件夹'],
+  ['hero-banner.png', 'img', '2.4 MB', '2.3 MB', '2026-10-20 14:31', 'PNG 图像'],
+  ['logo.svg', 'img', '4.1 KB', '1.2 KB', '2026-10-02 11:05', 'SVG 图像'],
+  ['screenshot-main.jpg', 'img', '812 KB', '790 KB', '2026-10-19 16:48', 'JPEG 图像'],
+  ['styles.css', 'code', '86 KB', '14 KB', '2026-10-21 17:55', 'CSS 样式表'],
+  ['app.js', 'code', '1.2 MB', '288 KB', '2026-10-21 17:55', 'JavaScript'],
+  ['manifest.json', 'code', '3.8 KB', '1.1 KB', '2026-10-15 08:20', 'JSON'],
+  ['设计说明.pdf', 'doc', '5.6 MB', '5.1 MB', '2026-10-12 10:33', 'PDF 文档'],
+  ['CHANGELOG.md', 'doc', '22 KB', '6.4 KB', '2026-10-21 18:10', 'Markdown'],
+  ['数据备份.sqlite', 'bin', '248 MB', '71 MB', '2026-10-21 03:00', 'SQLite 数据库', true],
+  ['render.bin', 'bin', '1.1 GB', '402 MB', '2026-10-17 20:26', '二进制文件', true],
+  ['.DS_Store', 'bin', '8.0 KB', '1.4 KB', '2026-09-28 13:17', '系统文件']
+];
+const tbl = document.getElementById('tbl'), insp = document.getElementById('insp');
+const ext = f => f[1] === 'dir' ? 'dir' : (f[0].split('.').pop().slice(0, 4));
+const rowHTML = (f, i) => `<div class="row" role="row" data-i="${i}" aria-selected="false">
+  <div class="n"><span class="fi ${f[1]}">${ext(f)}</span><span>${f[0]}</span>${f[6] ? `<span class="lock">${ic('lock')}</span>` : ''}</div>
+  <div class="num">${f[2]}</div><div class="num pk">${f[3]}</div><div class="dt">${f[4]}</div></div>`;
+function draw(list) {
+  tbl.innerHTML = `<div class="row h" role="row"><div>名称</div><div style="text-align:right">大小</div><div class="pk" style="text-align:right">压缩后</div><div class="dt">修改时间</div></div>` +
+    list.map(f => rowHTML(f, files.indexOf(f))).join('');
+}
+function inspect(i) {
+  const f = files[i];
+  insp.innerHTML = `<div class="prev"><span class="fi ${f[1]}">${ext(f)}</span></div>
+    <div><h3>${f[0]}</h3><p>${f[5]}${f[6] ? ' · 已加密' : ''}</p></div>
+    <dl class="kv"><dt>原始大小</dt><dd>${f[2]}</dd><dt>压缩后</dt><dd>${f[3]}</dd><dt>修改时间</dt><dd>${f[4]}</dd><dt>校验</dt><dd>CRC32 · 通过</dd></dl>
+    <button class="btn primary" style="justify-content:center">${ic('extract')}解压此项</button>`;
+}
+tbl.addEventListener('click', e => {
+  const r = e.target.closest('.row[data-i]'); if (!r) return;
+  tbl.querySelectorAll('.row[aria-selected="true"]').forEach(x => x.setAttribute('aria-selected', 'false'));
+  r.setAttribute('aria-selected', 'true'); inspect(+r.dataset.i);
+});
+draw(files); inspect(3);
+tbl.querySelector('[data-i="3"]').setAttribute('aria-selected', 'true');
+document.getElementById('q').addEventListener('input', e => {
+  const v = e.target.value.trim().toLowerCase();
+  draw(files.filter(f => f[0].toLowerCase().includes(v)));
+});
+
+/* 压缩面板 */
+let ratio = 34, secs = 42;
+const fmtT = s => s >= 60 ? `${Math.floor(s / 60)} 分 ${s % 60} 秒` : `${s} 秒`;
+function est() {
+  const thr = +document.getElementById('thr').value, t = Math.max(3, Math.round(secs * 8 / thr));
+  document.getElementById('est').textContent = `约 ${(3.2 * ratio / 100).toFixed(1)} GB · ${fmtT(t)}`;
+  document.getElementById('estb').style.width = ratio + '%';
+}
+document.getElementById('presets').addEventListener('click', e => {
+  const b = e.target.closest('.pre'); if (!b) return;
+  document.querySelectorAll('.pre').forEach(x => x.setAttribute('aria-pressed', x === b));
+  ratio = +b.dataset.r; secs = +b.dataset.t; est();
+});
+document.getElementById('fmt').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  document.querySelectorAll('#fmt button').forEach(x => x.setAttribute('aria-pressed', x === b));
+});
+document.getElementById('thr').addEventListener('input', e => { document.getElementById('thro').textContent = e.target.value; est(); });
+document.querySelectorAll('.tg').forEach(t => t.addEventListener('click', () => t.setAttribute('aria-checked', t.getAttribute('aria-checked') !== 'true')));
+document.getElementById('go').addEventListener('click', () => document.querySelector('[data-s="tasks"]').click());
+
+/* 任务进度 */
+if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  const bars = [...document.querySelectorAll('.prog i')];
+  setInterval(() => bars.forEach(b => {
+    let p = +b.dataset.p + (+b.dataset.v) * 6; if (p >= 100) p = 8;
+    b.dataset.p = p; b.style.width = p + '%';
+  }), 400);
+}
+</script>

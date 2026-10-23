@@ -1,0 +1,24 @@
+[package]
+name = "rz-engine"
+description = "RustZIP engine: safe extraction with limits, progress and cancellation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+rz-core.workspace = true
+rz-formats.workspace = true
+rz-platform.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
+tar = "0.4"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
+[[bench]]
+name = "throughput"
+harness = false
+
+[lints]
+workspace = true

@@ -1,0 +1,19 @@
+[package]
+name = "rz-formats"
+description = "RustZIP archive format backends and format sniffing"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+rz-core.workspace = true
+zip = { version = "2", default-features = false, features = ["deflate", "bzip2", "zstd", "aes-crypto"] }
+tar = "0.4"
+flate2 = "1"
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true
