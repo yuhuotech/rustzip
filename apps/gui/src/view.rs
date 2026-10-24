@@ -1789,12 +1789,14 @@ impl MainView {
                     .child(
                         Button::new("privacy-off")
                             .outline()
+                            .icon(IconName::Close)
                             .label("不参与")
                             .on_click(cx.listener(|this, _, _, cx| this.answer_privacy(false, cx))),
                     )
                     .child(
                         Button::new("privacy-on")
                             .primary()
+                            .icon(IconName::CircleCheck)
                             .label("好的")
                             .on_click(cx.listener(|this, _, _, cx| this.answer_privacy(true, cx))),
                     ),
