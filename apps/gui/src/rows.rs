@@ -6,6 +6,7 @@ use gpui_kit::component::{ActiveTheme, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 use rz_app::browse::{ArchiveTree, Badge, Row, RowKind, SortKey, badge, badge_label, format_size};
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 pub const COL_NAME: usize = 0;
@@ -21,6 +22,8 @@ pub struct FileRows {
     ascending: bool,
     rows: Vec<Row>,
     columns: Vec<Column>,
+    /// Paths picked with ⌘/Ctrl-click or Shift-click, besides the table's own row.
+    marked: BTreeSet<String>,
 }
 
 impl Default for FileRows {
@@ -36,6 +39,7 @@ impl Default for FileRows {
             sort: SortKey::Name,
             ascending: true,
             rows: Vec::new(),
+            marked: BTreeSet::new(),
             columns: vec![
                 Column::new("name", "名称").width(px(340.)).sortable(),
                 size,
@@ -52,7 +56,39 @@ impl FileRows {
         self.tree = tree;
         self.cwd = cwd.to_string();
         self.filter = filter.to_string();
+        self.marked.clear();
         self.reload();
+    }
+
+    /// Everything the user has picked, in path order.
+    pub fn marked(&self) -> Vec<String> {
+        self.marked.iter().cloned().collect()
+    }
+
+    /// A plain click: exactly this row is picked.
+    pub fn mark_only(&mut self, path: &str) {
+        self.marked.clear();
+        self.marked.insert(path.to_string());
+    }
+
+    pub fn toggle(&mut self, ix: usize) {
+        if let Some(r) = self.rows.get(ix)
+            && !self.marked.remove(&r.path)
+        {
+            self.marked.insert(r.path.clone());
+        }
+    }
+
+    /// Shift-click: everything between the anchor row and this one.
+    pub fn mark_range(&mut self, anchor: usize, ix: usize) {
+        let (lo, hi) = (anchor.min(ix), anchor.max(ix));
+        self.marked = self
+            .rows
+            .iter()
+            .skip(lo)
+            .take(hi - lo + 1)
+            .map(|r| r.path.clone())
+            .collect();
     }
 
     fn reload(&mut self) {
@@ -142,6 +178,34 @@ impl TableDelegate for FileRows {
             .size_full()
             .text_size(px(12.))
             .child(self.column(col_ix, cx).name)
+    }
+
+    fn render_tr(
+        &mut self,
+        row_ix: usize,
+        _: &mut Window,
+        cx: &mut Context<TableState<Self>>,
+    ) -> Stateful<Div> {
+        let p = palette(cx);
+        let picked = self
+            .rows
+            .get(row_ix)
+            .is_some_and(|r| self.marked.contains(&r.path));
+        div()
+            .id(("row", row_ix))
+            .when(picked, |d| d.bg(p.accent_soft))
+            .on_click(cx.listener(move |state, ev: &ClickEvent, _, cx| {
+                let m = ev.modifiers();
+                if m.secondary() {
+                    state.delegate_mut().toggle(row_ix);
+                } else if m.shift {
+                    let anchor = state.selected_row().unwrap_or(row_ix);
+                    state.delegate_mut().mark_range(anchor, row_ix);
+                } else {
+                    return;
+                }
+                cx.notify();
+            }))
     }
 
     fn perform_sort(

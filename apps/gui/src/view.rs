@@ -191,7 +191,10 @@ impl MainView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let table = cx.new(|cx| TableState::new(FileRows::default(), window, cx));
+        let table = cx.new(|cx| {
+            // Modified clicks build a multi-selection in `FileRows`, not a new single row.
+            TableState::new(FileRows::default(), window, cx).select_on_modifier_click(false)
+        });
         let search = cx.new(|cx| InputState::new(window, cx).placeholder("在压缩包内搜索"));
         cx.subscribe_in(&table, window, Self::on_table_event)
             .detach();
@@ -428,8 +431,11 @@ impl MainView {
         match event {
             TableEvent::SelectRow(ix) => {
                 if let Some(row) = row_at(*ix, cx) {
+                    let path = row.path;
+                    self.table
+                        .update(cx, |t, _| t.delegate_mut().mark_only(&path));
                     if let Some(a) = self.current_mut() {
-                        a.selected = Some(row.path);
+                        a.selected = Some(path);
                     }
                     cx.notify();
                 }
@@ -460,9 +466,11 @@ impl MainView {
     pub fn extract(&mut self, selected_only: bool, window: &mut Window, cx: &mut Context<Self>) {
         let Some(a) = self.current() else { return };
         let only = if selected_only {
-            match &a.selected {
-                Some(p) => Some(vec![p.clone()]),
-                None => {
+            let marked = self.table.read(cx).delegate().marked();
+            match (&a.selected, marked.is_empty()) {
+                (_, false) => Some(marked),
+                (Some(p), true) => Some(vec![p.clone()]),
+                (None, true) => {
                     self.say(Notice::Info("先在列表里选一个文件或文件夹".into()), cx);
                     return;
                 }
@@ -898,7 +906,8 @@ impl MainView {
     fn render_toolbar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let p = palette(cx);
         let has = self.current().is_some();
-        let has_sel = self.current().is_some_and(|a| a.selected.is_some());
+        let has_sel = self.current().is_some_and(|a| a.selected.is_some())
+            || !self.table.read(cx).delegate().marked().is_empty();
         h_flex()
             .id("toolbar")
             .h(px(46.))
@@ -1225,6 +1234,18 @@ impl MainView {
                         .child(value),
                 )
         };
+        let picked = self.table.read(cx).delegate().marked();
+        if picked.len() > 1 {
+            return v_flex()
+                .gap_1()
+                .child(
+                    div()
+                        .text_size(px(14.))
+                        .child(format!("已选 {} 项", picked.len())),
+                )
+                .child(div().text_color(p.fg3).child("点“解压所选”只解压这些项目"))
+                .into_any_element();
+        }
         match self.selected_row() {
             Some(row) => {
                 let kind = match row.kind {

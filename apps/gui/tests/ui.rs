@@ -596,6 +596,35 @@ fn opened_archives_are_remembered_across_launches(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn modified_clicks_build_a_multi_selection_that_navigation_clears(cx: &mut TestAppContext) {
+    let tmp = tempfile::tempdir().unwrap();
+    let archive = make_archive(tmp.path(), "a.zip", None);
+    let (handle, view) = open_window(cx, None);
+    open_sync(cx, handle, &view, &archive, None);
+    let table = cx.update(|cx| view.read(cx).table.clone());
+    let marked = |cx: &mut TestAppContext| cx.update(|cx| table.read(cx).delegate().marked());
+    // Inside "proj" there are two folders, docs and src.
+    with_view(cx, handle, &view, |v, _, cx| v.navigate("proj", cx));
+
+    cx.update(|cx| {
+        table.update(cx, |t, _| {
+            let d = t.delegate_mut();
+            d.mark_only("proj/docs");
+            d.toggle(1);
+        })
+    });
+    assert_eq!(marked(cx).len(), 2);
+    // Toggling a picked row again takes it out.
+    cx.update(|cx| table.update(cx, |t, _| t.delegate_mut().toggle(1)));
+    assert_eq!(marked(cx), vec!["proj/docs".to_string()]);
+    cx.update(|cx| table.update(cx, |t, _| t.delegate_mut().mark_range(0, 1)));
+    assert_eq!(marked(cx).len(), 2);
+
+    with_view(cx, handle, &view, |v, _, cx| v.navigate("proj/docs", cx));
+    assert!(marked(cx).is_empty());
+}
+
+#[gpui_kit::test]
 fn settings_changes_are_saved_and_the_theme_follows_the_choice(cx: &mut TestAppContext) {
     use rz_app::settings::{OnConflict, Theme as Pick};
     let tmp = tempfile::tempdir().unwrap();
