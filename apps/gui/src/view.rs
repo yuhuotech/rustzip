@@ -2691,7 +2691,7 @@ impl MainView {
                         .gap_2()
                         .flex_none()
                         .items_center()
-                        .text_color(if has_parent { p.fg } else { p.fg3 })
+                        .text_color(p.fg)
                         .when(has_parent, |d| {
                             d.cursor_pointer()
                                 .hover(|d| d.bg(p.hover))
@@ -2701,9 +2701,9 @@ impl MainView {
                                     }
                                 }))
                         })
-                        .child(Icon::new(IconName::ArrowUp).size_4().text_color(p.fg3))
-                        .child("..")
-                        .child(div().text_size(px(12.)).text_color(p.fg3).child("上一级")),
+                        // The same icon and look as the other folders below it.
+                        .child(Icon::new(IconName::Folder).size_4().text_color(p.accent))
+                        .child("../"),
                 )
             })
             .when(rows.is_empty(), |d| {

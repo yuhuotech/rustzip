@@ -144,11 +144,6 @@ impl FileRows {
         }
     }
 
-    /// Whether the list is at the top of the archive, where "back" leaves the archive.
-    pub fn at_top(&self) -> bool {
-        self.cwd.is_empty()
-    }
-
     fn reload(&mut self) {
         self.rows = match &self.tree {
             Some(t) => t.list(&self.cwd, self.sort, self.ascending, &self.filter),
@@ -410,24 +405,26 @@ impl TableDelegate for FileRows {
         let p = palette(cx);
         let Some(row) = self.row(row_ix) else {
             // The "back" row: always on top, even in the top folder, where it leaves
-            // the archive for the folder it lies in.
+            // the archive for the folder it lies in. It looks like any other folder
+            // and says only `../`.
             return if col_ix == COL_NAME {
+                let folder = Row {
+                    name: "../".into(),
+                    path: "..".into(),
+                    kind: RowKind::Dir,
+                    size: 0,
+                    packed: None,
+                    modified: None,
+                    encrypted: false,
+                    items: 0,
+                    entry: None,
+                };
                 h_flex()
                     .gap_2()
                     .items_center()
                     .text_size(px(13.))
-                    .child(Icon::new(IconName::ArrowUp).size_4().text_color(p.fg3))
-                    .child("..")
-                    .child(
-                        div()
-                            .text_color(p.fg3)
-                            .text_size(px(12.))
-                            .child(if self.at_top() {
-                                "压缩包所在的文件夹"
-                            } else {
-                                "上一级"
-                            }),
-                    )
+                    .child(badge_chip(&folder, cx))
+                    .child("../")
                     .into_any_element()
             } else {
                 div().into_any_element()
