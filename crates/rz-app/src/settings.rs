@@ -109,6 +109,7 @@ impl Settings {
             max_total: self.max_total_gb.saturating_mul(1 << 30),
             password,
             threads: self.threads,
+            only: None,
         }
     }
 

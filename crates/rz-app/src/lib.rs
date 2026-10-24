@@ -5,6 +5,7 @@
 // Tests may unwrap; library code may not (see docs/tech-spec.md).
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
+pub mod browse;
 pub mod passwords;
 pub mod settings;
 pub mod smart;

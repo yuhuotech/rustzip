@@ -9,8 +9,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  check:
-    name: ${{ matrix.os }}
+  core:
+    name: core / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -24,11 +24,30 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
-      - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace
+      # The GUI crates need a graphics stack; they are built in their own job.
+      - run: cargo clippy --workspace --exclude rustzip-gui --exclude gpui-probe --all-targets -- -D warnings
+      - run: cargo test --workspace --exclude rustzip-gui --exclude gpui-probe
       # The optional RAR reader builds the unRAR C++ sources.
-      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
-      - run: cargo test --workspace --all-features
+      - run: cargo clippy --workspace --exclude rustzip-gui --exclude gpui-probe --all-targets --all-features -- -D warnings
+      - run: cargo test --workspace --exclude rustzip-gui --exclude gpui-probe --all-features
+
+  gui:
+    name: gui / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Linux is left out until the GPUI Kit system packages are verified on a runner.
+        os: [macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.96.0
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy -p rustzip-gui --all-targets -- -D warnings
+      - run: cargo test -p rustzip-gui
 
   bench-smoke:
     name: bench (smoke)

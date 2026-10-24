@@ -1,7 +1,8 @@
 use crate::progress::Tracker;
 use crate::safe_path::safe_join;
 use rz_core::{
-    resolve_threads, ArchiveReader, CancelToken, Entry, EntryKind, Error, ProgressSink, Result,
+    clean_path, is_within, resolve_threads, ArchiveReader, CancelToken, Entry, EntryKind, Error,
+    ProgressSink, Result,
 };
 use rz_platform::{apply_mode, set_mtime};
 use std::collections::HashSet;
@@ -31,6 +32,9 @@ pub struct ExtractOptions {
     pub password: Option<String>,
     /// Worker threads for formats that allow parallel extraction; 0 means one per CPU.
     pub threads: usize,
+    /// Extract only these paths (and everything inside the folders among them).
+    /// Paths are as listed by the archive; `None` extracts everything.
+    pub only: Option<Vec<String>>,
 }
 
 impl Default for ExtractOptions {
@@ -42,6 +46,7 @@ impl Default for ExtractOptions {
             max_total: 1 << 40,
             password: None,
             threads: 0,
+            only: None,
         }
     }
 }
@@ -63,6 +68,8 @@ struct Ctx<'a> {
     dest: &'a Path,
     opts: &'a ExtractOptions,
     tracker: &'a Tracker<'a>,
+    /// Indexes of the entries chosen for selective extraction, if any.
+    wanted: Option<HashSet<usize>>,
     files: AtomicU64,
     dirs: AtomicU64,
     skipped: AtomicU64,
@@ -80,13 +87,25 @@ pub fn extract(
     if let Some(pw) = &opts.password {
         reader.set_password(pw)?;
     }
-    let entries = reader.entries()?;
+    let mut entries = reader.entries()?;
+    // Selective extraction: keep the chosen paths and everything inside chosen folders.
+    let wanted: Option<HashSet<usize>> = opts.only.as_ref().map(|only| {
+        let only: Vec<String> = only.iter().map(|p| clean_path(p)).collect();
+        entries.retain(|e| {
+            let path = clean_path(&e.path);
+            only.iter().any(|s| is_within(&path, s))
+        });
+        entries.iter().map(|e| e.index).collect()
+    });
     let declared: u64 = entries.iter().map(|e| e.size).fold(0, u64::saturating_add);
     if declared > opts.max_total {
         return Err(Error::LimitExceeded(format!("total size {declared} bytes")));
     }
     // Check everything before writing anything, so a bad archive leaves no partial result.
     let duplicates = preflight(&entries, dest, opts)?;
+    // A task that is paused or cancelled before it starts must not touch the disk,
+    // not even to create the destination folder.
+    cancel.check()?;
     fs::create_dir_all(dest)?;
 
     let tracker = Tracker::new(progress, cancel, entries.len() as u64, declared);
@@ -94,6 +113,7 @@ pub fn extract(
         dest,
         opts,
         tracker: &tracker,
+        wanted,
         files: AtomicU64::new(0),
         dirs: AtomicU64::new(0),
         skipped: AtomicU64::new(0),
@@ -166,7 +186,16 @@ fn already_exists(path: &Path) -> Error {
 
 fn run_sequential(reader: &mut dyn ArchiveReader, ctx: &Ctx<'_>) -> Result<()> {
     let mut buf = vec![0u8; BUF];
-    reader.for_each(&mut |entry, data| handle(ctx, entry, || Ok(&mut *data), &mut buf))
+    reader.for_each(&mut |entry, data| {
+        if ctx
+            .wanted
+            .as_ref()
+            .is_some_and(|w| !w.contains(&entry.index))
+        {
+            return Ok(()); // not selected; the reader skips its data
+        }
+        handle(ctx, entry, || Ok(&mut *data), &mut buf)
+    })
 }
 
 enum Parallel {

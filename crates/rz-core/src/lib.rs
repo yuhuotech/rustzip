@@ -157,6 +157,25 @@ impl Default for CreateOptions {
     }
 }
 
+/// An entry path the way a user sees it: `/` separators, no empty or `.` parts,
+/// no leading or trailing slash. `..` is kept as it is; extraction rejects it.
+pub fn clean_path(path: &str) -> String {
+    path.replace('\\', "/")
+        .split('/')
+        .filter(|p| !p.is_empty() && *p != ".")
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+/// True when `path` is `selected` itself or lies inside it (both cleaned).
+pub fn is_within(path: &str, selected: &str) -> bool {
+    path == selected
+        || (path.len() > selected.len()
+            && path.starts_with(selected)
+            && path.as_bytes()[selected.len()] == b'/')
+        || selected.is_empty()
+}
+
 /// Resolves a user-facing thread setting (`0` = automatic) to a real count.
 pub fn resolve_threads(requested: usize) -> usize {
     if requested > 0 {
@@ -264,6 +283,29 @@ impl ProgressSink for NoProgress {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn clean_path_normalises_separators_and_dots() {
+        assert_eq!(clean_path("a/b/c.txt"), "a/b/c.txt");
+        assert_eq!(clean_path("./a//b/"), "a/b");
+        assert_eq!(clean_path("/abs/x"), "abs/x");
+        assert_eq!(clean_path("a\\b\\c"), "a/b/c");
+        assert_eq!(clean_path(""), "");
+        assert_eq!(clean_path("./"), "");
+        assert_eq!(clean_path("a/../b"), "a/../b");
+        assert_eq!(clean_path("项目/说明.md"), "项目/说明.md");
+    }
+
+    #[test]
+    fn is_within_matches_whole_path_parts_only() {
+        assert!(is_within("a/b", "a"));
+        assert!(is_within("a", "a"));
+        assert!(is_within("a/b/c", "a/b"));
+        assert!(!is_within("ab/c", "a"));
+        assert!(!is_within("a", "a/b"));
+        assert!(is_within("anything", ""));
+        assert!(!is_within("a/b", "b"));
+    }
 
     #[test]
     fn cancel_token_is_shared_between_clones() {
