@@ -41,10 +41,6 @@ impl<'a> Tracker<'a> {
         self.cancel.check()
     }
 
-    pub fn is_cancelled(&self) -> bool {
-        self.cancel.is_cancelled()
-    }
-
     pub fn add_bytes(&self, n: u64) {
         self.bytes_done.fetch_add(n, Ordering::Relaxed);
         self.report(false);

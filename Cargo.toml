@@ -5,6 +5,7 @@ members = [
     "crates/rz-platform",
     "crates/rz-formats",
     "crates/rz-engine",
+    "crates/rz-app",
     "apps/cli",
 ]
 
@@ -19,6 +20,7 @@ rz-core = { path = "crates/rz-core" }
 rz-platform = { path = "crates/rz-platform" }
 rz-formats = { path = "crates/rz-formats" }
 rz-engine = { path = "crates/rz-engine" }
+rz-app = { path = "crates/rz-app" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

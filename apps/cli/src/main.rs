@@ -9,9 +9,10 @@ use std::process::ExitCode;
 const USAGE: &str = "RustZIP\n\n\
 Usage:\n  \
 rz a <archive> <path>... [-l 0-9] [-p password] [-t threads]   create\n  \
-rz l <archive> [-p password]                                   list contents\n  \
-rz x <archive> [-o dir] [-p password] [-t threads] [-y|-n]     extract (-y replace, -n skip existing)\n  \
-rz t <archive> [-p password]                                   test integrity\n\n\
+rz l <archive> [-p password] [-e charset]                      list contents\n  \
+rz x <archive> [-o dir] [-p password] [-t threads] [-e charset] [-y|-n]\n                                                                  extract (-y replace, -n skip existing)\n  \
+rz t <archive> [-p password] [-e charset]                      test integrity\n\n\
+-e names the character set of old zip file names (gbk, shift_jis, euc-kr, ...); it is guessed by default.\n\n\
 Create formats: .zip .7z .tar .tar.gz .tar.xz .tar.zst .tar.bz2 (and .tgz .txz .tzst .tbz2)\n\
                 .gz .xz .zst .bz2 (one file)\n\
 Read formats:   all of the above\n";
@@ -23,6 +24,7 @@ struct Args {
     password: Option<String>,
     level: Option<u32>,
     threads: Option<usize>,
+    encoding: Option<String>,
     overwrite: Option<Overwrite>,
 }
 
@@ -38,6 +40,7 @@ fn parse(args: &[String]) -> std::result::Result<Args, String> {
         match arg.as_str() {
             "-o" => a.out = Some(PathBuf::from(value("-o")?)),
             "-p" => a.password = Some(value("-p")?),
+            "-e" => a.encoding = Some(value("-e")?),
             "-l" => {
                 let v = value("-l")?;
                 a.level = Some(
@@ -136,6 +139,9 @@ fn add(archive: &Path, a: &Args) -> Result<()> {
 
 fn list(path: &Path, a: &Args) -> Result<()> {
     let mut r = rz_formats::open(path)?;
+    if let Some(enc) = &a.encoding {
+        r.set_encoding(enc)?;
+    }
     if let Some(pw) = &a.password {
         r.set_password(pw)?;
     }
@@ -164,6 +170,9 @@ fn list(path: &Path, a: &Args) -> Result<()> {
 fn extract_cmd(archive: &Path, a: &Args) -> Result<()> {
     let dest = a.out.clone().unwrap_or_else(|| PathBuf::from("."));
     let mut r = rz_formats::open(archive)?;
+    if let Some(enc) = &a.encoding {
+        r.set_encoding(enc)?;
+    }
     let opts = ExtractOptions {
         overwrite: a.overwrite.unwrap_or(Overwrite::Error),
         password: a.password.clone(),
@@ -181,6 +190,9 @@ fn extract_cmd(archive: &Path, a: &Args) -> Result<()> {
 /// Reads every file through the decoder and checks its checksum, writing nothing.
 fn test(path: &Path, a: &Args) -> Result<()> {
     let mut r = rz_formats::open(path)?;
+    if let Some(enc) = &a.encoding {
+        r.set_encoding(enc)?;
+    }
     if let Some(pw) = &a.password {
         r.set_password(pw)?;
     }

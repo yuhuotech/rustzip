@@ -2,7 +2,7 @@
 
 use std::io::Read;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Condvar, Mutex};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -64,6 +64,12 @@ pub trait ArchiveReader: Send {
     /// Sets the password used to open encrypted entries. Formats without
     /// encryption ignore it.
     fn set_password(&mut self, _password: &str) -> Result<()> {
+        Ok(())
+    }
+    /// Forces the character set used to decode entry names (e.g. `"gbk"`,
+    /// `"shift_jis"`). Without it, readers guess when names are not UTF-8.
+    /// Formats whose names are always Unicode ignore it.
+    fn set_encoding(&mut self, _label: &str) -> Result<()> {
         Ok(())
     }
     /// Opens one entry for reading. The returned reader borrows the archive.
@@ -160,9 +166,19 @@ pub fn resolve_threads(requested: usize) -> usize {
     }
 }
 
-/// Cloneable cancellation flag checked by long-running operations.
+#[derive(Debug, Default)]
+struct TokenState {
+    cancelled: AtomicBool,
+    paused: Mutex<bool>,
+    resumed: Condvar,
+}
+
+/// Cloneable control handle checked by long-running operations: cancel, pause, resume.
+///
+/// Operations call [`check`](Self::check) in their loops. While paused, `check`
+/// blocks, which stops every worker at its next checkpoint without losing state.
 #[derive(Debug, Clone, Default)]
-pub struct CancelToken(Arc<AtomicBool>);
+pub struct CancelToken(Arc<TokenState>);
 
 impl CancelToken {
     pub fn new() -> Self {
@@ -170,14 +186,48 @@ impl CancelToken {
     }
 
     pub fn cancel(&self) {
-        self.0.store(true, Ordering::Relaxed);
+        self.0.cancelled.store(true, Ordering::Relaxed);
+        // A paused task must wake up to notice it was cancelled. Taking the lock the
+        // waiter holds between its check and its wait closes the window in which this
+        // notification could otherwise be lost.
+        let _guard = self.0.paused.lock();
+        self.0.resumed.notify_all();
     }
 
     pub fn is_cancelled(&self) -> bool {
-        self.0.load(Ordering::Relaxed)
+        self.0.cancelled.load(Ordering::Relaxed)
     }
 
+    pub fn pause(&self) {
+        if let Ok(mut p) = self.0.paused.lock() {
+            *p = true;
+        }
+    }
+
+    pub fn resume(&self) {
+        if let Ok(mut p) = self.0.paused.lock() {
+            *p = false;
+        }
+        self.0.resumed.notify_all();
+    }
+
+    pub fn is_paused(&self) -> bool {
+        self.0.paused.lock().is_ok_and(|p| *p)
+    }
+
+    /// Returns `Err(Cancelled)` once cancelled; waits here while paused.
     pub fn check(&self) -> Result<()> {
+        if self.is_cancelled() {
+            return Err(Error::Cancelled);
+        }
+        if let Ok(mut paused) = self.0.paused.lock() {
+            while *paused && !self.is_cancelled() {
+                paused = match self.0.resumed.wait(paused) {
+                    Ok(p) => p,
+                    Err(_) => break,
+                };
+            }
+        }
         if self.is_cancelled() {
             Err(Error::Cancelled)
         } else {
@@ -222,5 +272,55 @@ mod tests {
         assert!(b.check().is_ok());
         a.cancel();
         assert!(matches!(b.check(), Err(Error::Cancelled)));
+    }
+
+    #[test]
+    fn check_blocks_while_paused_and_continues_after_resume() {
+        let t = CancelToken::new();
+        t.pause();
+        assert!(t.is_paused());
+        let t2 = t.clone();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let h = std::thread::spawn(move || {
+            let r = t2.check();
+            let _ = tx.send(r.is_ok());
+        });
+        // Still blocked after a moment.
+        assert!(rx
+            .recv_timeout(std::time::Duration::from_millis(150))
+            .is_err());
+        t.resume();
+        assert_eq!(rx.recv_timeout(std::time::Duration::from_secs(5)), Ok(true));
+        assert!(h.join().is_ok());
+    }
+
+    #[test]
+    fn cancel_wakes_a_paused_checker() {
+        let t = CancelToken::new();
+        t.pause();
+        let t2 = t.clone();
+        let h = std::thread::spawn(move || t2.check());
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        t.cancel();
+        assert!(matches!(h.join(), Ok(Err(Error::Cancelled))));
+    }
+
+    #[test]
+    fn cancel_never_loses_its_wakeup_when_racing_with_a_checker() {
+        // Regression: cancel() used to notify without the lock, so a checker about to
+        // wait could miss the signal and sleep forever.
+        for _ in 0..2000 {
+            let t = CancelToken::new();
+            t.pause();
+            let t2 = t.clone();
+            let (tx, rx) = std::sync::mpsc::channel();
+            let h = std::thread::spawn(move || {
+                let _ = tx.send(t2.check());
+            });
+            t.cancel();
+            let got = rx.recv_timeout(std::time::Duration::from_secs(10));
+            assert!(matches!(got, Ok(Err(Error::Cancelled))), "{got:?}");
+            let _ = h.join();
+        }
     }
 }

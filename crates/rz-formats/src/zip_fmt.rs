@@ -20,6 +20,35 @@ pub struct ZipReader {
     archive: ZipArchive<File>,
     path: PathBuf,
     password: Option<Vec<u8>>,
+    encoding: Option<&'static encoding_rs::Encoding>,
+}
+
+/// Picks the character set for entry names that are not valid UTF-8.
+///
+/// Old Chinese, Japanese and Korean tools write names in the local code page
+/// without marking it, so the whole set of such names is sampled together:
+/// more text makes the guess far more reliable than one name at a time.
+fn guess_encoding(raw_names: &[Vec<u8>]) -> Option<&'static encoding_rs::Encoding> {
+    // ISO-2022-JP uses escape bytes that never appear in zip names; UTF-8 is ruled
+    // out because only names that failed UTF-8 validation are sampled.
+    let mut detector = chardetng::EncodingDetector::new(chardetng::Iso2022JpDetection::Deny);
+    let mut any = false;
+    for raw in raw_names.iter().filter(|r| std::str::from_utf8(r).is_err()) {
+        detector.feed(raw, false);
+        any = true;
+    }
+    any.then(|| {
+        detector.feed(&[], true);
+        detector.guess(None, chardetng::Utf8Detection::Deny)
+    })
+}
+
+fn decode_name(raw: &[u8], enc: Option<&'static encoding_rs::Encoding>, forced: bool) -> String {
+    match (std::str::from_utf8(raw), enc) {
+        (Ok(s), _) if !forced => s.to_string(),
+        (_, Some(enc)) => enc.decode_without_bom_handling(raw).0.into_owned(),
+        _ => String::from_utf8_lossy(raw).into_owned(),
+    }
 }
 
 impl ZipReader {
@@ -29,6 +58,7 @@ impl ZipReader {
             archive,
             path: path.to_path_buf(),
             password: None,
+            encoding: None,
         })
     }
 }
@@ -67,8 +97,15 @@ impl ArchiveReader for ZipReader {
     }
 
     fn entries(&mut self) -> Result<Vec<Entry>> {
-        let mut out = Vec::with_capacity(self.archive.len());
+        let mut raw_names = Vec::with_capacity(self.archive.len());
         for index in 0..self.archive.len() {
+            let f = self.archive.by_index_raw(index).map_err(map_err)?;
+            raw_names.push(f.name_raw().to_vec());
+        }
+        let forced = self.encoding.is_some();
+        let enc = self.encoding.or_else(|| guess_encoding(&raw_names));
+        let mut out = Vec::with_capacity(self.archive.len());
+        for (index, raw) in raw_names.iter().enumerate() {
             let f = self.archive.by_index_raw(index).map_err(map_err)?;
             let mode = f.unix_mode();
             let kind = if f.is_dir() {
@@ -80,7 +117,7 @@ impl ArchiveReader for ZipReader {
             };
             out.push(Entry {
                 index,
-                path: f.name().to_string(),
+                path: decode_name(raw, enc, forced),
                 kind,
                 size: f.size(),
                 packed_size: Some(f.compressed_size()),
@@ -97,10 +134,18 @@ impl ArchiveReader for ZipReader {
         Ok(())
     }
 
+    fn set_encoding(&mut self, label: &str) -> Result<()> {
+        let enc = encoding_rs::Encoding::for_label(label.as_bytes())
+            .ok_or_else(|| Error::Unsupported(format!("unknown character set {label:?}")))?;
+        self.encoding = Some(enc);
+        Ok(())
+    }
+
     fn reopen(&self) -> Option<Result<Box<dyn ArchiveReader>>> {
         let open = || -> Result<Box<dyn ArchiveReader>> {
             let mut r = ZipReader::new(File::open(&self.path)?, &self.path)?;
             r.password.clone_from(&self.password);
+            r.encoding = self.encoding;
             Ok(Box::new(r))
         };
         Some(open())

@@ -136,7 +136,8 @@ impl Read for SourceFile<'_> {
         if self.done {
             return Ok(0);
         }
-        if self.tracker.is_cancelled() {
+        // Blocks while the task is paused; fails once it is cancelled.
+        if self.tracker.check().is_err() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::Interrupted,
                 "cancelled",

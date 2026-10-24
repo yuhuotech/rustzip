@@ -18,6 +18,8 @@ bzip2 = "0.6.1"
 sevenz-rust2 = { version = "0.24.1", default-features = false, features = ["compress", "aes256", "bzip2", "zstd", "deflate", "util"] }
 unrar = { version = "0.5.8", optional = true }
 tempfile = { version = "3", optional = true }
+encoding_rs = "0.8.42"
+chardetng = "1.0.0"
 
 [dev-dependencies]
 tempfile = "3"

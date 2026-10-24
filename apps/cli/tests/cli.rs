@@ -248,6 +248,55 @@ fn single_file_formats_reject_folders_and_passwords_clearly() {
     assert!(s(&o).1.contains("cannot be encrypted"));
 }
 
+/// A zip whose one file is named "测试文档.txt" in GBK without the UTF-8 flag,
+/// as old Chinese Windows tools wrote them.
+fn gbk_zip(path: &Path) {
+    let mut w = zip::ZipWriter::new(fs::File::create(path).unwrap());
+    w.start_file("QQQQQQQQQQQQ", zip::write::SimpleFileOptions::default())
+        .unwrap();
+    w.write_all("正文".as_bytes()).unwrap();
+    w.finish().unwrap();
+    let gbk: Vec<u8> = [
+        &[0xB2, 0xE2, 0xCA, 0xD4, 0xCE, 0xC4, 0xB5, 0xB5][..],
+        b".txt",
+    ]
+    .concat();
+    let mut data = fs::read(path).unwrap();
+    let mut patched = 0;
+    while let Some(at) = data.windows(12).position(|w| w == b"QQQQQQQQQQQQ") {
+        data[at..at + 12].copy_from_slice(&gbk);
+        patched += 1;
+    }
+    assert_eq!(patched, 2);
+    fs::write(path, data).unwrap();
+}
+
+#[test]
+fn legacy_gbk_names_can_be_named_with_the_encoding_flag() {
+    let tmp = tempfile::tempdir().unwrap();
+    let archive = tmp.path().join("old.zip");
+    gbk_zip(&archive);
+
+    let o = rz(&["l", p(&archive), "-e", "gbk"]);
+    assert!(o.status.success(), "{:?}", s(&o));
+    assert!(s(&o).0.contains("测试文档.txt"), "{}", s(&o).0);
+
+    let out = tmp.path().join("out");
+    let o = rz(&["x", p(&archive), "-o", p(&out), "-e", "gbk"]);
+    assert!(o.status.success(), "{:?}", s(&o));
+    assert_eq!(
+        fs::read_to_string(out.join("测试文档.txt")).unwrap(),
+        "正文"
+    );
+
+    let o = rz(&["t", p(&archive), "-e", "gbk"]);
+    assert!(o.status.success(), "{:?}", s(&o));
+
+    let o = rz(&["l", p(&archive), "-e", "no-such-charset"]);
+    assert!(!o.status.success());
+    assert!(s(&o).1.contains("unknown character set"));
+}
+
 #[test]
 fn reports_clear_errors() {
     let tmp = tempfile::tempdir().unwrap();
