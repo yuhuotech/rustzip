@@ -192,6 +192,15 @@ fn main() {
             v.navigate("项目文档", cx)
         });
 
+        // 3c. The recent archives page.
+        act(&mut cx, handle, &view, |v, _, cx| {
+            v.show_page(rustzip_gui::view::Page::Recent, cx);
+        });
+        shoot(&mut cx, handle, &out_dir, &format!("{tag}-3c-recent"));
+        act(&mut cx, handle, &view, |v, _, cx| {
+            v.show_page(rustzip_gui::view::Page::Archive, cx);
+        });
+
         // 4. The compress form.
         let src = work.path().join("项目文档");
         act(&mut cx, handle, &view, move |v, w, cx| {

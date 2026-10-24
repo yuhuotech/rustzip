@@ -43,6 +43,15 @@ pub struct OpenArchive {
     pub verified: Option<bool>,
 }
 
+/// What the area right of the left menu shows.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Page {
+    /// The files of the open archive.
+    Archive,
+    /// The archives opened lately.
+    Recent,
+}
+
 /// How a row of the left menu behaves.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Nav {
@@ -163,6 +172,7 @@ pub struct MainView {
     pub overlay: Option<Overlay>,
     pub loading: Option<PathBuf>,
     pub preview: Option<Preview>,
+    pub page: Page,
     polling: bool,
     /// Tasks already reported, so each result is announced once.
     announced: HashSet<TaskId>,
@@ -264,6 +274,7 @@ impl MainView {
             overlay: None,
             loading: None,
             preview: None,
+            page: Page::Archive,
             polling: false,
             announced: HashSet::new(),
             tests: HashMap::new(),
@@ -326,6 +337,7 @@ impl MainView {
     ) {
         if let Some(ix) = self.archives.iter().position(|a| a.path == path) {
             self.active = ix;
+            self.page = Page::Archive;
             self.apply_view(cx);
             return;
         }
@@ -373,6 +385,7 @@ impl MainView {
                     verified: None,
                 });
                 self.active = self.archives.len() - 1;
+                self.page = Page::Archive;
                 self.overlay = None;
                 self.apply_view(cx);
             }
@@ -400,8 +413,14 @@ impl MainView {
     pub fn activate_tab(&mut self, ix: usize, cx: &mut Context<Self>) {
         if ix < self.archives.len() {
             self.active = ix;
+            self.page = Page::Archive;
             self.apply_view(cx);
         }
+    }
+
+    pub fn show_page(&mut self, page: Page, cx: &mut Context<Self>) {
+        self.page = page;
+        cx.notify();
     }
 
     pub fn pick_archive(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -1292,33 +1311,127 @@ impl MainView {
             .items_stretch()
             // The sidebar needs room; below this width the file list wins.
             .when(width >= px(560.), |d| d.child(self.render_sidebar(cx)))
-            .child(
-                v_flex()
-                    .flex_1()
-                    .min_w_0()
-                    .child(self.render_breadcrumbs(cx))
-                    .child(
-                        div().id("files").flex_1().min_h_0().child(
-                            DataTable::new(&self.table)
-                                .with_size(px(28.))
-                                .bordered(false),
-                        ),
-                    ),
-            )
-            // Below this width the file list matters more than the details beside it.
-            .when(width >= px(760.), |d| {
+            .when(self.page == Page::Recent, |d| {
+                d.child(self.render_recent_page(cx))
+            })
+            .when(self.page == Page::Archive, |d| {
                 d.child(
                     v_flex()
-                        .id("inspector")
-                        .w(px(224.))
-                        .flex_none()
-                        .p_3()
-                        .gap_3()
-                        .border_l_1()
-                        .border_color(p.line)
-                        .child(self.render_inspector(cx)),
+                        .flex_1()
+                        .min_w_0()
+                        .child(self.render_breadcrumbs(cx))
+                        .child(
+                            div().id("files").flex_1().min_h_0().child(
+                                DataTable::new(&self.table)
+                                    .with_size(px(28.))
+                                    .bordered(false),
+                            ),
+                        ),
+                )
+                // Below this width the file list matters more than the details beside it.
+                .when(width >= px(760.), |d| {
+                    d.child(
+                        v_flex()
+                            .id("inspector")
+                            .w(px(224.))
+                            .flex_none()
+                            .p_3()
+                            .gap_3()
+                            .border_l_1()
+                            .border_color(p.line)
+                            .child(self.render_inspector(cx)),
+                    )
+                })
+            })
+    }
+
+    /// The archives opened lately, as a page of their own.
+    fn render_recent_page(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let p = palette(cx);
+        let rows = self
+            .settings
+            .recent
+            .iter()
+            .enumerate()
+            .map(|(ix, path)| {
+                let target = path.clone();
+                let name = path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                let folder = path
+                    .parent()
+                    .map(|d| d.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                let open = self.archives.iter().any(|a| a.path == *path);
+                h_flex()
+                    .id(("recent", ix))
+                    .gap_3()
+                    .px_3()
+                    .h(px(56.))
+                    .rounded(px(10.))
+                    .cursor_pointer()
+                    .hover(|d| d.bg(p.hover))
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        this.open_path(target.clone(), None, window, cx);
+                    }))
+                    .child(
+                        div()
+                            .size(px(36.))
+                            .rounded(px(10.))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .flex_none()
+                            .bg(p.accent_soft)
+                            .text_color(p.accent)
+                            .child(Icon::new(gpui_kit::assets::IconName::FileArchive).size_5()),
+                    )
+                    .child(
+                        v_flex()
+                            .flex_1()
+                            .min_w_0()
+                            .child(div().text_size(px(14.)).child(name))
+                            .child(
+                                div()
+                                    .text_size(px(12.))
+                                    .text_color(p.fg3)
+                                    .overflow_hidden()
+                                    .text_ellipsis()
+                                    .child(folder),
+                            ),
+                    )
+                    .when(open, |d| {
+                        d.child(div().text_size(px(12.)).text_color(p.fg3).child("已打开"))
+                    })
+                    .child(Icon::new(IconName::ChevronRight).size_4().text_color(p.fg3))
+                    .into_any_element()
+            })
+            .collect::<Vec<_>>();
+        v_flex()
+            .id("recent-page")
+            .flex_1()
+            .min_w_0()
+            .p_6()
+            .gap_4()
+            .child(
+                v_flex()
+                    .gap_1()
+                    .child(div().text_size(px(18.)).child("最近打开"))
+                    .child(
+                        div()
+                            .text_color(p.fg3)
+                            .child("点一下就在新标签页里打开,文件已被移走时会提示"),
+                    ),
+            )
+            .when(rows.is_empty(), |d| {
+                d.child(
+                    div()
+                        .text_color(p.fg3)
+                        .child("还没有打开过压缩包。打开的压缩包会记在这里。"),
                 )
             })
+            .child(v_flex().gap_1().children(rows))
     }
 
     fn render_sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -1334,6 +1447,7 @@ impl MainView {
         };
         // One row: icon, label and, on the right, a count or "coming soon".
         let mono = cx.theme().mono_font_family.clone();
+        let on_recent = self.page == Page::Recent;
         let nav = |icon: Icon, label: &'static str, count: Option<String>, state: Nav| {
             let (fg, icon_fg) = match state {
                 Nav::Current => (p.accent, p.accent),
@@ -1372,26 +1486,28 @@ impl MainView {
             .border_r_1()
             .border_color(p.line)
             .child(heading("位置"))
-            .child(nav(
-                Icon::new(IconName::Inbox),
-                "当前压缩包",
-                None,
-                Nav::Current,
-            ))
-            .child(nav(
-                Icon::new(gpui_kit::assets::IconName::Clock),
-                "最近打开",
-                Some(self.settings.recent.len().to_string()),
-                Nav::Live,
-            ))
-            .children(
-                self.settings
-                    .recent
-                    .iter()
-                    .take(5)
-                    .enumerate()
-                    .map(|(ix, path)| self.recent_row(ix, path, cx))
-                    .collect::<Vec<_>>(),
+            .child(
+                nav(
+                    Icon::new(IconName::Inbox),
+                    "当前压缩包",
+                    None,
+                    if on_recent { Nav::Live } else { Nav::Current },
+                )
+                .id("nav-current")
+                .cursor_pointer()
+                .on_click(cx.listener(|this, _, _, cx| this.show_page(Page::Archive, cx))),
+            )
+            // A page of its own on the right, not a list squeezed into the menu.
+            .child(
+                nav(
+                    Icon::new(gpui_kit::assets::IconName::Clock),
+                    "最近打开",
+                    Some(self.settings.recent.len().to_string()),
+                    if on_recent { Nav::Current } else { Nav::Live },
+                )
+                .id("nav-recent")
+                .cursor_pointer()
+                .on_click(cx.listener(|this, _, _, cx| this.show_page(Page::Recent, cx))),
             )
             .child(nav(Icon::new(IconName::Star), "常用位置", None, Nav::Soon))
             .child(heading("快速操作"))

@@ -238,6 +238,25 @@ fn a_picture_is_previewed_and_other_files_are_not(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn the_recent_page_lists_archives_and_opening_one_returns_to_the_files(cx: &mut TestAppContext) {
+    use rustzip_gui::view::Page;
+    let tmp = tempfile::tempdir().unwrap();
+    let first = make_archive(tmp.path(), "a.zip", None);
+    let (handle, view) = open_window(cx, None);
+    open_sync(cx, handle, &view, &first, None);
+    cx.update(|cx| assert_eq!(view.read(cx).page, Page::Archive));
+
+    with_view(cx, handle, &view, |v, _, cx| v.show_page(Page::Recent, cx));
+    cx.update(|cx| assert_eq!(view.read(cx).page, Page::Recent));
+
+    // Opening an archive, even one that is already open, goes back to its files.
+    with_view(cx, handle, &view, |v, window, cx| {
+        v.open_path(first.clone(), None, window, cx);
+    });
+    cx.update(|cx| assert_eq!(view.read(cx).page, Page::Archive));
+}
+
+#[gpui_kit::test]
 fn a_finished_test_marks_the_archive_as_verified(cx: &mut TestAppContext) {
     let tmp = tempfile::tempdir().unwrap();
     let archive = make_archive(tmp.path(), "a.zip", None);
