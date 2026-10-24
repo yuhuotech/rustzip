@@ -13,7 +13,7 @@ use gpui_kit::component::table::{DataTable, TableEvent, TableState};
 use gpui_kit::component::{ActiveTheme, Disableable, Icon, IconName, Sizable, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
-use rz_app::browse::{ArchiveTree, Row, RowKind, compression_ratio, format_size, format_time};
+use rz_app::browse::{ArchiveTree, Row, RowKind, compression_ratio, format_size};
 use rz_app::settings::Settings;
 use rz_app::tasks::{ErrorCode, JobKind, JobSpec, TaskId, TaskInfo, TaskManager, TaskState};
 use rz_core::{CreateOptions, Error};
@@ -1193,7 +1193,9 @@ impl MainView {
                                     .filter(|_| row.kind != RowKind::Dir),
                                 |d, r| d.child(kv("节省", r)),
                             )
-                            .when_some(row.modified, |d, t| d.child(kv("修改时间", format_time(t))))
+                            .when_some(row.modified, |d, t| {
+                                d.child(kv("修改时间", crate::local_time(t)))
+                            })
                             .when(row.kind == RowKind::Dir, |d| {
                                 d.child(kv("文件数", row.items.to_string()))
                             })

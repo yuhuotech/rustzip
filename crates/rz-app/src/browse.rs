@@ -381,8 +381,15 @@ pub fn format_size(bytes: u64) -> String {
 
 /// `2026-10-24 18:04`, from seconds since the Unix epoch (UTC).
 pub fn format_time(unix: i64) -> String {
-    let days = unix.div_euclid(86_400);
-    let secs = unix.rem_euclid(86_400);
+    format_time_at(unix, 0)
+}
+
+/// Like [`format_time`] for a zone `offset_secs` east of UTC. The offset comes from the
+/// caller because only the front end may ask the operating system for the local zone.
+pub fn format_time_at(unix: i64, offset_secs: i32) -> String {
+    let local = unix.saturating_add(i64::from(offset_secs));
+    let days = local.div_euclid(86_400);
+    let secs = local.rem_euclid(86_400);
     let z = days + 719_468;
     let era = z.div_euclid(146_097);
     let doe = z - era * 146_097;
@@ -614,6 +621,13 @@ mod tests {
         assert_eq!(format_time(1_700_000_000), "2023-11-14 22:13");
         assert_eq!(format_time(-1), "1969-12-31 23:59");
         assert_eq!(format_time(951_782_400), "2000-02-29 00:00");
+        // UTC+8 crosses midnight into the next day; UTC-5:30 steps back across a month.
+        assert_eq!(format_time_at(1_700_000_000, 8 * 3600), "2023-11-15 06:13");
+        assert_eq!(
+            format_time_at(951_782_400, -(5 * 3600 + 1800)),
+            "2000-02-28 18:30"
+        );
+        assert!(!format_time_at(i64::MAX, 3600).is_empty());
     }
 
     #[test]

@@ -65,6 +65,16 @@ pub fn install_app_actions(cx: &mut App) {
     .detach();
 }
 
+/// A modification time as the user's clock would show it.
+pub fn local_time(unix: i64) -> String {
+    use chrono::{Local, Offset, TimeZone};
+    let offset = Local
+        .timestamp_opt(unix, 0)
+        .single()
+        .map_or(0, |t| t.offset().fix().local_minus_utc());
+    rz_app::browse::format_time_at(unix, offset)
+}
+
 /// Where the settings file lives, when the system has a config directory.
 pub fn settings_path() -> Option<PathBuf> {
     config_dir().map(|d| d.join("settings.json"))

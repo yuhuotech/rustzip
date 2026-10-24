@@ -16,6 +16,8 @@ path = "src/main.rs"
 
 [dependencies]
 gpui-kit = "0.8.0"
+# Only for the local time zone; formatting stays in rz-app.
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 rz-app.workspace = true
 rz-core.workspace = true
 rz-engine.workspace = true

@@ -5,9 +5,7 @@ use gpui_kit::component::table::{Column, ColumnSort, TableDelegate, TableState};
 use gpui_kit::component::{ActiveTheme, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
-use rz_app::browse::{
-    ArchiveTree, Badge, Row, RowKind, SortKey, badge, badge_label, format_size, format_time,
-};
+use rz_app::browse::{ArchiveTree, Badge, Row, RowKind, SortKey, badge, badge_label, format_size};
 use std::sync::Arc;
 
 pub const COL_NAME: usize = 0;
@@ -205,7 +203,7 @@ impl TableDelegate for FileRows {
                 mono(text, p.fg2, cx)
             }
             _ => {
-                let text = row.modified.map_or_else(|| "—".into(), format_time);
+                let text = row.modified.map_or_else(|| "—".into(), crate::local_time);
                 mono(text, p.fg2, cx)
             }
         }

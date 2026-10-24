@@ -6273,6 +6273,7 @@ dependencies = [
 name = "rustzip-gui"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "gpui-kit",
  "image",
  "rz-app",
