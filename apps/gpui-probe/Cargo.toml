@@ -1,0 +1,10 @@
+[package]
+name = "gpui-probe"
+description = "Throwaway program to validate GPUI Kit on real machines (IME, huge lists, frame rate)"
+version.workspace = true
+edition = "2024"
+license.workspace = true
+publish = false
+
+[dependencies]
+gpui-kit = "0.8.0"

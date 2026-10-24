@@ -24,6 +24,7 @@
   2. 渲染 100 万行条目的压缩包列表,测滚动帧率和内存。
   3. Linux 虚拟机、无独显旧机器、Windows 10 上启动和渲染无花屏。
 - 验证未完成前,UI 代码必须与 `rz-app` 解耦,保证能换框架。
+- 进展:`gpui-kit 0.8.0` 已在 macOS(Apple Silicon,Xcode Metal)上编译通过,release 构建约 15 MB;验证程序 `apps/gpui-probe` 能启动并持续运行 8 秒无崩溃。**输入法、百万行滚动、Linux / Windows 兼容仍未验证**,清单和判定标准见 `gpui-probe.md`。
 
 ## D4 自动更新与安装统计(已定)
 
