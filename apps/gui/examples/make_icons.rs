@@ -4,7 +4,8 @@
 //!
 //!     cargo run --release -p rustzip-gui --example make_icons -- packaging/icons
 //!
-//! The icon is a teal rounded square with a white zipper. It is drawn by distance
+//! The icon is a graphite rounded square with a white "Z" whose diagonal carries a
+//! teal zipper seam. It is drawn by distance
 //! functions with 4x4 supersampling, so it is crisp at every size and the output is
 //! the same on every machine.
 
@@ -27,32 +28,66 @@ fn mix(a: [f32; 3], b: [f32; 3], t: f32) -> [f32; 3] {
     ]
 }
 
+/// Distance to a segment, the position along it (0..1) and the signed side offset.
+fn seg(x: f32, y: f32, a: (f32, f32), b: (f32, f32)) -> (f32, f32, f32) {
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let len2 = dx * dx + dy * dy;
+    let t = (((x - a.0) * dx + (y - a.1) * dy) / len2).clamp(0., 1.);
+    let dist = (x - (a.0 + t * dx)).hypot(y - (a.1 + t * dy));
+    let side = ((x - a.0) * -dy + (y - a.1) * dx) / len2.sqrt();
+    (dist, t, side)
+}
+
+// The corners of the Z and the half width of its stroke.
+const A: (f32, f32) = (0.315, 0.335);
+const B: (f32, f32) = (0.685, 0.335);
+const C: (f32, f32) = (0.315, 0.665);
+const D: (f32, f32) = (0.685, 0.665);
+const STROKE: f32 = 0.062;
+
+const GRAPHITE_TOP: [f32; 3] = [0.169, 0.204, 0.220];
+const GRAPHITE_BOTTOM: [f32; 3] = [0.071, 0.094, 0.106];
+const SEAM: [f32; 3] = [0.180, 0.769, 0.651];
+
+fn z_distance(x: f32, y: f32) -> f32 {
+    let d1 = seg(x, y, A, B).0;
+    let d2 = seg(x, y, B, C).0;
+    let d3 = seg(x, y, C, D).0;
+    d1.min(d2).min(d3) - STROKE
+}
+
 /// The colour (premultiplied RGBA) of the icon at a point of the unit square.
 fn sample(x: f32, y: f32) -> [f32; 4] {
-    if rbox(x, y, 0.5, 0.5, 0.5, 0.5, 0.225) > 0. {
+    // The tile leaves a margin, like the system icons do.
+    if rbox(x, y, 0.5, 0.5, 0.42, 0.42, 0.19) > 0. {
         return [0.; 4];
     }
-    let teal = mix([0.10, 0.76, 0.63], [0.04, 0.50, 0.42], y);
-    let mut rgb = teal;
-    let white = [1.0, 1.0, 1.0];
+    let mut rgb = mix(
+        GRAPHITE_TOP,
+        GRAPHITE_BOTTOM,
+        ((y - 0.08) / 0.84).clamp(0., 1.),
+    );
 
-    // The two rows of teeth, offset against each other by half a step.
-    if (0.36..0.90).contains(&y) {
-        let pitch = 0.085;
-        for (side, shift) in [(-1.0f32, 0.0f32), (1.0, 0.5)] {
-            let row = ((y - 0.36) / pitch - shift).floor();
-            let cy = 0.36 + (row + shift + 0.5) * pitch;
-            let cx = 0.5 + side * 0.062;
-            if cy > 0.36 && cy < 0.90 && rbox(x, y, cx, cy, 0.054, 0.027, 0.016) < 0. {
-                rgb = white;
-            }
-        }
-    }
-    // The slider with its pull tab.
-    if rbox(x, y, 0.5, 0.235, 0.118, 0.135, 0.05) < 0. {
-        rgb = white;
-        if rbox(x, y, 0.5, 0.215, 0.036, 0.055, 0.03) < 0. {
-            rgb = teal;
+    // A short, tight shadow keeps the letter from looking pasted on.
+    let shadow = (1. - (z_distance(x, y - 0.018) / 0.03).clamp(0., 1.)) * 0.45;
+    rgb = mix(rgb, [0., 0., 0.], shadow);
+
+    if z_distance(x, y) < 0. {
+        rgb = [1.0, 1.0, 1.0];
+        // A straight seam with round ends down the diagonal, like a zipper just closed.
+        let (_, along, side) = seg(x, y, B, C);
+        let len = ((C.0 - B.0).powi(2) + (C.1 - B.1).powi(2)).sqrt();
+        let u = along * len;
+        let (lo, hi) = (0.075, len - 0.075);
+        let off = if u < lo {
+            (u - lo).hypot(side)
+        } else if u > hi {
+            (u - hi).hypot(side)
+        } else {
+            side.abs()
+        };
+        if off < 0.0085 {
+            rgb = SEAM;
         }
     }
     [rgb[0], rgb[1], rgb[2], 1.0]
