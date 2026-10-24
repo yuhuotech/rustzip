@@ -154,6 +154,8 @@ pub enum Overlay {
     Settings,
     /// Shown once, on the first start: what the anonymous statistics are.
     Privacy,
+    /// Deleting these entries from the archive, waiting for the user to agree.
+    ConfirmDelete(Vec<String>),
 }
 
 pub struct MainView {
@@ -178,6 +180,8 @@ pub struct MainView {
     announced: HashSet<TaskId>,
     /// Which archive each running integrity test belongs to.
     tests: HashMap<TaskId, PathBuf>,
+    /// Which archive each running add/delete belongs to, to read it again afterwards.
+    edits: HashMap<TaskId, PathBuf>,
 }
 
 /// Reads the whole entry list of an archive. Runs off the UI thread.
@@ -223,6 +227,7 @@ fn kind_label(kind: JobKind) -> &'static str {
         JobKind::Compress => "压缩",
         JobKind::Extract => "解压",
         JobKind::Test => "测试",
+        JobKind::Edit => "修改",
     }
 }
 
@@ -278,6 +283,7 @@ impl MainView {
             polling: false,
             announced: HashSet::new(),
             tests: HashMap::new(),
+            edits: HashMap::new(),
         }
     }
 
@@ -620,6 +626,181 @@ impl MainView {
         self.tests.insert(id, archive);
     }
 
+    // ----- changing and previewing --------------------------------------------------
+
+    /// What the user has picked in the list: the marked rows, else the selected one.
+    pub fn picked_paths(&self, cx: &App) -> Vec<String> {
+        let marked = self.table.read(cx).delegate().marked();
+        match (self.current().and_then(|a| a.selected.clone()), marked) {
+            (_, m) if !m.is_empty() => m,
+            (Some(p), _) => vec![p],
+            _ => Vec::new(),
+        }
+    }
+
+    /// Whether the open archive is of a kind that can be changed.
+    pub fn can_edit(&self) -> bool {
+        self.current()
+            .is_some_and(|a| rz_app::modify::is_editable(&a.path))
+    }
+
+    /// "Extract to…": the picked items when there are any, otherwise everything.
+    pub fn extract_to(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let any = !self.picked_paths(cx).is_empty();
+        self.extract(any, window, cx);
+    }
+
+    /// Asks which files to add, then adds them to the folder being shown.
+    pub fn pick_files_to_add(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.can_edit() {
+            self.say(Notice::Info("这种格式的压缩包不能修改".into()), cx);
+            return;
+        }
+        let rx = cx.prompt_for_paths(PathPromptOptions {
+            files: true,
+            directories: true,
+            multiple: true,
+            prompt: Some("添加到压缩包".into()),
+        });
+        cx.spawn_in(window, async move |this, cx| {
+            if let Ok(Ok(Some(paths))) = rx.await {
+                let _ = this.update(cx, |this, cx| this.add_files(paths, cx));
+            }
+        })
+        .detach();
+    }
+
+    /// Adds files and folders to the folder being shown. The archive is rewritten.
+    pub fn add_files(&mut self, sources: Vec<PathBuf>, cx: &mut Context<Self>) {
+        let Some(a) = self.current() else { return };
+        if sources.is_empty() || !self.can_edit() {
+            return;
+        }
+        let into = a.cwd.clone();
+        self.submit_edit(rz_app::modify::Edit::Add { into, sources }, cx);
+    }
+
+    /// Opens the "are you sure" card for deleting the picked items.
+    pub fn ask_delete(&mut self, cx: &mut Context<Self>) {
+        let paths = self.picked_paths(cx);
+        if paths.is_empty() || !self.can_edit() {
+            return;
+        }
+        self.overlay = Some(Overlay::ConfirmDelete(paths));
+        cx.notify();
+    }
+
+    pub fn confirm_delete(&mut self, cx: &mut Context<Self>) {
+        if let Some(Overlay::ConfirmDelete(paths)) = self.overlay.take() {
+            self.submit_edit(rz_app::modify::Edit::Delete(paths), cx);
+        }
+        cx.notify();
+    }
+
+    fn submit_edit(&mut self, edit: rz_app::modify::Edit, cx: &mut Context<Self>) {
+        let Some(a) = self.current() else { return };
+        let archive = a.path.clone();
+        let spec = JobSpec::Edit {
+            archive: archive.clone(),
+            edit,
+            opts: self.extract_options(None),
+            level: self.settings.default_level,
+            encoding: self.settings.forced_encoding().map(str::to_string),
+        };
+        let id = self.submit(spec, cx);
+        self.edits.insert(id, archive);
+    }
+
+    /// Reads the archive again after it was changed, keeping the folder being shown.
+    fn reload_archive(&mut self, path: PathBuf, cx: &mut Context<Self>) {
+        let password = self
+            .archives
+            .iter()
+            .find(|a| a.path == path)
+            .and_then(|a| a.password.clone());
+        cx.spawn(async move |this, cx| {
+            let (p, pw) = (path.clone(), password);
+            let result = cx
+                .background_executor()
+                .spawn(async move { load_archive(&p, pw.as_deref()) })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                match result {
+                    Ok((tree, _)) => {
+                        if let Some(a) = this.archives.iter_mut().find(|a| a.path == path) {
+                            a.tree = Arc::new(tree);
+                            // The folder being shown may have been deleted.
+                            while !a.cwd.is_empty() && !a.tree.is_dir(&a.cwd) {
+                                a.cwd = rz_app::browse::parent_dir(&a.cwd);
+                            }
+                            a.selected = None;
+                            a.verified = None;
+                        }
+                        this.preview = None;
+                        this.apply_view(cx);
+                    }
+                    Err(e) => this.say(Notice::Error(explain(&e)), cx),
+                };
+            });
+        })
+        .detach();
+    }
+
+    /// Unpacks the picked file to a scratch folder and opens it with the program the
+    /// system uses for that kind of file.
+    pub fn preview_selected(&mut self, cx: &mut Context<Self>) {
+        let Some(row) = self.selected_row() else {
+            self.say(Notice::Info("先在列表里选一个文件".into()), cx);
+            return;
+        };
+        let Some(a) = self.current() else { return };
+        let entry = row.entry.and_then(|ix| a.tree.entries().get(ix).cloned());
+        let (RowKind::File, Some(entry)) = (row.kind, entry) else {
+            self.say(Notice::Info("预览只能用于文件".into()), cx);
+            return;
+        };
+        // Opening a program or script from an archive would run it, which is not a preview.
+        if crate::services::is_runnable(&row.name) {
+            self.say(
+                Notice::Info("为了安全,不直接打开程序和脚本;请解压后确认来源再运行".into()),
+                cx,
+            );
+            return;
+        }
+        let (archive, password) = (a.path.clone(), a.password.clone());
+        let encoding = self.settings.forced_encoding().map(str::to_string);
+        let name = crate::services::scratch_name(&row.name);
+        self.say(Notice::Info(format!("正在准备 {}…", row.name)), cx);
+        cx.spawn(async move |this, cx| {
+            let result = cx
+                .background_executor()
+                .spawn(async move {
+                    let data = rz_app::preview::read_entry(
+                        &archive,
+                        &entry,
+                        password.as_deref(),
+                        encoding.as_deref(),
+                        crate::services::MAX_PREVIEW_BYTES,
+                    )?;
+                    crate::services::write_scratch(&name, &data).map_err(Error::Io)
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| match result {
+                Ok(path) => {
+                    crate::services::open_file_with_system(&path);
+                    this.notice = None;
+                    cx.notify();
+                }
+                Err(Error::LimitExceeded(_)) => this.say(
+                    Notice::Info("文件太大,不适合预览;请用“解压到…”取出来".into()),
+                    cx,
+                ),
+                Err(e) => this.say(Notice::Error(explain(&e)), cx),
+            });
+        })
+        .detach();
+    }
+
     fn submit(&mut self, spec: JobSpec, cx: &mut Context<Self>) -> TaskId {
         let id = self.tasks.submit(spec);
         self.notice = None;
@@ -716,11 +897,17 @@ impl MainView {
                     a.verified = verdict;
                 }
             }
+            if let Some(path) = self.edits.remove(&t.id)
+                && t.state == TaskState::Done
+            {
+                self.reload_archive(path, cx);
+            }
             match (&t.state, &t.error, &t.summary) {
                 (TaskState::Done, _, Some(s)) => {
                     let what = kind_label(t.kind);
                     let msg = match t.kind {
                         JobKind::Test => format!("{what}通过:{} 个条目没有发现问题", s.files),
+                        JobKind::Edit => format!("{what}完成:压缩包现在有 {} 项", s.files),
                         _ => format!("{what}完成:{} 个文件,{}", s.files, format_size(s.bytes)),
                     };
                     self.notice = Some(Notice::Info(msg));
@@ -1141,6 +1328,10 @@ impl MainView {
         let has = self.current().is_some();
         let has_sel = self.current().is_some_and(|a| a.selected.is_some())
             || !self.table.read(cx).delegate().marked().is_empty();
+        let editable = self.can_edit();
+        // Previews open one file at a time.
+        let can_preview = self.selected_row().is_some_and(|r| r.kind == RowKind::File)
+            && self.table.read(cx).delegate().marked().len() <= 1;
         h_flex()
             .id("toolbar")
             .h(px(46.))
@@ -1150,21 +1341,24 @@ impl MainView {
             .flex_none()
             .border_b_1()
             .border_color(p.line)
+            // Extracts what is picked, or everything when nothing is.
             .child(
                 Button::new("extract-all")
                     .primary()
                     .icon(IconName::ArrowDown)
-                    .label("解压全部")
+                    .label("解压到…")
                     .disabled(!has)
-                    .on_click(cx.listener(|this, _, window, cx| this.extract(false, window, cx))),
+                    .on_click(cx.listener(|this, _, window, cx| this.extract_to(window, cx))),
             )
             .child(
-                Button::new("extract-selected")
+                Button::new("add")
                     .ghost()
-                    .icon(IconName::FolderOpen)
-                    .label("解压所选")
-                    .disabled(!has_sel)
-                    .on_click(cx.listener(|this, _, window, cx| this.extract(true, window, cx))),
+                    .icon(IconName::Plus)
+                    .label("添加")
+                    .disabled(!editable)
+                    .on_click(
+                        cx.listener(|this, _, window, cx| this.pick_files_to_add(window, cx)),
+                    ),
             )
             .child(
                 Button::new("test")
@@ -1174,13 +1368,23 @@ impl MainView {
                     .disabled(!has)
                     .on_click(cx.listener(|this, _, _, cx| this.start_test(cx))),
             )
+            .child(
+                Button::new("delete")
+                    .ghost()
+                    .icon(Icon::new(gpui_kit::assets::IconName::Trash))
+                    .label("删除")
+                    .text_color(if has_sel && editable { p.danger } else { p.fg3 })
+                    .disabled(!has_sel || !editable)
+                    .on_click(cx.listener(|this, _, _, cx| this.ask_delete(cx))),
+            )
             .child(div().w(px(1.)).h(px(16.)).mx_1p5().bg(p.line))
             .child(
-                Button::new("compress")
+                Button::new("preview")
                     .ghost()
-                    .icon(IconName::Plus)
-                    .label("新建压缩")
-                    .on_click(cx.listener(|this, _, window, cx| this.pick_sources(window, cx))),
+                    .icon(IconName::Eye)
+                    .label("预览")
+                    .disabled(!can_preview)
+                    .on_click(cx.listener(|this, _, _, cx| this.preview_selected(cx))),
             )
             .child(div().flex_1())
             .child(
@@ -2055,6 +2259,7 @@ impl MainView {
             Overlay::Compress(form) => self.compress_card(form, cx).into_any_element(),
             Overlay::Settings => self.settings_card(cx).into_any_element(),
             Overlay::Privacy => self.privacy_card(cx).into_any_element(),
+            Overlay::ConfirmDelete(paths) => self.delete_card(paths, cx).into_any_element(),
         };
         Some(
             div()
@@ -2105,6 +2310,41 @@ impl MainView {
                     .child(Button::new("pw-ok").primary().label("确定").on_click(
                         cx.listener(|this, _, window, cx| this.submit_password(window, cx)),
                     )),
+            )
+    }
+
+    fn delete_card(&self, paths: &[String], cx: &mut Context<Self>) -> impl IntoElement {
+        let p = palette(cx);
+        let what = match paths {
+            [one] => format!("“{}”", one.rsplit('/').next().unwrap_or(one)),
+            many => format!("这 {} 项", many.len()),
+        };
+        v_flex()
+            .gap_3()
+            .child(div().text_size(px(16.)).child(format!("从压缩包里删除{what}?")))
+            .child(
+                div().text_color(p.fg2).child(
+                    "删除会重新生成整个压缩包:先在旁边写好新文件,检查无误后才替换原文件,中途失败原文件不受影响。删除后无法撤销。",
+                ),
+            )
+            .child(
+                h_flex()
+                    .justify_end()
+                    .gap_2()
+                    .child(
+                        Button::new("delete-cancel")
+                            .outline()
+                            .icon(IconName::Close)
+                            .label("取消")
+                            .on_click(cx.listener(|this, _, _, cx| this.close_overlay(cx))),
+                    )
+                    .child(
+                        Button::new("delete-ok")
+                            .danger()
+                            .icon(Icon::new(gpui_kit::assets::IconName::Trash))
+                            .label("删除")
+                            .on_click(cx.listener(|this, _, _, cx| this.confirm_delete(cx))),
+                    ),
             )
     }
 

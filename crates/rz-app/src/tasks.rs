@@ -1,6 +1,7 @@
 //! The task queue: runs compress, extract and test jobs on a small worker pool
 //! and reports what happens as events a UI can render.
 
+use crate::modify::{edit_archive, Edit};
 use crate::smart::extraction_dir;
 use rz_core::{CancelToken, CreateOptions, EntryKind, Error, Progress, ProgressSink};
 use rz_engine::{compress, extract, ExtractOptions};
@@ -35,6 +36,15 @@ pub enum JobSpec {
         password: Option<String>,
         encoding: Option<String>,
     },
+    /// Add files to, or delete entries from, an existing archive.
+    Edit {
+        archive: PathBuf,
+        edit: Edit,
+        /// How the archive is unpacked first; carries the password.
+        opts: ExtractOptions,
+        level: u32,
+        encoding: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,6 +52,7 @@ pub enum JobKind {
     Compress,
     Extract,
     Test,
+    Edit,
 }
 
 impl JobSpec {
@@ -50,6 +61,7 @@ impl JobSpec {
             JobSpec::Compress { .. } => JobKind::Compress,
             JobSpec::Extract { .. } => JobKind::Extract,
             JobSpec::Test { .. } => JobKind::Test,
+            JobSpec::Edit { .. } => JobKind::Edit,
         }
     }
 
@@ -57,7 +69,9 @@ impl JobSpec {
     pub fn title(&self) -> String {
         let path = match self {
             JobSpec::Compress { output, .. } => output,
-            JobSpec::Extract { archive, .. } | JobSpec::Test { archive, .. } => archive,
+            JobSpec::Extract { archive, .. }
+            | JobSpec::Test { archive, .. }
+            | JobSpec::Edit { archive, .. } => archive,
         };
         path.file_name()
             .map(|n| n.to_string_lossy().into_owned())
@@ -80,6 +94,16 @@ impl JobSpec {
                 let mut spec = self.clone();
                 if let JobSpec::Test { password: p, .. } = &mut spec {
                     *p = Some(password);
+                }
+                Some(spec)
+            }
+            JobSpec::Edit { opts, .. } => {
+                let mut spec = self.clone();
+                if let JobSpec::Edit { opts: o, .. } = &mut spec {
+                    *o = ExtractOptions {
+                        password: Some(password),
+                        ..opts.clone()
+                    };
                 }
                 Some(spec)
             }
@@ -628,6 +652,29 @@ fn run(
                 files: rep.files,
                 bytes: rep.bytes,
                 output: target,
+                elapsed: started.elapsed(),
+            })
+        }
+        JobSpec::Edit {
+            archive,
+            edit,
+            opts,
+            level,
+            encoding,
+        } => {
+            let rep = edit_archive(
+                archive,
+                edit,
+                opts,
+                *level,
+                encoding.as_deref(),
+                token,
+                &mut sink,
+            )?;
+            Ok(Summary {
+                files: rep.files,
+                bytes: rep.bytes,
+                output: archive.clone(),
                 elapsed: started.elapsed(),
             })
         }

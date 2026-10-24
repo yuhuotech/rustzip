@@ -6378,6 +6378,7 @@ dependencies = [
  "rz-core",
  "rz-engine",
  "rz-formats",
+ "rz-platform",
  "semver",
  "serde",
  "serde_json",

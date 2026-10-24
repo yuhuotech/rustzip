@@ -10,6 +10,7 @@ rust-version.workspace = true
 rz-core.workspace = true
 rz-formats.workspace = true
 rz-engine.workspace = true
+rz-platform.workspace = true
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 ed25519-dalek = "3.0.0"

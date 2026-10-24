@@ -6,6 +6,7 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
 pub mod browse;
+pub mod modify;
 pub mod passwords;
 pub mod preview;
 pub mod settings;

@@ -48,6 +48,110 @@ fn open_with_system(path: &Path) {
     let _ = Command::new(program).arg(target).spawn();
 }
 
+/// The largest file unpacked just to be opened for a look.
+pub const MAX_PREVIEW_BYTES: u64 = 256 * 1024 * 1024;
+
+/// Opens a file with the program the system uses for that kind of file.
+pub fn open_file_with_system(path: &Path) {
+    let program = match std::env::consts::OS {
+        "macos" => "open",
+        "windows" => "explorer",
+        _ => "xdg-open",
+    };
+    let _ = Command::new(program).arg(path).spawn();
+}
+
+/// Files that run when opened. A preview must never start a program that came out of an
+/// archive, so these are refused and the user is told to extract them deliberately.
+pub fn is_runnable(name: &str) -> bool {
+    let ext = name
+        .rsplit_once('.')
+        .map(|(_, e)| e.to_ascii_lowercase())
+        .unwrap_or_default();
+    matches!(
+        ext.as_str(),
+        "exe"
+            | "com"
+            | "scr"
+            | "bat"
+            | "cmd"
+            | "msi"
+            | "msp"
+            | "ps1"
+            | "psm1"
+            | "vbs"
+            | "vbe"
+            | "js"
+            | "jse"
+            | "wsf"
+            | "wsh"
+            | "hta"
+            | "cpl"
+            | "lnk"
+            | "reg"
+            | "jar"
+            | "dll"
+            | "sh"
+            | "bash"
+            | "zsh"
+            | "command"
+            | "app"
+            | "pkg"
+            | "dmg"
+            | "action"
+            | "workflow"
+            | "appimage"
+            | "desktop"
+            | "run"
+            | "bin"
+            | "pif"
+            | "gadget"
+            | "inf"
+            | "url"
+            | "webloc"
+            | "terminal"
+            | "scpt"
+            | "scptd"
+            | "py"
+            | "pl"
+            | "rb"
+    ) || name.is_empty()
+}
+
+/// A file name that is safe to create inside the scratch folder.
+pub fn scratch_name(name: &str) -> String {
+    let clean: String = name
+        .chars()
+        .map(|c| {
+            if c.is_control() || matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|') {
+                '_'
+            } else {
+                c
+            }
+        })
+        .collect();
+    let clean = clean.trim().trim_matches('.').to_string();
+    if clean.is_empty() {
+        "preview".into()
+    } else {
+        clean
+    }
+}
+
+/// Writes preview data into this run's scratch folder and returns the new file's path.
+/// Each preview gets its own numbered folder so equal names never clash.
+pub fn write_scratch(name: &str, data: &[u8]) -> std::io::Result<PathBuf> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    let dir = std::env::temp_dir()
+        .join(format!("RustZIP-preview-{}", std::process::id()))
+        .join(NEXT.fetch_add(1, Ordering::Relaxed).to_string());
+    std::fs::create_dir_all(&dir)?;
+    let path = dir.join(scratch_name(name));
+    std::fs::write(&path, data)?;
+    Ok(path)
+}
+
 /// The file name a download is saved under, taken from its URL and made harmless.
 fn download_name(url: &str) -> String {
     let last = url.rsplit('/').next().unwrap_or("");
@@ -217,6 +321,28 @@ impl MainView {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn programs_and_scripts_are_never_previewed() {
+        for name in ["setup.EXE", "run.sh", "x.command", "a.app", "m.js", "k.lnk"] {
+            assert!(is_runnable(name), "{name}");
+        }
+        for name in ["photo.png", "notes.txt", "report.pdf", "data.csv", "README"] {
+            assert!(!is_runnable(name), "{name}");
+        }
+    }
+
+    #[test]
+    fn scratch_files_get_harmless_names_in_separate_folders() {
+        assert_eq!(scratch_name("../../etc/passwd"), "_.._etc_passwd");
+        assert_eq!(scratch_name("..."), "preview");
+        assert_eq!(scratch_name("报告 终稿.pdf"), "报告 终稿.pdf");
+        let a = write_scratch("x.txt", b"1").unwrap();
+        let b = write_scratch("x.txt", b"2").unwrap();
+        assert_ne!(a, b);
+        assert_eq!(std::fs::read(&b).unwrap(), b"2");
+        let _ = std::fs::remove_dir_all(a.parent().and_then(Path::parent).unwrap());
+    }
 
     #[test]
     fn download_names_cannot_escape_the_folder() {

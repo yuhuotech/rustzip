@@ -257,6 +257,75 @@ fn the_recent_page_lists_archives_and_opening_one_returns_to_the_files(cx: &mut 
 }
 
 #[gpui_kit::test]
+fn deleting_and_adding_rewrite_the_archive_and_the_list_follows(cx: &mut TestAppContext) {
+    use rustzip_gui::view::Overlay as O;
+    let tmp = tempfile::tempdir().unwrap();
+    let archive = make_archive(tmp.path(), "a.zip", None);
+    let (handle, view) = open_window(cx, None);
+    open_sync(cx, handle, &view, &archive, None);
+    with_view(cx, handle, &view, |v, _, cx| v.navigate("proj", cx));
+    assert_eq!(row_names(cx, &view), ["docs", "src", "readme.txt"]);
+
+    // Pick readme.txt and ask to delete it: nothing happens until the user agrees.
+    let table = cx.update(|cx| view.read(cx).table.clone());
+    cx.update_window(handle.into(), |_, _, cx| {
+        table.update(cx, |_, cx| cx.emit(TableEvent::SelectRow(2)));
+    })
+    .unwrap();
+    with_view(cx, handle, &view, |v, _, cx| v.ask_delete(cx));
+    cx.update(|cx| {
+        assert!(
+            matches!(&view.read(cx).overlay, Some(O::ConfirmDelete(p)) if p == &["proj/readme.txt"])
+        );
+    });
+    assert_eq!(row_names(cx, &view), ["docs", "src", "readme.txt"]);
+
+    with_view(cx, handle, &view, |v, _, cx| v.confirm_delete(cx));
+    wait_for_tasks(cx, handle, &view);
+    cx.run_until_parked();
+    draw(cx, handle);
+    assert_eq!(row_names(cx, &view), ["docs", "src"]);
+    cx.update(|cx| assert!(view.read(cx).overlay.is_none()));
+
+    // Adding puts the files into the folder being shown.
+    let extra = tmp.path().join("extra.txt");
+    fs::write(&extra, "more").unwrap();
+    with_view(cx, handle, &view, |v, _, cx| v.add_files(vec![extra], cx));
+    wait_for_tasks(cx, handle, &view);
+    cx.run_until_parked();
+    draw(cx, handle);
+    assert_eq!(row_names(cx, &view), ["docs", "src", "extra.txt"]);
+    // The file on disk really changed, not just the list.
+    let (tree, _) = load_archive(&archive, None).unwrap();
+    assert!(tree.find("proj/extra.txt").is_some());
+    assert!(tree.find("proj/readme.txt").is_none());
+}
+
+#[gpui_kit::test]
+fn archives_that_cannot_be_rewritten_refuse_to_be_edited(cx: &mut TestAppContext) {
+    let tmp = tempfile::tempdir().unwrap();
+    let file = tmp.path().join("one.txt");
+    fs::write(&file, "hello hello hello").unwrap();
+    let gz = tmp.path().join("one.txt.gz");
+    compress(
+        &[file],
+        &gz,
+        OutputFormat::from_path(&gz).unwrap(),
+        &CreateOptions::default(),
+        &CancelToken::new(),
+        &mut NoProgress,
+    )
+    .unwrap();
+    let (handle, view) = open_window(cx, None);
+    open_sync(cx, handle, &view, &gz, None);
+    cx.update(|cx| assert!(!view.read(cx).can_edit()));
+    with_view(cx, handle, &view, |v, _, cx| {
+        v.add_files(vec![gz.clone()], cx)
+    });
+    cx.update(|cx| assert!(view.read(cx).task_view.is_empty()));
+}
+
+#[gpui_kit::test]
 fn a_finished_test_marks_the_archive_as_verified(cx: &mut TestAppContext) {
     let tmp = tempfile::tempdir().unwrap();
     let archive = make_archive(tmp.path(), "a.zip", None);
