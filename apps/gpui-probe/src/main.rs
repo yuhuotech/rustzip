@@ -11,7 +11,7 @@
 use gpui_kit::component::button::*;
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::table::{Column, DataTable, TableDelegate, TableState};
-use gpui_kit::component::{Root, h_flex, v_flex};
+use gpui_kit::component::{Root, Theme, h_flex, v_flex};
 use gpui_kit::*;
 use std::time::Instant;
 
@@ -205,6 +205,14 @@ fn main() {
             ..WindowOptions::default()
         };
         let opened = gpui_kit::open_window(options, cx, |window, cx| {
+            // The kit does not follow the system theme by itself: apply it now and
+            // again whenever the user switches between light and dark.
+            Theme::sync_system_appearance(Some(window), cx);
+            window
+                .observe_window_appearance(|window, cx| {
+                    Theme::sync_system_appearance(Some(window), cx);
+                })
+                .detach();
             let view = cx.new(|cx| Probe::new(window, cx));
             cx.new(|cx| Root::new(view, window, cx))
         });

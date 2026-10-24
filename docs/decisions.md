@@ -24,7 +24,9 @@
   2. 渲染 100 万行条目的压缩包列表,测滚动帧率和内存。
   3. Linux 虚拟机、无独显旧机器、Windows 10 上启动和渲染无花屏。
 - 验证未完成前,UI 代码必须与 `rz-app` 解耦,保证能换框架。
-- 进展:`gpui-kit 0.8.0` 已在 macOS(Apple Silicon,Xcode Metal)上编译通过,release 构建约 15 MB;验证程序 `apps/gpui-probe` 能启动并持续运行 8 秒无崩溃。**输入法、百万行滚动、Linux / Windows 兼容仍未验证**,清单和判定标准见 `gpui-probe.md`。
+- 进展:`gpui-kit 0.8.0` 已在 macOS(Apple Silicon,Xcode Metal)上编译通过,release 构建约 15 MB;验证程序 `apps/gpui-probe` 能启动并持续运行 8 秒无崩溃。清单和判定标准见 `gpui-probe.md`。
+- 用户在 macOS 上的实测(未说明具体机型和版本):两个输入框正常;100 万行表格滚动稳定在 120 帧、非常顺滑。发现一个问题:**深色模式不会自动跟随系统**。原因是 GPUI Kit 不自动同步主题,应用必须在窗口创建时调用 `Theme::sync_system_appearance`,并用 `window.observe_window_appearance` 在系统切换时再调用一次。验证程序已按此修复,但修复后的效果还没有人在真机上确认。正式 GUI 必须照做。
+- 仍未验证:Windows、Linux 上的输入法和渲染,以及无独显 / 虚拟机环境。这几项不通过就不能定案。
 
 ## D4 自动更新与安装统计(已定)
 
