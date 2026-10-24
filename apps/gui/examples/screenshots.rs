@@ -295,5 +295,17 @@ fn main() {
             v.show_first_run_notice(cx);
         });
         shoot(&mut cx, handle, &out_dir, &format!("{tag}-8-privacy"));
+        // The same notice opened again from the settings.
+        act(&mut cx, handle, &view, |v, _, cx| {
+            v.close_overlay(cx);
+            v.open_settings(cx);
+            v.show_privacy_notice(cx);
+        });
+        shoot(
+            &mut cx,
+            handle,
+            &out_dir,
+            &format!("{tag}-8b-privacy-again"),
+        );
     }
 }

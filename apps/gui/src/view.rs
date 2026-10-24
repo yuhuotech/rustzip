@@ -222,6 +222,8 @@ pub struct MainView {
     pub overlay: Option<Overlay>,
     pub loading: Option<PathBuf>,
     pub preview: Option<Preview>,
+    /// The statistics notice was opened from the settings, so it goes back there.
+    pub privacy_from_settings: bool,
     pub page: Page,
     /// Where the file list was drawn last, to turn mouse positions into rows.
     files_bounds: Rc<Cell<Bounds<Pixels>>>,
@@ -337,6 +339,7 @@ impl MainView {
             overlay: None,
             loading: None,
             preview: None,
+            privacy_from_settings: false,
             page: Page::Archive,
             files_bounds: Rc::default(),
             marquee: None,
@@ -2012,7 +2015,16 @@ impl MainView {
         brand::apply(cx);
     }
 
-    /// Closes the first-run notice; `keep_stats` is the user's answer to it.
+    /// Shows the statistics notice again, from the settings, where it can be read and the
+    /// choice made once more.
+    pub fn show_privacy_notice(&mut self, cx: &mut Context<Self>) {
+        self.privacy_from_settings = true;
+        self.overlay = Some(Overlay::Privacy);
+        cx.notify();
+    }
+
+    /// Closes the notice; `keep_stats` is the user's answer to it. Opened from the
+    /// settings, it returns there.
     pub fn answer_privacy(&mut self, keep_stats: bool, cx: &mut Context<Self>) {
         self.change_settings(
             |s| {
@@ -2021,9 +2033,19 @@ impl MainView {
             },
             cx,
         );
-        self.close_overlay(cx);
+        self.leave_privacy_notice(cx);
         // The notice has been seen now, so the first report may go out.
         self.report_install(cx);
+    }
+
+    /// Back from the notice without answering: to the settings, or away.
+    pub fn leave_privacy_notice(&mut self, cx: &mut Context<Self>) {
+        if std::mem::take(&mut self.privacy_from_settings) {
+            self.overlay = Some(Overlay::Settings);
+            cx.notify();
+        } else {
+            self.close_overlay(cx);
+        }
     }
 }
 
@@ -3980,6 +4002,17 @@ impl MainView {
                                     cx,
                                 );
                             })),
+                        )
+                        // To read what is sent, and to answer the question once more.
+                        .child(
+                            Button::new("show-privacy")
+                                .ghost()
+                                .small()
+                                .icon(Icon::new(gpui_kit::assets::IconName::ShieldCheck))
+                                .label("查看统计说明并重新选择…")
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.show_privacy_notice(cx);
+                                })),
                         ),
                 );
         Dialog {
@@ -4002,40 +4035,91 @@ impl MainView {
 
     fn privacy_card(&self, cx: &mut Context<Self>) -> AnyElement {
         let p = palette(cx);
+        let again = self.privacy_from_settings;
+        // One block of the explanation: what it is about, then the facts.
+        let block = |title: &'static str, text: &'static str| {
+            v_flex()
+                .gap_1()
+                .px_3()
+                .py_2()
+                .rounded(px(8.))
+                .bg(p.panel)
+                .border_1()
+                .border_color(p.line)
+                .child(div().text_size(px(12.)).text_color(p.fg3).child(title))
+                .child(
+                    div()
+                        .text_size(px(13.))
+                        .line_height(px(20.))
+                        .text_color(p.fg)
+                        .child(text),
+                )
+        };
+        let body = v_flex()
+            .gap_3()
+            .child(block(
+                "会上报",
+                "随机编号 · 软件版本 · 系统及版本 · CPU 架构 · 界面语言",
+            ))
+            .child(block("不会收集", "文件名、路径、文件内容,以及任何使用行为"))
+            .child(
+                div()
+                    .text_size(px(12.))
+                    .line_height(px(18.))
+                    .text_color(p.fg3)
+                    .child(
+                        "首次使用时上报一次,之后每天最多一次。发送失败时直接丢弃,不影响使用。\
+                         你随时可以在设置里改变选择。",
+                    ),
+            )
+            // Opened again from the settings: say what is chosen now.
+            .when(again, |d| {
+                d.child(div().text_size(px(13.)).text_color(p.accent).child(
+                    if self.settings.send_install_stats {
+                        "当前选择:参与"
+                    } else {
+                        "当前选择:不参与"
+                    },
+                ))
+            });
+        let mut buttons = Vec::new();
+        if again {
+            // Reading it again must not force an answer.
+            buttons.push(
+                Button::new("privacy-back")
+                    .outline()
+                    .icon(IconName::ArrowLeft)
+                    .label("返回")
+                    .on_click(cx.listener(|this, _, _, cx| this.leave_privacy_notice(cx)))
+                    .into_any_element(),
+            );
+        }
+        buttons.push(
+            Button::new("privacy-off")
+                .outline()
+                .icon(IconName::Close)
+                .label("不参与")
+                .on_click(cx.listener(|this, _, _, cx| this.answer_privacy(false, cx)))
+                .into_any_element(),
+        );
+        buttons.push(
+            Button::new("privacy-on")
+                .primary()
+                .icon(IconName::CircleCheck)
+                .label(if again { "参与" } else { "好的" })
+                .on_click(cx.listener(|this, _, _, cx| this.answer_privacy(true, cx)))
+                .into_any_element(),
+        );
         Dialog {
             tone: Tone::Neutral,
             icon: Icon::new(gpui_kit::assets::IconName::ShieldCheck),
             title: "关于匿名统计".into(),
             lead: Some(
-                "RustZIP 是免费开源软件。为了了解有多少人在用,首次启动时会上报一次匿名信息:\
-                 随机编号、软件版本、系统及版本、CPU 架构、界面语言。"
+                "RustZIP 是免费开源软件。为了了解有多少人在用,会上报一份完全匿名的基本信息。"
                     .into(),
             ),
-            body: Some(
-                div()
-                    .text_size(px(13.))
-                    .line_height(px(20.))
-                    .text_color(p.fg2)
-                    .child(
-                        "不会收集文件名、路径、文件内容或任何使用行为。发送失败时直接丢弃,\
-                         不影响启动。你随时可以在设置里关闭。",
-                    )
-                    .into_any_element(),
-            ),
-            buttons: vec![
-                Button::new("privacy-off")
-                    .outline()
-                    .icon(IconName::Close)
-                    .label("不参与")
-                    .on_click(cx.listener(|this, _, _, cx| this.answer_privacy(false, cx)))
-                    .into_any_element(),
-                Button::new("privacy-on")
-                    .primary()
-                    .icon(IconName::CircleCheck)
-                    .label("好的")
-                    .on_click(cx.listener(|this, _, _, cx| this.answer_privacy(true, cx)))
-                    .into_any_element(),
-            ],
+            body: Some(body.into_any_element()),
+            buttons,
         }
         .render(&p)
     }

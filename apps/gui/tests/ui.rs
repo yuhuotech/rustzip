@@ -1406,6 +1406,38 @@ fn the_privacy_notice_shows_once_and_records_the_answer(cx: &mut TestAppContext)
 }
 
 #[gpui_kit::test]
+fn the_privacy_notice_can_be_read_again_from_the_settings_and_answered_anew(
+    cx: &mut TestAppContext,
+) {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("settings.json");
+    let (handle, view) = open_window(cx, Some(path.clone()));
+    with_view(cx, handle, &view, |v, _, cx| v.answer_privacy(false, cx));
+    assert!(!Settings::load(&path).send_install_stats);
+
+    // From the settings: the notice opens, and going back changes nothing.
+    with_view(cx, handle, &view, |v, _, cx| {
+        v.open_settings(cx);
+        v.show_privacy_notice(cx);
+    });
+    cx.update(|cx| assert!(matches!(view.read(cx).overlay, Some(Overlay::Privacy))));
+    with_view(cx, handle, &view, |v, _, cx| v.leave_privacy_notice(cx));
+    cx.update(|cx| assert!(matches!(view.read(cx).overlay, Some(Overlay::Settings))));
+    assert!(!Settings::load(&path).send_install_stats);
+
+    // Answering again changes the choice and returns to the settings.
+    with_view(cx, handle, &view, |v, _, cx| v.show_privacy_notice(cx));
+    with_view(cx, handle, &view, |v, _, cx| v.answer_privacy(true, cx));
+    assert!(Settings::load(&path).send_install_stats);
+    cx.update(|cx| assert!(matches!(view.read(cx).overlay, Some(Overlay::Settings))));
+
+    // After the first-run notice, answering closes it, as before.
+    with_view(cx, handle, &view, |v, _, cx| v.close_overlay(cx));
+    with_view(cx, handle, &view, |v, _, cx| v.answer_privacy(false, cx));
+    cx.update(|cx| assert!(view.read(cx).overlay.is_none()));
+}
+
+#[gpui_kit::test]
 fn a_task_can_be_paused_cancelled_and_cleared_from_the_window(cx: &mut TestAppContext) {
     let tmp = tempfile::tempdir().unwrap();
     let archive = make_archive(tmp.path(), "a.zip", None);
