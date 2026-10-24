@@ -772,7 +772,7 @@ impl Render for MainView {
             .relative()
             .bg(p.win)
             .text_color(p.fg)
-            .text_size(px(13.))
+            .text_size(px(12.))
             .key_context("RustZip")
             .on_action(cx.listener(|this, _: &OpenArchiveDialog, window, cx| {
                 this.pick_archive(window, cx);
@@ -792,8 +792,9 @@ impl Render for MainView {
             .on_drop(cx.listener(|this, paths: &ExternalPaths, window, cx| {
                 this.handle_drop(paths.paths().to_vec(), window, cx);
             }))
-            .child(self.render_tabs(cx))
-            .child(self.render_toolbar(cx))
+            // With nothing open the welcome screen has its own buttons; a toolbar of
+            // disabled buttons would only be noise.
+            .when(has_archive, |d| d.child(self.render_toolbar(cx)))
             .child(if has_archive {
                 self.render_browser(cx).into_any_element()
             } else {
@@ -808,57 +809,47 @@ impl Render for MainView {
 }
 
 impl MainView {
-    fn render_tabs(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    /// A row in the sidebar for an archive that is open: click to switch, × to close.
+    fn open_row(&self, ix: usize, cx: &mut Context<Self>) -> AnyElement {
         let p = palette(cx);
+        let on = ix == self.active;
+        let name = self.archives[ix]
+            .path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
         h_flex()
-            .id("tabs")
-            .h(px(40.))
-            .px_3()
-            .gap_1()
-            .items_end()
-            .flex_none()
-            .bg(p.panel)
-            .border_b_1()
-            .border_color(p.line)
-            .children(self.archives.iter().enumerate().map(|(ix, a)| {
-                let on = ix == self.active;
-                let name = a
-                    .path
-                    .file_name()
-                    .map(|n| n.to_string_lossy().into_owned())
-                    .unwrap_or_default();
-                h_flex()
-                    .id(("tab", ix))
-                    .gap_2()
-                    .items_center()
-                    .px_3()
-                    .py_1p5()
-                    .rounded_t(px(9.))
-                    .cursor_pointer()
-                    .text_color(if on { p.fg } else { p.fg2 })
-                    .when(on, |d| d.bg(p.win).border_1().border_color(p.line))
-                    .hover(|d| d.bg(p.hover))
-                    .on_click(cx.listener(move |this, _, _, cx| this.activate_tab(ix, cx)))
-                    .child(name)
-                    .child(
-                        div()
-                            .id(("close-tab", ix))
-                            .text_color(p.fg3)
-                            .child(Icon::new(IconName::Close).size_3())
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                cx.stop_propagation();
-                                this.close_tab(ix, cx);
-                            })),
-                    )
-            }))
+            .id(("open", ix))
+            .gap_1p5()
+            .px_2()
+            .h(px(26.))
+            .rounded(px(6.))
+            .cursor_pointer()
+            .text_color(if on { p.accent } else { p.fg })
+            .when(on, |d| d.bg(p.accent_soft))
+            .hover(|d| d.bg(if on { p.accent_soft } else { p.hover }))
+            .on_click(cx.listener(move |this, _, _, cx| this.activate_tab(ix, cx)))
             .child(
-                Button::new("open-tab")
-                    .ghost()
-                    .small()
-                    .icon(IconName::Plus)
-                    .tooltip("打开压缩包")
-                    .on_click(cx.listener(|this, _, window, cx| this.pick_archive(window, cx))),
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .overflow_hidden()
+                    .text_ellipsis()
+                    .child(name),
             )
+            .child(
+                div()
+                    .id(("close-open", ix))
+                    .flex_none()
+                    .text_color(p.fg3)
+                    .hover(|d| d.text_color(p.fg))
+                    .child(Icon::new(IconName::Close).size_3())
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        cx.stop_propagation();
+                        this.close_tab(ix, cx);
+                    })),
+            )
+            .into_any_element()
     }
 
     fn render_toolbar(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -867,7 +858,7 @@ impl MainView {
         let has_sel = self.current().is_some_and(|a| a.selected.is_some());
         h_flex()
             .id("toolbar")
-            .h(px(52.))
+            .h(px(42.))
             .px_3()
             .gap_1()
             .items_center()
@@ -877,6 +868,7 @@ impl MainView {
             .child(
                 Button::new("extract-all")
                     .primary()
+                    .small()
                     .label("解压全部")
                     .disabled(!has)
                     .on_click(cx.listener(|this, _, window, cx| this.extract(false, window, cx))),
@@ -884,6 +876,7 @@ impl MainView {
             .child(
                 Button::new("extract-selected")
                     .ghost()
+                    .small()
                     .label("解压所选")
                     .disabled(!has_sel)
                     .on_click(cx.listener(|this, _, window, cx| this.extract(true, window, cx))),
@@ -891,22 +884,24 @@ impl MainView {
             .child(
                 Button::new("test")
                     .ghost()
+                    .small()
                     .label("测试")
                     .disabled(!has)
                     .on_click(cx.listener(|this, _, _, cx| this.start_test(cx))),
             )
-            .child(div().w(px(1.)).h(px(20.)).mx_2().bg(p.line))
+            .child(div().w(px(1.)).h(px(16.)).mx_1p5().bg(p.line))
             .child(
                 Button::new("compress")
                     .ghost()
+                    .small()
                     .label("新建压缩")
                     .on_click(cx.listener(|this, _, window, cx| this.pick_sources(window, cx))),
             )
             .child(div().flex_1())
             .child(
                 div()
-                    .w(px(240.))
-                    .child(Input::new(&self.search).id("search")),
+                    .w(px(190.))
+                    .child(Input::new(&self.search).small().id("search")),
             )
     }
 
@@ -917,19 +912,22 @@ impl MainView {
             .flex_1()
             .items_center()
             .justify_center()
-            .gap_3()
-            .child(div().text_size(px(26.)).child("RustZIP"))
+            .gap_2()
+            .child(div().text_size(px(20.)).child("RustZIP"))
             .child(
                 div()
+                    .text_size(px(12.))
                     .text_color(p.fg2)
                     .child("把压缩包拖到这里打开,把文件拖到这里压缩"),
             )
             .child(
                 h_flex()
+                    .mt_1()
                     .gap_2()
                     .child(
                         Button::new("empty-open")
                             .primary()
+                            .small()
                             .label("打开压缩包")
                             .on_click(
                                 cx.listener(|this, _, window, cx| this.pick_archive(window, cx)),
@@ -938,6 +936,7 @@ impl MainView {
                     .child(
                         Button::new("empty-compress")
                             .outline()
+                            .small()
                             .label("新建压缩")
                             .on_click(
                                 cx.listener(|this, _, window, cx| this.pick_sources(window, cx)),
@@ -948,9 +947,9 @@ impl MainView {
                 d.child(
                     v_flex()
                         .mt_4()
-                        .gap_1()
-                        .w(px(360.))
-                        .child(div().text_color(p.fg3).text_size(px(11.)).child("最近打开"))
+                        .gap_0p5()
+                        .w(px(300.))
+                        .child(div().text_color(p.fg3).text_size(px(10.)).child("最近打开"))
                         .children(
                             self.settings
                                 .recent
@@ -988,11 +987,16 @@ impl MainView {
 
     fn render_browser(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let p = palette(cx);
+        // `h_flex` centres its children vertically; the three columns must fill the height.
         h_flex()
             .id("browser")
             .flex_1()
             .min_h_0()
-            .child(self.render_sidebar(cx))
+            .items_stretch()
+            // The sidebar only earns its width when there is something to switch between.
+            .when(self.archives.len() > 1, |d| {
+                d.child(self.render_sidebar(cx))
+            })
             .child(
                 v_flex()
                     .flex_1()
@@ -1003,16 +1007,16 @@ impl MainView {
                             .id("files")
                             .flex_1()
                             .min_h_0()
-                            .child(DataTable::new(&self.table)),
+                            .child(DataTable::new(&self.table).xsmall().bordered(false)),
                     ),
             )
             .child(
                 v_flex()
                     .id("inspector")
-                    .w(px(288.))
+                    .w(px(224.))
                     .flex_none()
-                    .p_4()
-                    .gap_4()
+                    .p_3()
+                    .gap_3()
                     .border_l_1()
                     .border_color(p.line)
                     .child(self.render_inspector(cx)),
@@ -1021,30 +1025,41 @@ impl MainView {
 
     fn render_sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let p = palette(cx);
+        let heading = |text: &'static str| {
+            div()
+                .px_2()
+                .pt_2()
+                .pb_1()
+                .text_size(px(10.))
+                .text_color(p.fg3)
+                .child(text)
+        };
         v_flex()
             .id("sidebar")
-            .w(px(196.))
+            .w(px(168.))
             .flex_none()
             .p_2()
-            .gap_1()
+            .gap_0p5()
             .bg(p.panel)
             .border_r_1()
             .border_color(p.line)
-            .child(
-                div()
-                    .px_2()
-                    .py_1()
-                    .text_size(px(11.))
-                    .text_color(p.fg3)
-                    .child("最近打开"),
-            )
+            // Several archives can be open at once; they switch here instead of in a tab strip.
+            .when(self.archives.len() > 1, |d| {
+                d.child(heading("已打开")).children(
+                    (0..self.archives.len())
+                        .map(|ix| self.open_row(ix, cx))
+                        .collect::<Vec<_>>(),
+                )
+            })
+            .child(heading("最近打开"))
             .children(
                 self.settings
                     .recent
                     .iter()
                     .take(8)
                     .enumerate()
-                    .map(|(ix, path)| self.recent_row(ix, path, cx)),
+                    .map(|(ix, path)| self.recent_row(ix, path, cx))
+                    .collect::<Vec<_>>(),
             )
     }
 
@@ -1061,8 +1076,8 @@ impl MainView {
             .unwrap_or_default();
         h_flex()
             .id("breadcrumbs")
-            .h(px(38.))
-            .px_4()
+            .h(px(32.))
+            .px_3()
             .gap_1()
             .items_center()
             .flex_none()
@@ -1139,19 +1154,23 @@ impl MainView {
                             .gap_3()
                             .items_center()
                             .child(badge_chip(&row, cx))
-                            .child(div().text_size(px(15.)).child(row.name.clone())),
+                            .child(div().text_size(px(13.)).child(row.name.clone())),
                     )
                     .child(
                         v_flex()
                             .gap_2()
                             .child(kv("类型", kind.to_string()))
                             .child(kv("原始大小", format_size(row.size)))
-                            .when_some(row.packed, |d, packed| {
-                                d.child(kv("压缩后", format_size(packed)))
-                            })
-                            .when_some(compression_ratio(row.size, row.packed), |d, r| {
-                                d.child(kv("节省", r))
-                            })
+                            // Folders have no packed size of their own.
+                            .when_some(
+                                row.packed.filter(|_| row.kind != RowKind::Dir),
+                                |d, packed| d.child(kv("压缩后", format_size(packed))),
+                            )
+                            .when_some(
+                                compression_ratio(row.size, row.packed)
+                                    .filter(|_| row.kind != RowKind::Dir),
+                                |d, r| d.child(kv("节省", r)),
+                            )
                             .when_some(row.modified, |d, t| d.child(kv("修改时间", format_time(t))))
                             .when(row.kind == RowKind::Dir, |d| {
                                 d.child(kv("文件数", row.items.to_string()))
@@ -1361,15 +1380,15 @@ impl MainView {
         };
         h_flex()
             .id("status")
-            .h(px(30.))
-            .px_4()
+            .h(px(26.))
+            .px_3()
             .gap_4()
             .items_center()
             .flex_none()
             .bg(p.panel)
             .border_t_1()
             .border_color(p.line)
-            .text_size(px(12.))
+            .text_size(px(11.))
             .child(left.flex_1().overflow_hidden().text_ellipsis())
             .when_some(self.current(), |d, a| {
                 d.child(
@@ -1399,11 +1418,11 @@ impl MainView {
                 .occlude()
                 .child(
                     v_flex()
-                        .w(px(520.))
+                        .w(px(420.))
                         .max_w_full()
-                        .p_5()
-                        .gap_4()
-                        .rounded(px(14.))
+                        .p_4()
+                        .gap_3()
+                        .rounded(px(12.))
                         .bg(p.win)
                         .border_1()
                         .border_color(p.line)
@@ -1418,7 +1437,7 @@ impl MainView {
         let p = palette(cx);
         v_flex()
             .gap_3()
-            .child(div().text_size(px(16.)).child("需要密码"))
+            .child(div().text_size(px(14.)).child("需要密码"))
             .when(prompt.wrong, |d| {
                 d.child(div().text_color(p.danger).child("密码不正确,请再试一次"))
             })
@@ -1456,7 +1475,7 @@ impl MainView {
         };
         v_flex()
             .gap_4()
-            .child(div().text_size(px(18.)).child("新建压缩"))
+            .child(div().text_size(px(15.)).child("新建压缩"))
             .child(div().text_color(p.fg3).child(format!(
                 "已选 {} 项:{}",
                 names.len(),

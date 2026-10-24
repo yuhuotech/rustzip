@@ -23,6 +23,7 @@ rz-formats.workspace = true
 
 [dev-dependencies]
 gpui-kit = { version = "0.8.0", features = ["test-support"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
 tempfile = "3"
 
 [lints]

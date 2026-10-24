@@ -75,9 +75,10 @@ pub fn open_main_window(initial: Vec<PathBuf>, cx: &mut App) {
     let options = WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
             None,
-            size(px(1180.), px(760.)),
+            size(px(860.), px(560.)),
             cx,
         ))),
+        window_min_size: Some(size(px(640.), px(420.))),
         titlebar: Some(TitlebarOptions {
             title: Some("RustZIP".into()),
             ..TitlebarOptions::default()

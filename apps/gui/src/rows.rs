@@ -27,9 +27,9 @@ pub struct FileRows {
 
 impl Default for FileRows {
     fn default() -> Self {
-        let mut size = Column::new("size", "大小").width(px(110.)).sortable();
+        let mut size = Column::new("size", "大小").width(px(84.)).sortable();
         size.align = TextAlign::Right;
-        let mut packed = Column::new("packed", "压缩后").width(px(110.));
+        let mut packed = Column::new("packed", "压缩后").width(px(84.));
         packed.align = TextAlign::Right;
         Self {
             tree: None,
@@ -39,10 +39,10 @@ impl Default for FileRows {
             ascending: true,
             rows: Vec::new(),
             columns: vec![
-                Column::new("name", "名称").width(px(420.)).sortable(),
+                Column::new("name", "名称").width(px(340.)).sortable(),
                 size,
                 packed,
-                Column::new("time", "修改时间").width(px(170.)).sortable(),
+                Column::new("time", "修改时间").width(px(128.)).sortable(),
             ],
         }
     }
@@ -107,16 +107,16 @@ pub fn badge_chip(row: &Row, cx: &App) -> Div {
         Badge::Other => (p.hover, p.fg2),
     };
     div()
-        .w(px(30.))
-        .h(px(22.))
-        .rounded(px(6.))
+        .w(px(28.))
+        .h(px(16.))
+        .rounded(px(5.))
         .flex()
         .items_center()
         .justify_center()
         .flex_none()
         .bg(bg)
         .text_color(fg)
-        .text_size(px(9.))
+        .text_size(px(8.))
         .child(badge_label(&row.name, row.kind))
 }
 
@@ -168,6 +168,7 @@ impl TableDelegate for FileRows {
                 h_flex()
                     .gap_2()
                     .items_center()
+                    .text_size(px(12.))
                     .child(badge_chip(row, cx))
                     .child(div().overflow_hidden().text_ellipsis().child(shown))
                     .when(row.encrypted, |d| {
@@ -183,7 +184,11 @@ impl TableDelegate for FileRows {
                 mono(text, p.fg2, cx)
             }
             COL_PACKED => {
-                let text = row.packed.map_or_else(|| "—".into(), format_size);
+                // A folder has no packed size of its own.
+                let text = match (row.kind, row.packed) {
+                    (RowKind::File | RowKind::Link, Some(packed)) => format_size(packed),
+                    _ => "—".into(),
+                };
                 mono(text, p.fg2, cx)
             }
             _ => {
@@ -199,7 +204,7 @@ fn mono(text: String, color: Hsla, cx: &App) -> AnyElement {
         .w_full()
         .text_right()
         .text_color(color)
-        .text_size(px(12.))
+        .text_size(px(11.))
         .font_family(cx.theme().mono_font_family.clone())
         .child(text)
         .into_any_element()

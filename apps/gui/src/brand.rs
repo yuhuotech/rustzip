@@ -4,7 +4,7 @@
 //! light and dark palettes stay in one place.
 
 use gpui_kit::component::Theme;
-use gpui_kit::{App, Hsla, rgb};
+use gpui_kit::{App, Hsla, px, rgb};
 
 /// The semantic tokens of the design: light on the left, dark on the right.
 #[derive(Debug, Clone, Copy)]
@@ -81,7 +81,25 @@ pub fn palette(cx: &App) -> Palette {
 /// the kit's default colours, which would undo this.
 pub fn apply(cx: &mut App) {
     let p = palette(cx);
+    // A little lighter or darker for hover and press, in whichever direction stays visible.
+    let shade = |c: Hsla, by: f32| Hsla {
+        l: (c.l + by).clamp(0., 1.),
+        ..c
+    };
     Theme::update(cx, |t| {
+        t.font_size = px(12.);
+        t.button_primary = p.accent;
+        t.button_primary_hover = shade(p.accent, if p.win.l < 0.5 { 0.06 } else { -0.05 });
+        t.button_primary_active = shade(p.accent, if p.win.l < 0.5 { 0.1 } else { -0.09 });
+        t.button_primary_foreground = p.accent_ink;
+        t.primary_hover = t.button_primary_hover;
+        t.primary_active = t.button_primary_active;
+        t.progress_bar = p.accent;
+        t.ring = p.accent;
+        t.caret = p.accent;
+        t.link = p.accent;
+        t.link_hover = shade(p.accent, if p.win.l < 0.5 { 0.08 } else { -0.06 });
+        t.input = p.line;
         t.background = p.win;
         t.foreground = p.fg;
         t.border = p.line;
@@ -94,9 +112,15 @@ pub fn apply(cx: &mut App) {
         t.secondary = p.panel;
         t.list_active = p.accent_soft;
         t.list_hover = p.hover;
+        t.table = p.win;
+        t.table_even = p.win;
         t.table_active = p.accent_soft;
         t.table_hover = p.hover;
         t.table_head = p.win;
+        t.table_head_foreground = p.fg3;
+        t.colors.list = p.win;
+        t.colors.list_even = p.win;
+        t.colors.list_head = p.win;
         t.table_row_border = p.line;
         t.sidebar = p.panel;
         t.title_bar = p.panel;

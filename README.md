@@ -65,6 +65,12 @@ cargo run --release -p rustzip-gui            # 或:cargo run --release -p rustz
 快捷键:`⌘O` 打开、`⌘N` 新建压缩、`⌘F` 搜索、`⌘E` 解压全部、`⌘W` 关闭标签页(Windows / Linux 为 Ctrl)。
 也可以把压缩包拖进窗口打开,把普通文件拖进窗口压缩。设置保存在系统配置目录的 `settings.json`。
 
+不打开窗口也能看到界面长什么样:用真实的 Metal 渲染器离屏截图(浅色和深色各 6 个状态):
+
+```
+RZ_SHOT_DIR=/某个文件夹 cargo run --release -p rustzip-gui --example screenshots
+```
+
 ## 开发
 
 ```

@@ -7,10 +7,13 @@ fn main() {
         .map(PathBuf::from)
         .filter(|p| p.is_file())
         .collect();
-    gpui_kit::application().run(move |cx| {
-        gpui_kit::init(cx);
-        rustzip_gui::install_app_actions(cx);
-        rustzip_gui::open_main_window(initial, cx);
-        cx.activate(true);
-    });
+    // Without the icon assets every icon in the kit's controls is silently blank.
+    gpui_kit::application()
+        .with_assets(gpui_kit::assets::Assets)
+        .run(move |cx| {
+            gpui_kit::init(cx);
+            rustzip_gui::install_app_actions(cx);
+            rustzip_gui::open_main_window(initial, cx);
+            cx.activate(true);
+        });
 }
