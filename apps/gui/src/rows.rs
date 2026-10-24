@@ -33,6 +33,8 @@ pub struct FileRows {
     /// same name"; both only shape the right-click menu.
     editable: bool,
     stem: String,
+    /// The format the archive really is, to say why it cannot be changed.
+    format: String,
 }
 
 impl Default for FileRows {
@@ -51,6 +53,7 @@ impl Default for FileRows {
             marked: BTreeSet::new(),
             editable: false,
             stem: String::new(),
+            format: String::new(),
             columns: vec![
                 Column::new("name", "名称").width(px(340.)).sortable(),
                 size,
@@ -72,9 +75,15 @@ impl FileRows {
     }
 
     /// What the right-click menu needs to know about the archive.
-    pub fn set_menu_context(&mut self, editable: bool, stem: &str) {
+    pub fn set_menu_context(&mut self, editable: bool, stem: &str, format: &str) {
         self.editable = editable;
         self.stem = stem.to_string();
+        self.format = format.to_uppercase();
+    }
+
+    /// A line for the top of a menu that says why adding, renaming and deleting are off.
+    fn read_only_note(&self) -> String {
+        format!("{} 压缩包只读,不能添加、重命名或删除", self.format)
     }
 
     /// Lets go of everything picked.
@@ -228,6 +237,11 @@ impl TableDelegate for FileRows {
         if row_ix >= self.rows.len() {
             self.marked.clear();
             cx.emit(TableEvent::ClearSelection);
+            let menu = if self.editable {
+                menu
+            } else {
+                menu.label(self.read_only_note())
+            };
             let mut menu = menu.menu_with_icon_and_disabled(
                 "添加文件到此处…",
                 IconName::Plus,
@@ -262,6 +276,9 @@ impl TableDelegate for FileRows {
             self.stem.clone()
         };
         let mut menu = menu;
+        if !editable {
+            menu = menu.label(self.read_only_note());
+        }
         if picked.len() > 1 {
             menu = menu.label(format!("已选 {} 项", picked.len()));
         }

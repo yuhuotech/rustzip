@@ -307,6 +307,17 @@ fn deleting_and_adding_rewrite_the_archive_and_the_list_follows(cx: &mut TestApp
 }
 
 #[gpui_kit::test]
+fn editing_depends_on_what_the_file_is_not_on_its_name(cx: &mut TestAppContext) {
+    let tmp = tempfile::tempdir().unwrap();
+    let zip = make_archive(tmp.path(), "a.zip", None);
+    let odd = tmp.path().join("library.jar");
+    fs::rename(&zip, &odd).unwrap();
+    let (handle, view) = open_window(cx, None);
+    open_sync(cx, handle, &view, &odd, None);
+    cx.update(|cx| assert!(view.read(cx).can_edit()));
+}
+
+#[gpui_kit::test]
 fn archives_that_cannot_be_rewritten_refuse_to_be_edited(cx: &mut TestAppContext) {
     let tmp = tempfile::tempdir().unwrap();
     let file = tmp.path().join("one.txt");

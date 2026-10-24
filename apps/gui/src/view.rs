@@ -386,8 +386,9 @@ impl MainView {
             .current()
             .map(|a| recent::archive_stem(&a.path))
             .unwrap_or_default();
+        let format = self.current().map(|a| a.format.clone()).unwrap_or_default();
         self.table.update(cx, |t, cx| {
-            t.delegate_mut().set_menu_context(editable, &stem);
+            t.delegate_mut().set_menu_context(editable, &stem, &format);
             t.delegate_mut().show(tree, &cwd, &filter);
             t.refresh(cx);
         });
@@ -730,7 +731,7 @@ impl MainView {
     /// Whether the open archive is of a kind that can be changed.
     pub fn can_edit(&self) -> bool {
         self.current()
-            .is_some_and(|a| rz_app::modify::is_editable(&a.path))
+            .is_some_and(|a| rz_app::modify::edit_format(&a.format).is_some())
     }
 
     /// "Extract to…": the picked items when there are any, otherwise everything.
@@ -1322,7 +1323,7 @@ impl MainView {
         let encoding = self.settings.forced_encoding().map(str::to_string);
         let name = crate::services::scratch_name(&row.name);
         // Formats that can be rewritten get their changes saved back; the rest are read-only.
-        let writable = rz_app::modify::is_editable(&archive);
+        let writable = rz_app::modify::edit_format(&a.format).is_some();
         let (entry_path, archive_key) = (row.path.clone(), archive.clone());
         self.say(Notice::Info(format!("正在准备 {}…", row.name)), cx);
         cx.spawn(async move |this, cx| {
@@ -1943,6 +1944,13 @@ impl MainView {
         let has_sel = self.current().is_some_and(|a| a.selected.is_some())
             || !self.table.read(cx).delegate().marked().is_empty();
         let editable = self.can_edit();
+        // Said when hovering a button that is off because of the format.
+        let read_only = format!(
+            "{} 压缩包只读,不能添加、重命名或删除",
+            self.current()
+                .map(|a| a.format.to_uppercase())
+                .unwrap_or_default()
+        );
         let one_picked = self.picked_paths(cx).len() == 1;
         // Previews open one file at a time.
         let can_preview = self.selected_row().is_some_and(|r| r.kind == RowKind::File)
@@ -1971,6 +1979,7 @@ impl MainView {
                     .icon(IconName::Plus)
                     .label("添加")
                     .disabled(!editable)
+                    .when(!editable, |b| b.tooltip(read_only.clone()))
                     .on_click(
                         cx.listener(|this, _, window, cx| this.pick_files_to_add(window, cx)),
                     ),
@@ -1989,6 +1998,7 @@ impl MainView {
                     .icon(IconName::Replace)
                     .label("重命名")
                     .disabled(!one_picked || !editable)
+                    .when(!editable, |b| b.tooltip(read_only.clone()))
                     .on_click(cx.listener(|this, _, window, cx| this.ask_rename_entry(window, cx))),
             )
             .child(
@@ -1998,6 +2008,7 @@ impl MainView {
                     .label("删除")
                     .text_color(if has_sel && editable { p.danger } else { p.fg3 })
                     .disabled(!has_sel || !editable)
+                    .when(!editable, |b| b.tooltip(read_only))
                     .on_click(cx.listener(|this, _, _, cx| this.ask_delete(cx))),
             )
             .child(div().w(px(1.)).h(px(16.)).mx_1p5().bg(p.line))

@@ -44,12 +44,20 @@ pub struct EditReport {
     pub bytes: u64,
 }
 
-/// Whether archives of this name can be changed at all.
-pub fn is_editable(archive: &Path) -> bool {
-    matches!(
-        OutputFormat::from_path(archive),
-        Some(OutputFormat::Zip | OutputFormat::SevenZ | OutputFormat::Tar(_))
-    )
+/// The format an archive is written back in, from the name the reader reports for it
+/// (`"zip"`, `"7z"`, `"tar.gz"`...). `None` for formats that cannot be rewritten.
+pub fn edit_format(detected: &str) -> Option<OutputFormat> {
+    use rz_formats::Compression;
+    Some(match detected {
+        "zip" => OutputFormat::Zip,
+        "7z" => OutputFormat::SevenZ,
+        "tar" => OutputFormat::Tar(Compression::None),
+        "tar.gz" => OutputFormat::Tar(Compression::Gzip),
+        "tar.xz" => OutputFormat::Tar(Compression::Xz),
+        "tar.zst" => OutputFormat::Tar(Compression::Zstd),
+        "tar.bz2" => OutputFormat::Tar(Compression::Bzip2),
+        _ => return None,
+    })
 }
 
 /// Maps one phase of the work onto its half of the overall progress bar.
@@ -89,14 +97,10 @@ pub fn edit_archive(
     cancel: &CancelToken,
     progress: &mut dyn ProgressSink,
 ) -> Result<EditReport> {
-    let format = match OutputFormat::from_path(archive) {
-        Some(f @ (OutputFormat::Zip | OutputFormat::SevenZ | OutputFormat::Tar(_))) => f,
-        _ => {
-            return Err(Error::Unsupported(
-                "only zip, 7z and tar archives can be changed".into(),
-            ))
-        }
-    };
+    // What the file really is decides, not its name: a `.jar` or `.docx` is a zip.
+    let mut reader = rz_formats::open(archive)?;
+    let format = edit_format(reader.format_name())
+        .ok_or_else(|| Error::Unsupported("only zip, 7z and tar archives can be changed".into()))?;
     let parent = archive
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
@@ -113,7 +117,6 @@ pub fn edit_archive(
     fs::create_dir_all(&stage)?;
 
     // 1. Unpack everything.
-    let mut reader = rz_formats::open(archive)?;
     if let Some(enc) = encoding {
         reader.set_encoding(enc)?;
     }
@@ -561,14 +564,36 @@ mod tests {
     #[test]
     fn single_file_and_unknown_formats_are_refused() {
         let tmp = tempfile::tempdir().unwrap();
-        let p = tmp.path().join("x.gz");
-        fs::write(&p, b"x").unwrap();
-        assert!(!is_editable(&p));
-        assert!(is_editable(Path::new("a.zip")));
-        assert!(is_editable(Path::new("a.tar.zst")));
+        let one = tmp.path().join("x.txt");
+        fs::write(&one, "hello hello").unwrap();
+        let p = tmp.path().join("x.txt.gz");
+        compress(
+            &[one],
+            &p,
+            OutputFormat::from_path(&p).unwrap(),
+            &CreateOptions::default(),
+            &CancelToken::new(),
+            &mut NoProgress,
+        )
+        .unwrap();
+        assert!(edit_format("gzip").is_none());
+        assert!(edit_format("rar").is_none());
+        assert!(edit_format("zip").is_some() && edit_format("tar.zst").is_some());
         assert!(matches!(
             run(&p, &Edit::Delete(vec![]), None),
             Err(Error::Unsupported(_))
         ));
+    }
+
+    #[test]
+    fn what_the_file_is_decides_not_what_it_is_called() {
+        // A zip under another name (a .jar, a .docx...) can be changed like any zip.
+        let tmp = tempfile::tempdir().unwrap();
+        let zip = make(tmp.path(), "t.zip", None);
+        let odd = tmp.path().join("library.jar");
+        fs::rename(&zip, &odd).unwrap();
+        run(&odd, &Edit::Delete(vec!["data/a.txt".into()]), None).unwrap();
+        assert_eq!(names(&odd, None), ["data/sub/b.txt", "data/sub/c.txt"]);
+        assert!(odd.is_file());
     }
 }
