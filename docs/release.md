@@ -1,0 +1,62 @@
+# 发布、更新与统计
+
+## 一次性准备
+
+1. **更新签名密钥**。公钥已写进 `crates/rz-services/src/update_key.in`,私钥由 `rz-release keygen` 生成,在维护者本机 `~/.rustzip-release/update-signing.key`(权限 600)。
+   - 把这个文件的内容(64 个十六进制字符)存成 GitHub 仓库的 **Secret `RZ_UPDATE_KEY`**。
+   - **私钥不进仓库,也不要发给任何人。** 丢了只能换密钥:旧版本不认新公钥,用户要手动重装一次。
+   - 备份到密码管理器。
+2. **统计服务器地址**(可选):GitHub 本身不能接收上报,需要一个能收 POST 的 https 地址。把它设成仓库 **Variable `RZ_STATS_URL`**。没设就不会上报任何东西(见下文)。
+3. **macOS 签名**(可选,强烈建议):没有 Apple 开发者账号时 dmg 只做临时签名,用户首次打开要在"系统设置 → 隐私与安全"里点"仍要打开"。有账号则设置 Secrets:`MACOS_CERT_P12`(base64)、`MACOS_CERT_PASSWORD`、`MACOS_SIGN_IDENTITY`,公证再加 `APPLE_ID`、`APPLE_TEAM_ID`、`APPLE_APP_PASSWORD`。
+4. **Windows 签名**:目前不签。SmartScreen 会提示"未知发布者",买代码签名证书后再接入。
+
+## 发一个版本
+
+1. 改根 `Cargo.toml` 里 `[workspace.package] version`,提交。
+2. `git tag v0.2.0 && git push origin v0.2.0`。
+3. `.github/workflows/release.yml` 在三个系统上打包(macOS arm64 和 x86_64 各一个 dmg,Windows 一个安装程序,Linux 一个 tar.gz),用 `RZ_UPDATE_KEY` 给每个安装包签名,汇总成 `update.json`,创建 GitHub Release 并上传。
+4. 已安装的用户下次启动时,从 `https://github.com/yuhuotech/rustzip/releases/latest/download/update.json` 读到新版本,状态栏出现"新版本 x.y.z · 更新"。
+
+## 更新怎么保证安全
+
+- `update.json` 每个条目带 SHA-256 和 Ed25519 签名,签名内容是"版本 + 平台 + 文件哈希"。
+- 客户端只信内置公钥,不信 GitHub、TLS 或重定向:大小、哈希、签名任何一项不对,下载直接丢弃。
+- 只接受 https;不会降级到旧版本;稳定版用户不会被推送预发布版。
+- 下载后只是"保存到临时目录并交给系统打开"(macOS 打开 dmg,Windows 运行安装程序,Linux 打开所在文件夹),**不会静默替换正在运行的程序**。
+
+## 匿名统计
+
+上报内容固定 7 个字段,没有别的(代码里 `rz_app::stats::Report`,新增字段属于隐私变更,必须同步改首次启动提示):
+
+```json
+{"event":"activate|heartbeat","install_id":"随机 UUID","app_version":"0.1.0",
+ "os":"macos","os_version":"15.1","arch":"aarch64","language":"zh-CN"}
+```
+
+- 首次启动弹说明,用户点"好的"之后才会上报;点"不参与"则永不上报,也不生成安装编号。
+- `activate` 只发一次;之后每天最多一次 `heartbeat`。失败直接丢弃,下次启动再试,不阻塞启动。
+- 设置里可随时关闭。
+
+**服务端**需要自己搭。最小要求:接收 POST JSON、按 `install_id` 去重计数,不记录 IP。例如 Cloudflare Workers + KV 十几行就够,用 `activate` 数新增安装,用每日 `heartbeat` 数活跃。没有服务器时保持 `RZ_STATS_URL` 为空即可,软件其余功能不受影响。
+
+## 本地打包(不发布)
+
+| 系统 | 命令 | 产物 |
+|---|---|---|
+| macOS | `packaging/macos/build-app.sh dist` | `RustZIP.app` 和 `RustZIP-<版本>-macos-<架构>.dmg` |
+| Windows | `iscc /DAppVersion=0.1.0 packaging\windows\rustzip.iss`(需先 `cargo build --release -p rustzip-gui`) | `RustZIP-<版本>-windows-x86_64.exe` |
+| Linux | `packaging/linux/build-tarball.sh dist` | `RustZIP-<版本>-linux-<架构>.tar.gz`,解开后 `./install.sh` |
+
+图标由 `cargo run --release -p rustzip-gui --example make_icons -- packaging/icons` 生成(`.icns`、`.ico`、各尺寸 PNG)。
+
+## 系统集成现状
+
+| 能力 | macOS | Windows | Linux |
+|---|---|---|---|
+| 双击/"打开方式"打开压缩包 | 已做(Info.plist 文档类型 + 系统打开事件) | 已做(安装程序注册,不抢默认程序) | 已做(`.desktop` 的 MimeType) |
+| 右键"用 RustZIP 压缩"/"解压到此处" | **未做**(需要 Finder 扩展或 Services,另做) | 已做(安装程序写注册表) | Dolphin 服务菜单、Nemo 动作已做;Nautilus 未做 |
+| 预览(Quick Look 等) | 未做 | 未做 | 未做 |
+
+命令行入口:`rustzip --extract-here <压缩包>...` 解压到压缩包所在目录;`rustzip --compress <文件或文件夹>...` 打开新建压缩窗口。
+
+**验证状态**:macOS 的打包、签名校验、dmg 在开发机上跑通过。Windows 安装程序、Linux 打包和整个 release 工作流**还没有真正运行过**,第一次打 tag 时很可能需要调整。

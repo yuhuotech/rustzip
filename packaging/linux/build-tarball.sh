@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# Builds RustZIP-<version>-linux-<arch>.tar.gz: the program, desktop entry, icons, file
+# manager menu entries and an install script that needs no root (installs under ~/.local).
+#
+#   packaging/linux/build-tarball.sh [output-dir]
+set -euo pipefail
+
+root="$(cd "$(dirname "$0")/../.." && pwd)"
+out="${1:-$root/dist}"
+version="$(awk -F'"' '/^version *=/ {print $2; exit}' "$root/Cargo.toml")"
+arch="$(uname -m)"
+name="RustZIP-$version-linux-$arch"
+
+cd "$root"
+cargo build --release -p rustzip-gui
+
+stage="$(mktemp -d)/$name"
+mkdir -p "$stage/icons"
+cp target/release/rustzip "$stage/"
+cp packaging/linux/*.desktop packaging/linux/*.nemo_action "$stage/"
+cp packaging/icons/hicolor/*.png "$stage/icons/"
+cat > "$stage/install.sh" <<'EOF'
+#!/usr/bin/env sh
+# Installs RustZIP for the current user. Remove with: ./install.sh --uninstall
+set -eu
+here="$(cd "$(dirname "$0")" && pwd)"
+prefix="${PREFIX:-$HOME/.local}"
+apps="$prefix/share/applications"
+if [ "${1:-}" = "--uninstall" ]; then
+    rm -f "$prefix/bin/rustzip" "$apps/rustzip.desktop" \
+          "$prefix/share/kservices5/ServiceMenus/rustzip-servicemenu.desktop" \
+          "$prefix/share/nemo/actions/rustzip-compress.nemo_action" \
+          "$prefix/share/nemo/actions/rustzip-extract.nemo_action"
+    for s in 16 32 48 64 128 256 512; do
+        rm -f "$prefix/share/icons/hicolor/${s}x${s}/apps/rustzip.png"
+    done
+    echo "RustZIP removed."
+    exit 0
+fi
+install -Dm755 "$here/rustzip" "$prefix/bin/rustzip"
+install -Dm644 "$here/rustzip.desktop" "$apps/rustzip.desktop"
+install -Dm755 "$here/rustzip-servicemenu.desktop" \
+    "$prefix/share/kservices5/ServiceMenus/rustzip-servicemenu.desktop"
+install -Dm644 "$here/rustzip-compress.nemo_action" "$prefix/share/nemo/actions/rustzip-compress.nemo_action"
+install -Dm644 "$here/rustzip-extract.nemo_action" "$prefix/share/nemo/actions/rustzip-extract.nemo_action"
+for s in 16 32 48 64 128 256 512; do
+    install -Dm644 "$here/icons/$s.png" "$prefix/share/icons/hicolor/${s}x${s}/apps/rustzip.png"
+done
+command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$apps" || true
+command -v gtk-update-icon-cache >/dev/null 2>&1 && gtk-update-icon-cache -q "$prefix/share/icons/hicolor" || true
+echo "RustZIP installed to $prefix. Make sure $prefix/bin is on your PATH."
+EOF
+chmod +x "$stage/install.sh" "$stage/rustzip"
+
+mkdir -p "$out"
+tar -C "$(dirname "$stage")" -czf "$out/$name.tar.gz" "$name"
+rm -rf "$(dirname "$stage")"
+echo "$out/$name.tar.gz"

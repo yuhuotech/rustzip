@@ -1,0 +1,141 @@
+name: Release
+
+# Push a tag such as v0.2.0 to build, sign and publish a release.
+# One-time setup (see docs/release.md):
+#   - repository secret RZ_UPDATE_KEY: the update signing key (64 hex characters)
+#   - optional repository variable RZ_STATS_URL: https address that receives install reports
+#   - optional macOS signing secrets: MACOS_CERT_P12 (base64), MACOS_CERT_PASSWORD,
+#     MACOS_SIGN_IDENTITY, and for notarization APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  RZ_STATS_URL: ${{ vars.RZ_STATS_URL }}
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.experimental }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-14, platform: macos-aarch64, target: aarch64-apple-darwin, experimental: false }
+          - { os: macos-14, platform: macos-x86_64, target: x86_64-apple-darwin, experimental: false }
+          - { os: windows-latest, platform: windows-x86_64, target: x86_64-pc-windows-msvc, experimental: false }
+          # The Linux desktop build has not been verified on real hardware yet.
+          - { os: ubuntu-22.04, platform: linux-x86_64, target: x86_64-unknown-linux-gnu, experimental: true }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Version
+        id: v
+        shell: bash
+        run: echo "version=$(awk -F'"' '/^version *=/ {print $2; exit}' Cargo.toml)" >> "$GITHUB_OUTPUT"
+
+      - name: Linux libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxcb1-dev libxkbcommon-dev libxkbcommon-x11-dev \
+            libwayland-dev libvulkan-dev libfontconfig1-dev libasound2-dev libssl-dev pkg-config
+
+      - name: Import the macOS signing certificate
+        if: runner.os == 'macOS'
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          # Without a certificate the app is ad-hoc signed by the packaging script.
+          if [ -n "$MACOS_CERT_P12" ]; then
+            echo "$MACOS_CERT_P12" | base64 --decode > cert.p12
+            security create-keychain -p ci build.keychain
+            security default-keychain -s build.keychain
+            security unlock-keychain -p ci build.keychain
+            security import cert.p12 -k build.keychain -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+            security set-key-partition-list -S apple-tool:,apple: -s -k ci build.keychain
+            rm cert.p12
+          fi
+
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        env:
+          TARGET: ${{ matrix.target }}
+          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+        run: |
+          if [ -n "${{ secrets.APPLE_ID }}" ]; then
+            xcrun notarytool store-credentials ci --apple-id "${{ secrets.APPLE_ID }}" \
+              --team-id "${{ secrets.APPLE_TEAM_ID }}" --password "${{ secrets.APPLE_APP_PASSWORD }}"
+            export NOTARY_PROFILE=ci
+          fi
+          packaging/macos/build-app.sh dist
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cargo build --release -p rustzip-gui
+          choco install innosetup -y --no-progress
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=${{ steps.v.outputs.version }}" `
+            "/DSourceExe=$PWD\target\release\rustzip.exe" "/DOutDir=$PWD\dist" packaging\windows\rustzip.iss
+
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        run: packaging/linux/build-tarball.sh dist
+
+      - name: Sign for the updater
+        shell: bash
+        env:
+          RZ_UPDATE_KEY: ${{ secrets.RZ_UPDATE_KEY }}
+        run: |
+          cargo build --release -p rz-release
+          file="$(ls dist/RustZIP-*.dmg dist/RustZIP-*.exe dist/RustZIP-*.tar.gz 2>/dev/null | head -n 1)"
+          name="$(basename "$file")"
+          url="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/$name"
+          bin=target/release/rz-release
+          "$bin" sign "${{ steps.v.outputs.version }}" "${{ matrix.platform }}" "$file" "$url" > "dist/${{ matrix.platform }}.asset.json"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform }}
+          path: |
+            dist/RustZIP-*.dmg
+            dist/RustZIP-*.exe
+            dist/RustZIP-*.tar.gz
+            dist/*.asset.json
+
+  publish:
+    needs: build
+    runs-on: ubuntu-22.04
+    if: ${{ !cancelled() }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Manifest
+        run: |
+          cargo build --release -p rz-release
+          version="${GITHUB_REF_NAME#v}"
+          printf 'RustZIP %s\n' "$version" > notes.txt
+          target/release/rz-release manifest "$version" notes.txt artifacts/*.asset.json > artifacts/update.json
+          cat artifacts/update.json
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --title "RustZIP ${GITHUB_REF_NAME#v}" --generate-notes \
+            artifacts/RustZIP-* artifacts/update.json

@@ -1,0 +1,19 @@
+[Desktop Entry]
+Type=Application
+Name=RustZIP
+GenericName=Archive Manager
+GenericName[zh_CN]=压缩管理器
+Comment=Create, browse and extract archives
+Comment[zh_CN]=创建、浏览和解压压缩文件
+Exec=rustzip %F
+Icon=rustzip
+Terminal=false
+Categories=Utility;Archiving;Compression;
+MimeType=application/zip;application/x-7z-compressed;application/vnd.rar;application/x-rar;application/x-tar;application/gzip;application/x-gzip;application/x-compressed-tar;application/x-xz;application/x-xz-compressed-tar;application/zstd;application/x-zstd-compressed-tar;application/x-bzip2;application/x-bzip-compressed-tar;
+StartupNotify=true
+Actions=Compress;
+
+[Desktop Action Compress]
+Name=Compress files…
+Name[zh_CN]=压缩文件…
+Exec=rustzip --compress %F

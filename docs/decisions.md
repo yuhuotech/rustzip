@@ -54,8 +54,17 @@
 - RAR:`unrar` crate,放在默认关闭的 `rar` feature 里,只读。unRAR 是 C++ 代码,攻击面比其余纯 Rust 后端大,需要在文档中提示。
 - 已知局限:每个压缩比检查依赖条目声明的压缩后大小,7z / tar 这类固实格式没有逐条目的压缩后大小,只能靠总大小上限和"不超过声明大小"兜底。
 
+## D8 联网、钥匙串与发布(已定)
+
+- 联网与系统钥匙串放在独立 crate `rz-services`(HTTP 用 `ureq` + rustls,钥匙串用 `keyring`),`rz-app` 只定义 trait 并用假实现测试;GUI 通过它接入,核心 crate 不碰网络。
+- 更新源:GitHub Release 里的 `update.json`(`releases/latest/download/update.json`),安装包也放在同一个 Release。信任来自内置 Ed25519 公钥,不来自 GitHub 或 TLS;私钥只存在维护者本机和仓库 Secret `RZ_UPDATE_KEY`。
+- 更新只做到"下载、验签、交给系统打开安装",不静默替换运行中的程序。
+- 统计:只有设置了 `RZ_STATS_URL`(构建期或运行期)才会上报,且必须在用户看过首次启动提示之后。服务端自建,GitHub 不能接收上报。
+- 记住密码默认关闭,开启后存进系统钥匙串,条目名只用压缩包文件名。
+- 文件关联用"备选"优先级,不抢用户已选的默认程序。
+- 品牌图标:拉链图案、青绿渐变圆角方块,由代码绘制(`make_icons` 示例),不依赖设计软件。
+
 ## 待决事项
 
-- 品牌图标与 Logo。
 - 官方安装包渠道(是否上架 Microsoft Store、Mac App Store、Flathub)。
 - 最低支持的系统版本最终线(随 UI 框架验证结果确认)。

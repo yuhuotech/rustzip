@@ -1,0 +1,20 @@
+[Desktop Entry]
+Type=Service
+ServiceTypes=KonqPopupMenu/Plugin
+MimeType=all/allfiles;
+Actions=RustZipCompress;RustZipExtractHere;
+X-KDE-Submenu=RustZIP
+X-KDE-Submenu[zh_CN]=RustZIP
+Icon=rustzip
+
+[Desktop Action RustZipCompress]
+Name=Compress with RustZIP…
+Name[zh_CN]=用 RustZIP 压缩…
+Icon=rustzip
+Exec=rustzip --compress %F
+
+[Desktop Action RustZipExtractHere]
+Name=Extract here with RustZIP
+Name[zh_CN]=用 RustZIP 解压到此处
+Icon=rustzip
+Exec=rustzip --extract-here %F

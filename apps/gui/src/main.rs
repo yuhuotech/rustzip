@@ -1,3 +1,6 @@
+// A release build on Windows is a window program: no console flashing up behind it.
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 fn main() {
     // Archives named on the command line, or the file manager's Extract here / Compress.
     let launch = rustzip_gui::launch::parse_args(std::env::args_os().skip(1));

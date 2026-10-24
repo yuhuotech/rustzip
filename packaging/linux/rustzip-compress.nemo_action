@@ -1,0 +1,7 @@
+[Nemo Action]
+Name=Compress with RustZIP…
+Comment=Put the selected files into a new archive
+Exec=rustzip --compress %F
+Icon-Name=rustzip
+Selection=any
+Extensions=any;
