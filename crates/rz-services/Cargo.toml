@@ -1,0 +1,17 @@
+[package]
+name = "rz-services"
+description = "RustZIP services that talk to the outside world: HTTP for updates and statistics, the system keychain"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+rz-core.workspace = true
+rz-app.workspace = true
+serde_json = "1.0.154"
+ureq = { version = "3.5.0", default-features = false, features = ["rustls", "gzip"] }
+keyring = "4.2.0"
+
+[lints]
+workspace = true

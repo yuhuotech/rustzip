@@ -1,0 +1,22 @@
+[package]
+name = "rz-release"
+description = "RustZIP release tooling: signing key generation and update manifests"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+rz-app.workspace = true
+ed25519-dalek = "3.0.0"
+getrandom = "0.4.3"
+serde_json = "1.0.154"
+sha2 = "0.11.1"
+
+[dev-dependencies]
+rz-core.workspace = true
+tempfile = "3"
+
+[lints]
+workspace = true
