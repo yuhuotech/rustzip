@@ -147,6 +147,22 @@ fn wait_for_tasks(cx: &mut TestAppContext, handle: WindowHandle<Root>, view: &En
     with_view(cx, handle, view, |v, _, cx| v.refresh_tasks(cx));
 }
 
+/// Lets background work run until `done` holds (or a few seconds pass).
+fn wait_until(
+    cx: &mut TestAppContext,
+    handle: WindowHandle<Root>,
+    done: impl Fn(&mut TestAppContext) -> bool,
+) {
+    for _ in 0..150 {
+        cx.run_until_parked();
+        if done(cx) {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    draw(cx, handle);
+}
+
 #[gpui_kit::test]
 fn the_empty_window_draws(cx: &mut TestAppContext) {
     let (handle, view) = open_window(cx, None);
@@ -183,7 +199,7 @@ fn folders_open_on_double_click_and_the_way_back_works(cx: &mut TestAppContext) 
 
     let table = cx.update(|cx| view.read(cx).table.clone());
     cx.update_window(handle.into(), |_, _, cx| {
-        table.update(cx, |_, cx| cx.emit(TableEvent::DoubleClickedRow(0)));
+        table.update(cx, |_, cx| cx.emit(TableEvent::DoubleClickedRow(1)));
     })
     .unwrap();
     draw(cx, handle);
@@ -225,7 +241,7 @@ fn a_picture_is_previewed_and_other_files_are_not(cx: &mut TestAppContext) {
     let table = cx.update(|cx| view.read(cx).table.clone());
     let select = |cx: &mut TestAppContext, ix: usize| {
         cx.update_window(handle.into(), |_, _, cx| {
-            table.update(cx, |_, cx| cx.emit(TableEvent::SelectRow(ix)));
+            table.update(cx, |_, cx| cx.emit(TableEvent::SelectRow(ix + 1)));
         })
         .unwrap();
         cx.run_until_parked();
@@ -274,7 +290,7 @@ fn deleting_and_adding_rewrite_the_archive_and_the_list_follows(cx: &mut TestApp
     // Pick readme.txt and ask to delete it: nothing happens until the user agrees.
     let table = cx.update(|cx| view.read(cx).table.clone());
     cx.update_window(handle.into(), |_, _, cx| {
-        table.update(cx, |_, cx| cx.emit(TableEvent::SelectRow(2)));
+        table.update(cx, |_, cx| cx.emit(TableEvent::SelectRow(3)));
     })
     .unwrap();
     with_view(cx, handle, &view, |v, _, cx| v.ask_delete(cx));
@@ -364,7 +380,7 @@ fn double_clicking_a_file_opens_it_and_saving_it_writes_it_back(cx: &mut TestApp
     let table = cx.update(|cx| view.read(cx).table.clone());
     // Row 2 is readme.txt.
     cx.update_window(handle.into(), |_, _, cx| {
-        table.update(cx, |_, cx| cx.emit(TableEvent::DoubleClickedRow(2)));
+        table.update(cx, |_, cx| cx.emit(TableEvent::DoubleClickedRow(3)));
     })
     .unwrap();
     cx.executor().advance_clock(Duration::from_millis(50));
@@ -538,7 +554,7 @@ fn renaming_inside_an_archive_changes_the_entry_and_refuses_bad_names(cx: &mut T
     with_view(cx, handle, &view, |v, _, cx| v.navigate("proj", cx));
     let table = cx.update(|cx| view.read(cx).table.clone());
     cx.update_window(handle.into(), |_, _, cx| {
-        table.update(cx, |_, cx| cx.emit(TableEvent::SelectRow(2)));
+        table.update(cx, |_, cx| cx.emit(TableEvent::SelectRow(3)));
     })
     .unwrap();
 
@@ -633,7 +649,7 @@ fn the_row_menu_actions_work_on_the_whole_selection(cx: &mut TestAppContext) {
         v.table
             .update(cx, |t, _| t.delegate_mut().mark_only("proj/src"));
         // Row 2 is readme.txt.
-        v.table.update(cx, |t, _| t.delegate_mut().toggle(2));
+        v.table.update(cx, |t, _| t.delegate_mut().toggle(3));
     });
     cx.dispatch_action(handle.into(), RowExtractHere);
     wait_for_tasks(cx, handle, &view);
@@ -651,7 +667,7 @@ fn a_right_click_on_the_empty_part_lets_go_of_the_selection(cx: &mut TestAppCont
     with_view(cx, handle, &view, |v, _, cx| v.navigate("proj", cx));
     let table = cx.update(|cx| view.read(cx).table.clone());
     cx.update_window(handle.into(), |_, _, cx| {
-        table.update(cx, |t, cx| t.set_selected_row(2, cx));
+        table.update(cx, |t, cx| t.set_selected_row(3, cx));
     })
     .unwrap();
     draw(cx, handle);
@@ -675,11 +691,156 @@ fn a_right_click_on_the_empty_part_lets_go_of_the_selection(cx: &mut TestAppCont
     });
     // Picking a row afterwards still works.
     cx.update_window(handle.into(), |_, _, cx| {
-        table.update(cx, |t, cx| t.set_selected_row(0, cx));
+        table.update(cx, |t, cx| t.set_selected_row(1, cx));
     })
     .unwrap();
     draw(cx, handle);
     cx.update(|cx| assert_eq!(view.read(cx).picked_paths(cx), ["proj/docs"]));
+}
+
+#[gpui_kit::test]
+fn the_back_row_goes_up_and_out_of_the_archive_into_its_folder(cx: &mut TestAppContext) {
+    use rustzip_gui::view::Page;
+    let tmp = tempfile::tempdir().unwrap();
+    let archive = make_archive(tmp.path(), "a.zip", None);
+    let (handle, view) = open_window(cx, None);
+    open_sync(cx, handle, &view, &archive, None);
+    let table = cx.update(|cx| view.read(cx).table.clone());
+    let double = |cx: &mut TestAppContext, ix: usize| {
+        cx.update_window(handle.into(), |_, _, cx| {
+            table.update(cx, |_, cx| cx.emit(TableEvent::DoubleClickedRow(ix)));
+        })
+        .unwrap();
+        cx.run_until_parked();
+        std::thread::sleep(Duration::from_millis(50));
+        cx.run_until_parked();
+        draw(cx, handle);
+    };
+
+    // The back row is the first row, though it is not an entry of the archive.
+    assert_eq!(row_names(cx, &view), ["proj"]);
+    cx.update(|cx| {
+        let d = view.read(cx).table.read(cx).delegate();
+        assert_eq!(d.table_len(), 2);
+        assert!(d.row(0).is_none() && d.row(1).is_some());
+    });
+
+    // Inside a folder it goes one level up.
+    double(cx, 1);
+    cx.update(|cx| assert_eq!(view.read(cx).current().unwrap().cwd, "proj"));
+    double(cx, 0);
+    cx.update(|cx| assert_eq!(view.read(cx).current().unwrap().cwd, ""));
+
+    // At the top it leaves the archive for the folder the archive is in.
+    double(cx, 0);
+    cx.update(|cx| {
+        let v = view.read(cx);
+        assert_eq!(v.page, Page::Folder);
+        assert_eq!(v.folder.as_deref(), Some(tmp.path()));
+        let names: Vec<_> = v.files.items.iter().map(|i| i.name.as_str()).collect();
+        assert!(names.contains(&"a.zip"), "{names:?}");
+        // Folders first.
+        assert!(v.files.items[0].is_dir);
+    });
+
+    // An archive in that folder opens in a tab of its own.
+    let other = make_archive(tmp.path(), "second.zip", None);
+    with_view(cx, handle, &view, |v, _, cx| v.reload_folder(cx));
+    std::thread::sleep(Duration::from_millis(50));
+    cx.run_until_parked();
+    with_view(cx, handle, &view, |v, w, cx| {
+        v.open_listed(other.clone(), false, w, cx);
+    });
+    wait_until(cx, handle, |cx| {
+        cx.update(|cx| view.read(cx).archives.len() == 2)
+    });
+    cx.update(|cx| assert_eq!(view.read(cx).page, Page::Archive));
+
+    // And ".." in the folder page climbs on.
+    with_view(cx, handle, &view, |v, _, cx| {
+        v.show_folder(tmp.path().join("cfg-none"), cx)
+    });
+    with_view(cx, handle, &view, |v, _, cx| v.folder_up(cx));
+    cx.update(|cx| assert_eq!(view.read(cx).folder.as_deref(), Some(tmp.path())));
+}
+
+#[gpui_kit::test]
+fn dragging_a_band_over_the_list_picks_the_rows_it_touches(cx: &mut TestAppContext) {
+    use gpui_kit::{
+        Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PlatformInput, point,
+        px,
+    };
+    let tmp = tempfile::tempdir().unwrap();
+    let archive = make_archive(tmp.path(), "a.zip", None);
+    let (handle, view) = open_window(cx, None);
+    open_sync(cx, handle, &view, &archive, None);
+    with_view(cx, handle, &view, |v, _, cx| v.navigate("proj", cx));
+    // A frame to learn where the list is, and a second one with it laid out.
+    draw(cx, handle);
+    draw(cx, handle);
+    let bounds = cx.update(|cx| view.read(cx).list_bounds());
+    assert!(bounds.size.height > px(200.), "{bounds:?}");
+
+    // Title row, back row, then docs, src, readme.txt; the rest of the list is empty.
+    let row_y = |ix: usize| bounds.origin.y + px(28. + 28. * ix as f32 + 14.);
+    let x = bounds.origin.x + px(200.);
+    let send = |cx: &mut TestAppContext, event: PlatformInput| {
+        cx.update_window(handle.into(), |_, window, cx| {
+            window.dispatch_event(event, cx);
+        })
+        .unwrap();
+        draw(cx, handle);
+    };
+    let down = |y| {
+        PlatformInput::MouseDown(MouseDownEvent {
+            button: MouseButton::Left,
+            position: point(x, y),
+            modifiers: Modifiers::default(),
+            click_count: 1,
+            first_mouse: false,
+        })
+    };
+    let moved = |y| {
+        PlatformInput::MouseMove(MouseMoveEvent {
+            position: point(x, y),
+            pressed_button: Some(MouseButton::Left),
+            modifiers: Modifiers::default(),
+        })
+    };
+    let up = |y| {
+        PlatformInput::MouseUp(MouseUpEvent {
+            button: MouseButton::Left,
+            position: point(x, y),
+            modifiers: Modifiers::default(),
+            click_count: 1,
+        })
+    };
+    let picked = |cx: &mut TestAppContext| cx.update(|cx| view.read(cx).picked_paths(cx));
+
+    // From the empty part, up over the last two rows: those two are picked.
+    let start = row_y(8);
+    send(cx, down(start));
+    send(cx, moved(row_y(3)));
+    cx.update(|cx| assert!(view.read(cx).marquee.is_some()));
+    // Row 3 is readme.txt, the last one.
+    assert_eq!(picked(cx), ["proj/readme.txt"]);
+    send(cx, moved(row_y(2)));
+    assert_eq!(picked(cx), ["proj/readme.txt", "proj/src"]);
+    // Further up, over the back row and the first row: everything but the back row.
+    send(cx, moved(row_y(0)));
+    assert_eq!(picked(cx), ["proj/docs", "proj/readme.txt", "proj/src"]);
+    // Back down to the empty part: nothing.
+    send(cx, moved(row_y(7)));
+    assert!(picked(cx).is_empty());
+    send(cx, moved(row_y(2)));
+    send(cx, up(row_y(2)));
+    cx.update(|cx| assert!(view.read(cx).marquee.is_none()));
+    assert_eq!(picked(cx), ["proj/readme.txt", "proj/src"]);
+
+    // A plain click on the empty part lets go of the selection.
+    send(cx, down(start));
+    send(cx, up(start));
+    assert!(picked(cx).is_empty());
 }
 
 #[gpui_kit::test]
@@ -707,7 +868,7 @@ fn selecting_a_row_fills_the_details_and_double_clicking_a_file_does_nothing(
     let table = cx.update(|cx| view.read(cx).table.clone());
     // Row 2 is readme.txt (folders first).
     cx.update_window(handle.into(), |_, _, cx| {
-        table.update(cx, |_, cx| cx.emit(TableEvent::SelectRow(2)));
+        table.update(cx, |_, cx| cx.emit(TableEvent::SelectRow(3)));
     })
     .unwrap();
     draw(cx, handle);
@@ -719,7 +880,7 @@ fn selecting_a_row_fills_the_details_and_double_clicking_a_file_does_nothing(
     });
 
     cx.update_window(handle.into(), |_, _, cx| {
-        table.update(cx, |_, cx| cx.emit(TableEvent::DoubleClickedRow(2)));
+        table.update(cx, |_, cx| cx.emit(TableEvent::DoubleClickedRow(3)));
     })
     .unwrap();
     cx.update(|cx| assert_eq!(view.read(cx).current().unwrap().cwd, "proj"));
@@ -1158,14 +1319,14 @@ fn modified_clicks_build_a_multi_selection_that_navigation_clears(cx: &mut TestA
         table.update(cx, |t, _| {
             let d = t.delegate_mut();
             d.mark_only("proj/docs");
-            d.toggle(1);
+            d.toggle(2);
         })
     });
     assert_eq!(marked(cx).len(), 2);
     // Toggling a picked row again takes it out.
-    cx.update(|cx| table.update(cx, |t, _| t.delegate_mut().toggle(1)));
+    cx.update(|cx| table.update(cx, |t, _| t.delegate_mut().toggle(2)));
     assert_eq!(marked(cx), vec!["proj/docs".to_string()]);
-    cx.update(|cx| table.update(cx, |t, _| t.delegate_mut().mark_range(0, 1)));
+    cx.update(|cx| table.update(cx, |t, _| t.delegate_mut().mark_range(1, 2)));
     assert_eq!(marked(cx).len(), 2);
 
     with_view(cx, handle, &view, |v, _, cx| v.navigate("proj/docs", cx));

@@ -177,7 +177,7 @@ fn main() {
         });
         let table = view.read_with(&cx, |v, _| v.table.clone());
         cx.update_window(handle.into(), |_, _, cx| {
-            table.update(cx, |t, cx| t.set_selected_row(2, cx));
+            table.update(cx, |t, cx| t.set_selected_row(3, cx));
         })
         .unwrap();
         shoot(&mut cx, handle, &out_dir, &format!("{tag}-3-selected"));
@@ -190,7 +190,7 @@ fn main() {
             }
         });
         cx.update_window(handle.into(), |_, _, cx| {
-            table.update(cx, |t, cx| t.set_selected_row(0, cx));
+            table.update(cx, |t, cx| t.set_selected_row(1, cx));
         })
         .unwrap();
         shoot(&mut cx, handle, &out_dir, &format!("{tag}-3b-picture"));
@@ -222,12 +222,24 @@ fn main() {
 
         // 3d. Asking before deleting from the archive.
         cx.update_window(handle.into(), |_, _, cx| {
-            table.update(cx, |t, cx| t.set_selected_row(3, cx));
+            table.update(cx, |t, cx| t.set_selected_row(4, cx));
         })
         .unwrap();
         act(&mut cx, handle, &view, |v, _, cx| v.ask_delete(cx));
         shoot(&mut cx, handle, &out_dir, &format!("{tag}-3d-delete"));
         act(&mut cx, handle, &view, |v, _, cx| v.close_overlay(cx));
+
+        // 3f. Out of the archive, into the folder it lies in.
+        act(&mut cx, handle, &view, |v, _, cx| {
+            // Once up to the top of the archive, and once more to leave it.
+            v.go_up_or_out(cx);
+            v.go_up_or_out(cx);
+        });
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        shoot(&mut cx, handle, &out_dir, &format!("{tag}-3f-folder"));
+        act(&mut cx, handle, &view, |v, _, cx| {
+            v.show_page(rustzip_gui::view::Page::Archive, cx);
+        });
 
         // 4. The compress form.
         let src = work.path().join("项目文档");

@@ -12,6 +12,7 @@ use crate::{
     RowAddHere, RowCopyPath, RowDelete, RowExtractHere, RowExtractNamed, RowExtractTo, RowOpen,
     RowRename, SelectAllRows,
 };
+use gpui_kit::component::FocusableExt as _;
 use gpui_kit::component::button::*;
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::progress::Progress;
@@ -26,8 +27,10 @@ use rz_app::settings::{OnConflict, Settings, Theme};
 use rz_app::tasks::{ErrorCode, JobKind, JobSpec, TaskId, TaskInfo, TaskManager, TaskState};
 use rz_core::{CreateOptions, Error};
 use rz_formats::OutputFormat;
+use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -48,6 +51,24 @@ pub struct OpenArchive {
     pub verified: Option<bool>,
 }
 
+/// Heights of the file list: its title row and each row, as drawn by the table.
+const LIST_HEAD: f32 = 28.;
+const LIST_ROW: f32 = 28.;
+
+/// A drag with the mouse over the list that picks every row it reaches.
+#[derive(Debug, Clone, Copy)]
+pub struct Marquee {
+    pub start: Point<Pixels>,
+    pub current: Point<Pixels>,
+}
+
+/// The table row under a vertical position, from the top of the list and how far it has
+/// scrolled. `None` over the title row; positions below the last row give an index past it.
+pub fn list_row_at(y: f32, list_top: f32, scrolled: f32) -> Option<usize> {
+    let rel = y - list_top - LIST_HEAD + scrolled;
+    (rel >= 0.).then(|| (rel / LIST_ROW) as usize)
+}
+
 /// What the area right of the left menu shows.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Page {
@@ -55,6 +76,8 @@ pub enum Page {
     Archive,
     /// The archives opened lately.
     Recent,
+    /// A folder on disk, browsed like in a file manager.
+    Folder,
 }
 
 /// How a row of the left menu behaves.
@@ -199,7 +222,13 @@ pub struct MainView {
     pub loading: Option<PathBuf>,
     pub preview: Option<Preview>,
     pub page: Page,
+    /// Where the file list was drawn last, to turn mouse positions into rows.
+    files_bounds: Rc<Cell<Bounds<Pixels>>>,
+    pub marquee: Option<Marquee>,
     pub recent: RecentList,
+    /// The folder shown on the folder page, and what is in it.
+    pub folder: Option<PathBuf>,
+    pub files: RecentList,
     /// Opens an unpacked file with the program the system uses for it. Replaced in tests.
     pub opener: Arc<dyn Fn(&Path) + Send + Sync>,
     polling: bool,
@@ -308,7 +337,11 @@ impl MainView {
             loading: None,
             preview: None,
             page: Page::Archive,
+            files_bounds: Rc::default(),
+            marquee: None,
             recent: RecentList::default(),
+            folder: None,
+            files: RecentList::for_folder(),
             opener: Arc::new(crate::services::open_file_with_system),
             polling: false,
             announced: HashSet::new(),
@@ -583,6 +616,138 @@ impl MainView {
         }
     }
 
+    /// "Back": one folder up inside the archive; at the top of the archive, out of it to
+    /// the folder the archive lies in, so browsing can go on from there.
+    pub fn go_up_or_out(&mut self, cx: &mut Context<Self>) {
+        let Some(a) = self.current() else { return };
+        if a.cwd.is_empty() {
+            if let Some(dir) = a.path.parent().map(Path::to_path_buf) {
+                self.show_folder(dir, cx);
+            }
+        } else {
+            self.go_up(cx);
+        }
+    }
+
+    /// Nothing is picked, but the table keeps its own highlight (for the "back" row).
+    fn pick_nothing(&mut self, cx: &mut Context<Self>) {
+        if let Some(a) = self.current_mut() {
+            a.selected = None;
+        }
+        self.preview = None;
+        self.table.update(cx, |t, _| t.delegate_mut().clear_marks());
+        self.leave_notice();
+        cx.notify();
+    }
+
+    // ----- browsing folders on disk ------------------------------------------------------
+
+    /// Shows the files of a folder on disk, like a file manager, so the archive manager
+    /// can be used to move around and open the next archive from.
+    pub fn show_folder(&mut self, dir: PathBuf, cx: &mut Context<Self>) {
+        self.leave_notice();
+        self.page = Page::Folder;
+        self.folder = Some(dir.clone());
+        self.files.selected = None;
+        self.reload_folder(cx);
+        cx.notify();
+    }
+
+    /// Reads the folder being browsed again, off the UI thread.
+    pub fn reload_folder(&mut self, cx: &mut Context<Self>) {
+        let Some(dir) = self.folder.clone() else {
+            return;
+        };
+        cx.spawn(async move |this, cx| {
+            let target = dir.clone();
+            let result = cx
+                .background_executor()
+                .spawn(async move { recent::list_dir(&target) })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                // The user may have moved on to another folder while this was read.
+                if this.folder.as_ref() != Some(&dir) {
+                    return;
+                }
+                match result {
+                    Ok(items) => this.files.set_items(items),
+                    Err(e) => {
+                        this.files.set_items(Vec::new());
+                        this.say(Notice::Error(format!("打不开这个文件夹:{e}")), cx);
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// One folder up on disk.
+    pub fn folder_up(&mut self, cx: &mut Context<Self>) {
+        if let Some(parent) = self
+            .folder
+            .as_deref()
+            .and_then(Path::parent)
+            .map(Path::to_path_buf)
+        {
+            self.show_folder(parent, cx);
+        }
+    }
+
+    /// The list of the page that is showing one (recent archives or a folder).
+    fn listed(&self) -> &RecentList {
+        match self.page {
+            Page::Folder => &self.files,
+            _ => &self.recent,
+        }
+    }
+
+    fn listed_mut(&mut self) -> &mut RecentList {
+        match self.page {
+            Page::Folder => &mut self.files,
+            _ => &mut self.recent,
+        }
+    }
+
+    /// Reads the shown list again after something on disk changed.
+    fn refresh_listed(&mut self, cx: &mut Context<Self>) {
+        match self.page {
+            Page::Folder => self.reload_folder(cx),
+            Page::Recent => self.refresh_recent(cx),
+            Page::Archive => {}
+        }
+    }
+
+    /// A double click in a list of files: folders are entered, archives opened, anything
+    /// else is handed to the program the system uses for it.
+    pub fn open_listed(
+        &mut self,
+        path: PathBuf,
+        is_dir: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if is_dir {
+            self.show_folder(path, cx);
+        } else if self.page == Page::Recent
+            || recent::looks_like_archive(
+                &path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default(),
+            )
+        {
+            self.open_path(path, None, window, cx);
+        } else if crate::services::is_runnable(&path.to_string_lossy()) {
+            self.say(
+                Notice::Info("为了安全,不直接打开程序和脚本;请在文件管理器里确认来源再运行".into()),
+                cx,
+            );
+        } else {
+            (self.opener)(&path);
+        }
+    }
+
     fn on_table_event(
         &mut self,
         table: &Entity<TableState<FileRows>>,
@@ -594,6 +759,8 @@ impl MainView {
         match event {
             // A right click on the empty part of the list: nothing stays picked.
             TableEvent::ClearSelection => self.clear_pick(cx),
+            // Listed before the general case below, which would find no row at 0.
+            TableEvent::SelectRow(0) => self.pick_nothing(cx),
             TableEvent::SelectRow(ix) => {
                 if let Some(row) = row_at(*ix, cx) {
                     let path = row.path;
@@ -607,6 +774,8 @@ impl MainView {
                     cx.notify();
                 }
             }
+            // The "back" row on top: one level up, or out of the archive at the top.
+            TableEvent::DoubleClickedRow(0) => self.go_up_or_out(cx),
             TableEvent::DoubleClickedRow(ix) => {
                 if let Some(row) = row_at(*ix, cx) {
                     match row.kind {
@@ -741,6 +910,92 @@ impl MainView {
     }
 
     // ----- the right-click menu of the list ------------------------------------------------
+
+    // ----- picking with a rubber band ------------------------------------------------------
+
+    /// Where the file list was drawn last (for tests that move the mouse over it).
+    pub fn list_bounds(&self) -> Bounds<Pixels> {
+        self.files_bounds.get()
+    }
+
+    /// The row index and the scrolled distance for a mouse position over the list.
+    fn list_hit(&self, y: Pixels, cx: &App) -> (Option<usize>, usize) {
+        let top = self.files_bounds.get().origin.y;
+        let scrolled = -self
+            .table
+            .read(cx)
+            .vertical_scroll_handle
+            .0
+            .borrow()
+            .base_handle
+            .offset()
+            .y;
+        let len = self.table.read(cx).delegate().table_len();
+        (
+            list_row_at(f32::from(y), f32::from(top), f32::from(scrolled)),
+            len,
+        )
+    }
+
+    /// A press on the empty part of the list starts a rubber band and lets go of what was
+    /// picked, like in a file manager. A press on a row is the table's own business.
+    pub fn start_marquee(&mut self, at: Point<Pixels>, cx: &mut Context<Self>) {
+        if self.page != Page::Archive || self.current().is_none() {
+            return;
+        }
+        let (row, len) = self.list_hit(at.y, cx);
+        if row.is_some_and(|r| r >= len) {
+            self.marquee = Some(Marquee {
+                start: at,
+                current: at,
+            });
+            self.clear_pick(cx);
+        }
+    }
+
+    /// While the button is down, everything the band touches is picked.
+    pub fn drag_marquee(&mut self, ev: &MouseMoveEvent, cx: &mut Context<Self>) {
+        let Some(mut band) = self.marquee else { return };
+        if ev.pressed_button != Some(MouseButton::Left) {
+            self.end_marquee(cx);
+            return;
+        }
+        band.current = ev.position;
+        self.marquee = Some(band);
+        let (top_y, bottom_y) = (
+            band.start.y.min(band.current.y),
+            band.start.y.max(band.current.y),
+        );
+        let ((first, len), (last, _)) = (self.list_hit(top_y, cx), self.list_hit(bottom_y, cx));
+        self.table.update(cx, |t, cx| {
+            match (first, last) {
+                // The band reaches the rows: from where it starts to where it ends.
+                (_, Some(last)) if len > 0 && first.is_none_or(|f| f < len) => {
+                    t.delegate_mut()
+                        .mark_between(first.unwrap_or(0), last.min(len - 1));
+                }
+                _ => t.delegate_mut().clear_marks(),
+            }
+            cx.notify();
+        });
+        cx.notify();
+    }
+
+    /// The button is up: what the band picked stays picked, and the details panel shows it.
+    pub fn end_marquee(&mut self, cx: &mut Context<Self>) {
+        if self.marquee.take().is_none() {
+            return;
+        }
+        let marked = self.table.read(cx).delegate().marked();
+        if let Some(a) = self.current_mut() {
+            a.selected = match marked.as_slice() {
+                [one] => Some(one.clone()),
+                _ => None,
+            };
+        }
+        self.load_preview(cx);
+        cx.notify();
+    }
 
     /// Nothing is picked: not in the list, not for the details panel.
     pub fn clear_pick(&mut self, cx: &mut Context<Self>) {
@@ -973,7 +1228,7 @@ impl MainView {
 
     /// Renames the selected recent archive on disk.
     pub fn ask_rename_file(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(item) = self.recent.selected_item().filter(|i| i.exists) else {
+        let Some(item) = self.listed().selected_item().filter(|i| i.exists) else {
             return;
         };
         let (path, name) = (item.path.clone(), item.name.clone());
@@ -1046,8 +1301,8 @@ impl MainView {
                         }
                     }
                     this.save_settings();
-                    this.recent.selected = Some(to);
-                    this.refresh_recent(cx);
+                    this.listed_mut().selected = Some(to);
+                    this.refresh_listed(cx);
                     this.say(Notice::Info("已重命名".into()), cx);
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => this.say(
@@ -1079,13 +1334,13 @@ impl MainView {
     }
 
     pub fn select_recent(&mut self, path: PathBuf, cx: &mut Context<Self>) {
-        self.recent.selected = Some(path);
+        self.listed_mut().selected = Some(path);
         self.leave_notice();
         cx.notify();
     }
 
     pub fn sort_recent(&mut self, key: RecentSort, cx: &mut Context<Self>) {
-        self.recent.sort_by(key);
+        self.listed_mut().sort_by(key);
         cx.notify();
     }
 
@@ -1109,7 +1364,7 @@ impl MainView {
     /// Unpacks the selected recent archive next to it, optionally into a folder named
     /// after it.
     pub fn extract_recent(&mut self, into_named_folder: bool, cx: &mut Context<Self>) {
-        let Some(item) = self.recent.selected_item().filter(|i| i.exists) else {
+        let Some(item) = self.listed().selected_item().filter(|i| i.exists) else {
             return;
         };
         let archive = item.path.clone();
@@ -1132,7 +1387,7 @@ impl MainView {
     }
 
     pub fn ask_trash(&mut self, cx: &mut Context<Self>) {
-        if let Some(item) = self.recent.selected_item().filter(|i| i.exists) {
+        if let Some(item) = self.listed().selected_item().filter(|i| i.exists) {
             self.overlay = Some(Overlay::ConfirmTrash(item.path.clone()));
             cx.notify();
         }
@@ -1157,6 +1412,8 @@ impl MainView {
                         this.close_tab(ix, cx);
                     }
                     this.forget_recent(&path, cx);
+                    this.files.selected = None;
+                    this.refresh_listed(cx);
                     this.say(Notice::Info("已移到废纸篓 / 回收站".into()), cx);
                 }
                 Err(e) => this.say(Notice::Error(format!("没能删除:{e}")), cx),
@@ -1935,6 +2192,7 @@ impl MainView {
         match self.page {
             Page::Archive => self.render_archive_toolbar(cx).into_any_element(),
             Page::Recent => self.render_recent_toolbar(cx).into_any_element(),
+            Page::Folder => self.render_folder_toolbar(cx).into_any_element(),
         }
     }
 
@@ -2150,7 +2408,10 @@ impl MainView {
             // The sidebar needs room; below this width the file list wins.
             .when(width >= px(560.), |d| d.child(self.render_sidebar(cx)))
             .when(self.page == Page::Recent, |d| {
-                d.child(self.render_recent_page(cx))
+                d.child(self.render_file_list(false, cx))
+            })
+            .when(self.page == Page::Folder, |d| {
+                d.child(self.render_file_list(true, cx))
             })
             .when(self.page == Page::Archive, |d| {
                 d.child(
@@ -2170,18 +2431,67 @@ impl MainView {
                                     let table = self.table.clone();
                                     move |ev, _, cx| {
                                         if ev.button == MouseButton::Right {
-                                            let past = table.read(cx).delegate().rows().len();
+                                            let past = table.read(cx).delegate().table_len();
                                             table.update(cx, |t, cx| {
                                                 t.set_right_clicked_row(Some(past), cx)
                                             });
                                         }
                                     }
                                 })
+                                .relative()
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    cx.listener(|this, ev: &MouseDownEvent, _, cx| {
+                                        this.start_marquee(ev.position, cx);
+                                    }),
+                                )
+                                .on_mouse_move(cx.listener(|this, ev: &MouseMoveEvent, _, cx| {
+                                    this.drag_marquee(ev, cx);
+                                }))
+                                .on_mouse_up(
+                                    MouseButton::Left,
+                                    cx.listener(|this, _, _, cx| this.end_marquee(cx)),
+                                )
+                                .on_mouse_up_out(
+                                    MouseButton::Left,
+                                    cx.listener(|this, _, _, cx| this.end_marquee(cx)),
+                                )
+                                // Remembers where the list is, to turn mouse positions into rows.
+                                .child({
+                                    let cell = self.files_bounds.clone();
+                                    canvas(move |bounds, _, _| cell.set(bounds), |_, _, _, _| {})
+                                        .absolute()
+                                        .size_full()
+                                })
+                                // No focus ring: Ctrl+A would flash one around the whole list.
                                 .child(
                                     DataTable::new(&self.table)
+                                        .focus_ring(false)
                                         .with_size(px(28.))
                                         .bordered(false),
-                                ),
+                                )
+                                .when_some(self.marquee, |d, band| {
+                                    let origin = self.files_bounds.get().origin;
+                                    let (x0, x1) = (
+                                        band.start.x.min(band.current.x),
+                                        band.start.x.max(band.current.x),
+                                    );
+                                    let (y0, y1) = (
+                                        band.start.y.min(band.current.y),
+                                        band.start.y.max(band.current.y),
+                                    );
+                                    d.child(
+                                        div()
+                                            .absolute()
+                                            .left(x0 - origin.x)
+                                            .top(y0 - origin.y)
+                                            .w(x1 - x0)
+                                            .h(y1 - y0)
+                                            .border_1()
+                                            .border_color(p.accent)
+                                            .bg(hsla(0., 0., 0.5, 0.12)),
+                                    )
+                                }),
                         ),
                 )
                 // Below this width the file list matters more than the details beside it.
@@ -2203,10 +2513,13 @@ impl MainView {
 
     /// The archives opened lately, as a list like the one in a folder: one line each, with
     /// where it is, when it was made and last changed, and click-to-sort column titles.
-    fn render_recent_page(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    ///
+    /// The same list serves the folder page (`folder_mode`), where folders are listed too
+    /// and a "back" row stays on top.
+    fn render_file_list(&self, folder_mode: bool, cx: &mut Context<Self>) -> impl IntoElement {
         let p = palette(cx);
         let mono = cx.theme().mono_font_family.clone();
-        let list = &self.recent;
+        let list = self.listed();
         let time = |t: Option<i64>| t.map_or_else(|| "—".to_string(), crate::local_time);
         // Column widths; name and place share what is left.
         const W_TIME: f32 = 136.;
@@ -2250,12 +2563,15 @@ impl MainView {
             )
             // The size is one of the first things to look for, so it sits next to the name.
             .child(title("recent-th-size", "大小", RecentSort::Size, true).w(px(W_SIZE)))
-            .child(
-                title("recent-th-folder", "位置", RecentSort::Folder, false)
-                    .flex_1()
-                    .min_w_0()
-                    .pl_3(),
-            )
+            // In a folder listing every item is in the same place.
+            .when(!folder_mode, |d| {
+                d.child(
+                    title("recent-th-folder", "位置", RecentSort::Folder, false)
+                        .flex_1()
+                        .min_w_0()
+                        .pl_3(),
+                )
+            })
             .child(title("recent-th-created", "创建时间", RecentSort::Created, false).w(px(W_TIME)))
             .child(
                 title(
@@ -2275,6 +2591,7 @@ impl MainView {
                 let on = list.selected.as_ref() == Some(&item.path);
                 let open = self.archives.iter().any(|a| a.path == item.path);
                 let (single, double) = (item.path.clone(), item.path.clone());
+                let is_dir = item.is_dir;
                 let dim = if item.exists { p.fg } else { p.fg3 };
                 h_flex()
                     .id(("recent", ix))
@@ -2289,7 +2606,7 @@ impl MainView {
                     .on_click(cx.listener(move |this, ev: &ClickEvent, window, cx| {
                         this.select_recent(single.clone(), cx);
                         if ev.click_count() >= 2 {
-                            this.open_path(double.clone(), None, window, cx);
+                            this.open_listed(double.clone(), is_dir, window, cx);
                         }
                     }))
                     .child(
@@ -2298,9 +2615,13 @@ impl MainView {
                             .min_w_0()
                             .gap_2()
                             .child(
-                                Icon::new(gpui_kit::assets::IconName::FileArchive)
-                                    .size_4()
-                                    .text_color(if on { p.accent } else { p.fg3 }),
+                                if item.is_dir {
+                                    Icon::new(IconName::Folder)
+                                } else {
+                                    Icon::new(gpui_kit::assets::IconName::FileArchive)
+                                }
+                                .size_4()
+                                .text_color(if on || item.is_dir { p.accent } else { p.fg3 }),
                             )
                             .child(
                                 div()
@@ -2308,7 +2629,7 @@ impl MainView {
                                     .text_ellipsis()
                                     .child(item.name.clone()),
                             )
-                            .when(open, |d| {
+                            .when(open && !item.is_dir, |d| {
                                 d.child(div().text_size(px(11.)).text_color(p.fg3).child("已打开"))
                             }),
                     )
@@ -2320,20 +2641,23 @@ impl MainView {
                             .font_family(mono.clone())
                             .child(match (item.exists, item.size) {
                                 (true, Some(n)) => format_size(n),
+                                (true, None) => "—".to_string(),
                                 _ => "已移走".to_string(),
                             }),
                     )
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .pl_3()
-                            .overflow_hidden()
-                            .text_ellipsis()
-                            .text_size(px(12.))
-                            .text_color(p.fg3)
-                            .child(item.folder.clone()),
-                    )
+                    .when(!folder_mode, |d| {
+                        d.child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .pl_3()
+                                .overflow_hidden()
+                                .text_ellipsis()
+                                .text_size(px(12.))
+                                .text_color(p.fg3)
+                                .child(item.folder.clone()),
+                        )
+                    })
                     .child(
                         div()
                             .w(px(W_TIME))
@@ -2356,13 +2680,38 @@ impl MainView {
             .flex_1()
             .min_w_0()
             .child(header)
-            .when(rows.is_empty(), |d| {
+            // Always on top, whatever the order: one folder up, like `../`.
+            .when(folder_mode, |d| {
+                let has_parent = self.folder.as_deref().and_then(Path::parent).is_some();
                 d.child(
-                    div()
-                        .p_6()
-                        .text_color(p.fg3)
-                        .child("还没有打开过压缩包。打开的压缩包会记在这里。"),
+                    h_flex()
+                        .id("folder-up")
+                        .h(px(36.))
+                        .px_3()
+                        .gap_2()
+                        .flex_none()
+                        .items_center()
+                        .text_color(if has_parent { p.fg } else { p.fg3 })
+                        .when(has_parent, |d| {
+                            d.cursor_pointer()
+                                .hover(|d| d.bg(p.hover))
+                                .on_click(cx.listener(|this, ev: &ClickEvent, _, cx| {
+                                    if ev.click_count() >= 2 {
+                                        this.folder_up(cx);
+                                    }
+                                }))
+                        })
+                        .child(Icon::new(IconName::ArrowUp).size_4().text_color(p.fg3))
+                        .child("..")
+                        .child(div().text_size(px(12.)).text_color(p.fg3).child("上一级")),
                 )
+            })
+            .when(rows.is_empty(), |d| {
+                d.child(div().p_6().text_color(p.fg3).child(if folder_mode {
+                    "这个文件夹里没有可显示的内容"
+                } else {
+                    "还没有打开过压缩包。打开的压缩包会记在这里。"
+                }))
             })
             .child(
                 v_flex()
@@ -2484,6 +2833,109 @@ impl MainView {
                 .icon(IconName::Close)
                 .label("从列表移除")
                 .on_click(cx.listener(move |this, _, _, cx| this.forget_recent(&forget, cx))),
+        )
+    }
+
+    /// Toolbar of the folder page: what can be done with the file or folder picked in the
+    /// list, which depends on what it is.
+    fn render_folder_toolbar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let p = palette(cx);
+        let bar = h_flex()
+            .id("toolbar")
+            .h(px(46.))
+            .px_3()
+            .gap_1()
+            .items_center()
+            .flex_none()
+            .border_b_1()
+            .border_color(p.line);
+        let divider = || div().w(px(1.)).h(px(16.)).mx_1p5().bg(p.line);
+        let Some(item) = self.files.selected_item() else {
+            return bar
+                .child(
+                    Button::new("folder-open-other")
+                        .primary()
+                        .icon(IconName::FolderOpen)
+                        .label("打开压缩包…")
+                        .on_click(cx.listener(|this, _, window, cx| this.pick_archive(window, cx))),
+                )
+                .child(
+                    Button::new("folder-new")
+                        .ghost()
+                        .icon(IconName::Plus)
+                        .label("新建压缩")
+                        .on_click(cx.listener(|this, _, window, cx| this.pick_sources(window, cx))),
+                );
+        };
+        let (path, is_dir) = (item.path.clone(), item.is_dir);
+        let is_archive = !is_dir && recent::looks_like_archive(&item.name);
+        let several = !matches!(
+            rz_formats::OutputFormat::from_path(&path),
+            Some(rz_formats::OutputFormat::Single(_))
+        );
+        bar.child(
+            Button::new("folder-open")
+                .primary()
+                .icon(IconName::FolderOpen)
+                .label(if is_dir { "进入" } else { "打开" })
+                .on_click(cx.listener({
+                    let path = path.clone();
+                    move |this, _, window, cx| this.open_listed(path.clone(), is_dir, window, cx)
+                })),
+        )
+        .when(is_archive, |d| {
+            d.child(
+                Button::new("folder-extract-here")
+                    .ghost()
+                    .icon(IconName::ArrowDown)
+                    .label("解压到当前文件夹")
+                    .on_click(cx.listener(|this, _, _, cx| this.extract_recent(false, cx))),
+            )
+            .when(several, |d| {
+                d.child(
+                    Button::new("folder-extract-named")
+                        .ghost()
+                        .icon(IconName::Folder)
+                        .label("解压到同名文件夹")
+                        .on_click(cx.listener(|this, _, _, cx| this.extract_recent(true, cx))),
+                )
+            })
+        })
+        .child(
+            Button::new("folder-compress")
+                .ghost()
+                .icon(IconName::Plus)
+                .label("压缩")
+                .on_click(cx.listener({
+                    let path = path.clone();
+                    move |this, _, window, cx| this.open_compress(vec![path.clone()], window, cx)
+                })),
+        )
+        .child(divider())
+        .child(
+            Button::new("folder-reveal")
+                .ghost()
+                .icon(IconName::ExternalLink)
+                .label("在文件夹中显示")
+                .on_click(cx.listener({
+                    let path = path.clone();
+                    move |_, _, _, cx| cx.reveal_path(&path)
+                })),
+        )
+        .child(
+            Button::new("folder-rename")
+                .ghost()
+                .icon(IconName::Replace)
+                .label("重命名")
+                .on_click(cx.listener(|this, _, window, cx| this.ask_rename_file(window, cx))),
+        )
+        .child(
+            Button::new("folder-trash")
+                .ghost()
+                .icon(Icon::new(gpui_kit::assets::IconName::Trash))
+                .label("删除")
+                .text_color(p.danger)
+                .on_click(cx.listener(|this, _, _, cx| this.ask_trash(cx))),
         )
     }
 
@@ -2617,7 +3069,11 @@ impl MainView {
                     Icon::new(IconName::Inbox),
                     "当前压缩包",
                     None,
-                    if on_recent { Nav::Live } else { Nav::Current },
+                    if self.page == Page::Archive {
+                        Nav::Current
+                    } else {
+                        Nav::Live
+                    },
                 )
                 .id("nav-current")
                 .cursor_pointer()
@@ -2686,7 +3142,7 @@ impl MainView {
                     .icon(IconName::ArrowUp)
                     .tooltip("上一级")
                     .disabled(a.cwd.is_empty())
-                    .on_click(cx.listener(|this, _, _, cx| this.go_up(cx))),
+                    .on_click(cx.listener(|this, _, _, cx| this.go_up_or_out(cx))),
             )
             .children(
                 crumbs
@@ -3072,6 +3528,15 @@ impl MainView {
                 } else {
                     format!("{total} 个最近的压缩包")
                 })
+            }
+            (None, None, Some(_)) if self.page == Page::Folder => {
+                let n = self.files.items.len();
+                let name = self
+                    .folder
+                    .as_deref()
+                    .and_then(|d| d.file_name().map(|n| n.to_string_lossy().into_owned()))
+                    .unwrap_or_else(|| "/".into());
+                div().text_color(p.fg2).child(format!("{name} · {n} 项"))
             }
             (None, None, Some(a)) => {
                 let t = &a.tree;

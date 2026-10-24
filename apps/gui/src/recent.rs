@@ -17,6 +17,8 @@ pub struct RecentItem {
     pub size: Option<u64>,
     /// The file is still where it was.
     pub exists: bool,
+    /// A folder (only in the folder listing; recent archives are files).
+    pub is_dir: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -34,6 +36,8 @@ pub struct RecentList {
     pub sort: RecentSort,
     pub ascending: bool,
     pub selected: Option<PathBuf>,
+    /// Folders before files, whatever the order (the folder listing).
+    pub dirs_first: bool,
 }
 
 impl Default for RecentList {
@@ -44,11 +48,22 @@ impl Default for RecentList {
             sort: RecentSort::Modified,
             ascending: false,
             selected: None,
+            dirs_first: false,
         }
     }
 }
 
 impl RecentList {
+    /// A list for browsing a folder: by name, folders first.
+    pub fn for_folder() -> Self {
+        Self {
+            sort: RecentSort::Name,
+            ascending: true,
+            dirs_first: true,
+            ..Self::default()
+        }
+    }
+
     pub fn set_items(&mut self, items: Vec<RecentItem>) {
         self.items = items;
         if let Some(sel) = &self.selected
@@ -77,8 +92,11 @@ impl RecentList {
     }
 
     fn resort(&mut self) {
-        let (key, asc) = (self.sort, self.ascending);
+        let (key, asc, dirs_first) = (self.sort, self.ascending, self.dirs_first);
         self.items.sort_by(|a, b| {
+            if dirs_first && a.is_dir != b.is_dir {
+                return b.is_dir.cmp(&a.is_dir);
+            }
             let ord = match key {
                 RecentSort::Name => directed(natural_cmp(&a.name, &b.name), asc),
                 RecentSort::Folder => directed(natural_cmp(&a.folder, &b.folder), asc),
@@ -131,9 +149,50 @@ pub fn scan(paths: &[PathBuf]) -> Vec<RecentItem> {
                 modified: meta.as_ref().and_then(|m| unix(m.modified())),
                 size: meta.as_ref().map(|m| m.len()),
                 exists: meta.is_some(),
+                is_dir: false,
             }
         })
         .collect()
+}
+
+/// Lists a folder for the file browser. Runs off the UI thread. Hidden files are left
+/// out, like a file manager does by default; unreadable entries are skipped.
+pub fn list_dir(dir: &Path) -> std::io::Result<Vec<RecentItem>> {
+    let mut items = Vec::new();
+    for entry in std::fs::read_dir(dir)? {
+        let Ok(entry) = entry else { continue };
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name.starts_with('.') {
+            continue;
+        }
+        let path = entry.path();
+        // `metadata` follows links, so a link to a folder behaves as the folder.
+        let Ok(meta) = std::fs::metadata(&path) else {
+            continue;
+        };
+        items.push(RecentItem {
+            folder: dir.to_string_lossy().into_owned(),
+            created: unix(meta.created()),
+            modified: unix(meta.modified()),
+            size: (!meta.is_dir()).then_some(meta.len()),
+            exists: true,
+            is_dir: meta.is_dir(),
+            path,
+            name,
+        });
+    }
+    Ok(items)
+}
+
+/// Whether a file name looks like one of the archives this program opens.
+pub fn looks_like_archive(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    [
+        ".zip", ".7z", ".rar", ".tar", ".tgz", ".txz", ".tzst", ".tbz2", ".tbz", ".gz", ".xz",
+        ".zst", ".zstd", ".bz2", ".jar", ".apk", ".cbz",
+    ]
+    .iter()
+    .any(|e| lower.ends_with(e))
 }
 
 /// The folder name for "extract to a folder of the same name": the file name without its
@@ -169,7 +228,25 @@ mod tests {
             modified,
             size,
             exists: modified.is_some(),
+            is_dir: false,
         }
+    }
+
+    #[test]
+    fn a_folder_listing_puts_folders_first_and_skips_hidden_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir(tmp.path().join("zeta")).unwrap();
+        std::fs::write(tmp.path().join("alpha.zip"), b"x").unwrap();
+        std::fs::write(tmp.path().join(".hidden"), b"x").unwrap();
+        let mut l = RecentList::for_folder();
+        l.set_items(list_dir(tmp.path()).unwrap());
+        assert_eq!(names(&l), ["zeta", "alpha.zip"]);
+        assert!(l.items[0].is_dir && l.items[0].size.is_none());
+        // Folders stay first when the order is reversed.
+        l.sort_by(RecentSort::Name);
+        assert_eq!(names(&l), ["zeta", "alpha.zip"]);
+        assert!(looks_like_archive("Backup.TAR.GZ") && !looks_like_archive("notes.txt"));
+        assert!(list_dir(&tmp.path().join("missing")).is_err());
     }
 
     fn names(l: &RecentList) -> Vec<&str> {

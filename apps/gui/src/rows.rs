@@ -107,24 +107,46 @@ impl FileRows {
         self.marked.insert(path.to_string());
     }
 
+    /// Picks or lets go of one row; `ix` counts the "back" row at the top as 0.
     pub fn toggle(&mut self, ix: usize) {
-        if let Some(r) = self.rows.get(ix)
-            && !self.marked.remove(&r.path)
-        {
-            self.marked.insert(r.path.clone());
+        let Some(path) = self.row(ix).map(|r| r.path.clone()) else {
+            return;
+        };
+        if !self.marked.remove(&path) {
+            self.marked.insert(path);
         }
     }
 
-    /// Shift-click: everything between the anchor row and this one.
+    /// Shift-click: everything between the anchor row and this one. The "back" row at
+    /// the top is never part of a selection.
     pub fn mark_range(&mut self, anchor: usize, ix: usize) {
-        let (lo, hi) = (anchor.min(ix), anchor.max(ix));
-        self.marked = self
-            .rows
-            .iter()
-            .skip(lo)
-            .take(hi - lo + 1)
+        let (lo, hi) = (anchor.min(ix).max(1), anchor.max(ix));
+        self.marked = (lo..=hi)
+            .filter_map(|i| self.row(i))
             .map(|r| r.path.clone())
             .collect();
+    }
+
+    /// Picks the listed rows from `lo` to `hi` (table indexes, "back" row excluded).
+    pub fn mark_between(&mut self, lo: usize, hi: usize) {
+        self.marked = (lo.max(1)..=hi)
+            .filter_map(|i| self.row(i))
+            .map(|r| r.path.clone())
+            .collect();
+    }
+
+    /// Number of rows the table shows, the "back" row included.
+    pub fn table_len(&self) -> usize {
+        if self.tree.is_some() {
+            self.rows.len() + 1
+        } else {
+            0
+        }
+    }
+
+    /// Whether the list is at the top of the archive, where "back" leaves the archive.
+    pub fn at_top(&self) -> bool {
+        self.cwd.is_empty()
     }
 
     fn reload(&mut self) {
@@ -138,12 +160,15 @@ impl FileRows {
         &self.rows
     }
 
+    /// The row at a table position. Position 0 is the "back" row at the top, which is
+    /// not an entry of the archive, so it has no `Row`.
     pub fn row(&self, ix: usize) -> Option<&Row> {
-        self.rows.get(ix)
+        self.rows.get(ix.checked_sub(1)?)
     }
 
+    /// Where a path is in the table.
     pub fn position_of(&self, path: &str) -> Option<usize> {
-        self.rows.iter().position(|r| r.path == path)
+        self.rows.iter().position(|r| r.path == path).map(|i| i + 1)
     }
 }
 
@@ -201,7 +226,7 @@ impl TableDelegate for FileRows {
     }
 
     fn rows_count(&self, _: &App) -> usize {
-        self.rows.len()
+        self.table_len()
     }
 
     fn column(&self, ix: usize, _: &App) -> Column {
@@ -234,7 +259,11 @@ impl TableDelegate for FileRows {
         // The empty part of the list (the window tells us so with an index past the last
         // row): nothing is picked any more, and what people most likely want to do in
         // the folder they are looking at is put something into it.
-        if row_ix >= self.rows.len() {
+        // The "back" row is not an item: it has no menu.
+        if row_ix == 0 {
+            return menu;
+        }
+        if row_ix >= self.table_len() {
             self.marked.clear();
             cx.emit(TableEvent::ClearSelection);
             let menu = if self.editable {
@@ -257,7 +286,7 @@ impl TableDelegate for FileRows {
             }
             return menu;
         }
-        if let Some(row) = self.rows.get(row_ix).cloned()
+        if let Some(row) = self.row(row_ix).cloned()
             && !self.marked.contains(&row.path)
         {
             self.mark_only(&row.path);
@@ -339,8 +368,7 @@ impl TableDelegate for FileRows {
     ) -> Stateful<Div> {
         let p = palette(cx);
         let picked = self
-            .rows
-            .get(row_ix)
+            .row(row_ix)
             .is_some_and(|r| self.marked.contains(&r.path));
         div()
             .id(("row", row_ix))
@@ -379,10 +407,32 @@ impl TableDelegate for FileRows {
         _: &mut Window,
         cx: &mut Context<TableState<Self>>,
     ) -> impl IntoElement {
-        let Some(row) = self.rows.get(row_ix) else {
-            return div().into_any_element();
-        };
         let p = palette(cx);
+        let Some(row) = self.row(row_ix) else {
+            // The "back" row: always on top, even in the top folder, where it leaves
+            // the archive for the folder it lies in.
+            return if col_ix == COL_NAME {
+                h_flex()
+                    .gap_2()
+                    .items_center()
+                    .text_size(px(13.))
+                    .child(Icon::new(IconName::ArrowUp).size_4().text_color(p.fg3))
+                    .child("..")
+                    .child(
+                        div()
+                            .text_color(p.fg3)
+                            .text_size(px(12.))
+                            .child(if self.at_top() {
+                                "压缩包所在的文件夹"
+                            } else {
+                                "上一级"
+                            }),
+                    )
+                    .into_any_element()
+            } else {
+                div().into_any_element()
+            };
+        };
         match col_ix {
             COL_NAME => {
                 let shown = if self.filter.is_empty() {
