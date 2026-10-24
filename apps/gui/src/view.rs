@@ -2061,10 +2061,13 @@ impl MainView {
                     .flex_1()
                     .min_w_0(),
             )
+            // The size is one of the first things to look for, so it sits next to the name.
+            .child(title("recent-th-size", "大小", RecentSort::Size, true).w(px(W_SIZE)))
             .child(
                 title("recent-th-folder", "位置", RecentSort::Folder, false)
                     .flex_1()
-                    .min_w_0(),
+                    .min_w_0()
+                    .pl_3(),
             )
             .child(title("recent-th-created", "创建时间", RecentSort::Created, false).w(px(W_TIME)))
             .child(
@@ -2075,8 +2078,7 @@ impl MainView {
                     false,
                 )
                 .w(px(W_TIME)),
-            )
-            .child(title("recent-th-size", "大小", RecentSort::Size, true).w(px(W_SIZE)));
+            );
 
         let rows = list
             .items
@@ -2125,8 +2127,20 @@ impl MainView {
                     )
                     .child(
                         div()
+                            .w(px(W_SIZE))
+                            .text_right()
+                            .text_size(px(12.))
+                            .font_family(mono.clone())
+                            .child(match (item.exists, item.size) {
+                                (true, Some(n)) => format_size(n),
+                                _ => "已移走".to_string(),
+                            }),
+                    )
+                    .child(
+                        div()
                             .flex_1()
                             .min_w_0()
+                            .pl_3()
                             .overflow_hidden()
                             .text_ellipsis()
                             .text_size(px(12.))
@@ -2146,17 +2160,6 @@ impl MainView {
                             .text_size(px(12.))
                             .font_family(mono.clone())
                             .child(time(item.modified)),
-                    )
-                    .child(
-                        div()
-                            .w(px(W_SIZE))
-                            .text_right()
-                            .text_size(px(12.))
-                            .font_family(mono.clone())
-                            .child(match (item.exists, item.size) {
-                                (true, Some(n)) => format_size(n),
-                                _ => "已移走".to_string(),
-                            }),
                     )
                     .into_any_element()
             })
