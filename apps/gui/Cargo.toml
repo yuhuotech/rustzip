@@ -22,6 +22,7 @@ rz-app.workspace = true
 rz-core.workspace = true
 rz-engine.workspace = true
 rz-formats.workspace = true
+rz-services.workspace = true
 
 [dev-dependencies]
 gpui-kit = { version = "0.8.0", features = ["test-support"] }

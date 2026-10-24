@@ -402,6 +402,55 @@ fn an_archive_with_encrypted_names_prompts_before_opening(cx: &mut TestAppContex
 }
 
 #[gpui_kit::test]
+fn a_remembered_password_opens_the_archive_without_asking(cx: &mut TestAppContext) {
+    let tmp = tempfile::tempdir().unwrap();
+    let archive = make_archive(tmp.path(), "hidden.7z", Some("pw2"));
+    let (handle, view) = open_window(cx, None);
+
+    // With the setting off (the default) nothing is kept.
+    open_sync(cx, handle, &view, &archive, Some("pw2"));
+    cx.run_until_parked();
+    cx.update(|cx| assert!(view.read(cx).vault.labels().is_empty()));
+    with_view(cx, handle, &view, |v, _, cx| v.close_tab(0, cx));
+
+    with_view(cx, handle, &view, |v, _, _| {
+        v.settings.remember_passwords = true
+    });
+    open_sync(cx, handle, &view, &archive, Some("pw2"));
+    cx.run_until_parked();
+    cx.update(|cx| {
+        let vault = &view.read(cx).vault;
+        assert_eq!(vault.labels(), ["hidden.7z"]);
+        assert_eq!(vault.get("hidden.7z").as_deref(), Some("pw2"));
+    });
+    with_view(cx, handle, &view, |v, _, cx| v.close_tab(0, cx));
+
+    // Opening again needs no typing.
+    open_sync(cx, handle, &view, &archive, None);
+    cx.run_until_parked();
+    draw(cx, handle);
+    cx.update(|cx| {
+        let v = view.read(cx);
+        assert!(
+            v.overlay.is_none(),
+            "the saved password should have been tried"
+        );
+        assert_eq!(v.archives.len(), 1);
+    });
+
+    // A stale saved password falls back to asking.
+    with_view(cx, handle, &view, |v, _, cx| {
+        v.close_tab(0, cx);
+        v.forget_all_passwords(cx);
+    });
+    cx.run_until_parked();
+    cx.update(|cx| assert!(view.read(cx).vault.labels().is_empty()));
+    open_sync(cx, handle, &view, &archive, None);
+    cx.run_until_parked();
+    cx.update(|cx| assert!(matches!(view.read(cx).overlay, Some(Overlay::Password(_)))));
+}
+
+#[gpui_kit::test]
 fn a_file_that_is_not_an_archive_shows_an_error_and_no_tab(cx: &mut TestAppContext) {
     let tmp = tempfile::tempdir().unwrap();
     let junk = tmp.path().join("junk.zip");

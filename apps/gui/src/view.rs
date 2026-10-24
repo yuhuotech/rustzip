@@ -5,6 +5,7 @@
 
 use crate::brand::{self, palette};
 use crate::rows::{FileRows, badge_chip};
+use crate::services::UpdateState;
 use crate::{CloseTab, ExtractAll, FocusSearch, NewArchiveDialog, OpenArchiveDialog, OpenSettings};
 use gpui_kit::component::button::*;
 use gpui_kit::component::input::{Input, InputEvent, InputState};
@@ -15,6 +16,7 @@ use gpui_kit::component::{ActiveTheme, Disableable, Icon, IconName, Sizable, h_f
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 use rz_app::browse::{ArchiveTree, Row, RowKind, compression_ratio, format_size};
+use rz_app::passwords::{MemoryStore, SecretStore};
 use rz_app::settings::{OnConflict, Settings, Theme};
 use rz_app::tasks::{ErrorCode, JobKind, JobSpec, TaskId, TaskInfo, TaskManager, TaskState};
 use rz_core::{CreateOptions, Error};
@@ -129,7 +131,10 @@ pub struct MainView {
     pub tasks: TaskManager,
     pub task_view: Vec<TaskInfo>,
     pub settings: Settings,
-    settings_path: Option<PathBuf>,
+    pub(crate) settings_path: Option<PathBuf>,
+    /// Where remembered passwords live; the system keychain in the real application.
+    pub vault: Arc<dyn SecretStore>,
+    pub update: Option<crate::services::UpdateState>,
     pub notice: Option<Notice>,
     pub overlay: Option<Overlay>,
     pub loading: Option<PathBuf>,
@@ -213,6 +218,8 @@ impl MainView {
             task_view: Vec::new(),
             settings,
             settings_path,
+            vault: Arc::new(MemoryStore::default()),
+            update: None,
             notice: None,
             overlay: None,
             loading: None,
@@ -246,7 +253,7 @@ impl MainView {
         }
     }
 
-    fn say(&mut self, notice: Notice, cx: &mut Context<Self>) {
+    pub(crate) fn say(&mut self, notice: Notice, cx: &mut Context<Self>) {
         self.notice = Some(notice);
         cx.notify();
     }
@@ -309,6 +316,11 @@ impl MainView {
             Ok((tree, format)) => {
                 self.settings.remember(&path);
                 self.save_settings();
+                if self.settings.remember_passwords
+                    && let Some(pw) = &password
+                {
+                    self.remember_password(&path, pw, cx);
+                }
                 self.archives.push(OpenArchive {
                     path,
                     tree: Arc::new(tree),
@@ -322,6 +334,11 @@ impl MainView {
                 self.apply_view(cx);
             }
             Err(Error::Password) => {
+                // A password saved earlier gets one try before the user is asked.
+                if password.is_none() && self.settings.remember_passwords {
+                    self.open_with_saved_password(path, window, cx);
+                    return;
+                }
                 let wrong = password.is_some();
                 self.ask_password(PasswordTarget::Open(path), wrong, window, cx);
             }
@@ -492,6 +509,21 @@ impl MainView {
             }
         })
         .detach();
+    }
+
+    /// "Extract here": next to the archive, no questions asked.
+    pub fn extract_here(&mut self, archive: PathBuf, cx: &mut Context<Self>) {
+        let dest = archive
+            .parent()
+            .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
+        let spec = JobSpec::Extract {
+            archive,
+            dest,
+            opts: self.settings.extract_options(None),
+            smart: self.settings.smart_extract,
+            encoding: self.settings.forced_encoding().map(str::to_string),
+        };
+        self.submit(spec, cx);
     }
 
     pub fn start_extract(
@@ -806,6 +838,8 @@ impl MainView {
             cx,
         );
         self.close_overlay(cx);
+        // The notice has been seen now, so the first report may go out.
+        self.report_install(cx);
     }
 }
 
@@ -1498,6 +1532,22 @@ impl MainView {
             .border_color(p.line)
             .text_size(px(12.))
             .child(left.flex_1().overflow_hidden().text_ellipsis())
+            .when_some(self.update.clone(), |d, state| match state {
+                UpdateState::Available(u) => d.child(
+                    Button::new("install-update")
+                        .ghost()
+                        .small()
+                        .icon(IconName::ArrowDown)
+                        .text_color(p.accent)
+                        .label(format!("新版本 {} · 更新", u.version))
+                        .on_click(cx.listener(|this, _, _, cx| this.install_update(cx))),
+                ),
+                UpdateState::Downloading(u) => d.child(
+                    div()
+                        .text_color(p.fg2)
+                        .child(format!("正在下载 {}…", u.version)),
+                ),
+            })
             .when_some(self.current(), |d, a| {
                 d.child(
                     div()
@@ -1665,6 +1715,34 @@ impl MainView {
                             this.change_settings(|s| s.check_updates = !s.check_updates, cx);
                         })),
                     )
+                    .child(
+                        toggle(
+                            "set-passwords",
+                            "记住密码",
+                            "打开加密压缩包成功后,把密码存进系统钥匙串,下次自动尝试",
+                            s.remember_passwords,
+                        )
+                        .id("row-passwords")
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.change_settings(
+                                |s| s.remember_passwords = !s.remember_passwords,
+                                cx,
+                            );
+                        })),
+                    )
+                    .when(s.remember_passwords, |d| {
+                        d.child(
+                            h_flex().child(
+                                Button::new("forget-passwords")
+                                    .outline()
+                                    .small()
+                                    .label("清除已保存的密码")
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.forget_all_passwords(cx);
+                                    })),
+                            ),
+                        )
+                    })
                     .child(
                         toggle(
                             "set-stats",

@@ -4,7 +4,9 @@
 //! into windows. Colours come from `brand`, never from the views.
 
 pub mod brand;
+pub mod launch;
 pub mod rows;
+pub mod services;
 pub mod view;
 
 use gpui_kit::component::Root;
@@ -86,8 +88,78 @@ pub fn settings_path() -> Option<PathBuf> {
     config_dir().map(|d| d.join("settings.json"))
 }
 
-/// Opens the main window. `initial` are archives to open right away.
-pub fn open_main_window(initial: Vec<PathBuf>, cx: &mut App) {
+/// The running main window, so later requests (a second launch, Finder's "Open With")
+/// can be handed to it.
+#[derive(Clone)]
+struct MainRef {
+    window: AnyWindowHandle,
+    view: WeakEntity<MainView>,
+}
+
+impl Global for MainRef {}
+
+/// Hands paths to the window that is already open; false when there is none yet.
+pub fn open_in_running_window(paths: Vec<PathBuf>, cx: &mut App) -> bool {
+    let Some(main) = cx.try_global::<MainRef>().cloned() else {
+        return false;
+    };
+    let _ = main.window.update(cx, |_, window, cx| {
+        if let Some(view) = main.view.upgrade() {
+            view.update(cx, |m, cx| {
+                for p in paths {
+                    m.open_path(p, None, window, cx);
+                }
+            });
+        }
+        window.activate_window();
+    });
+    true
+}
+
+/// Starts forwarding `file://` addresses received from the system (macOS "Open With",
+/// double click, drop on the Dock icon) to the main window.
+pub fn listen_for_open_urls(app: &Application) -> std::sync::mpsc::Receiver<Vec<PathBuf>> {
+    let (tx, rx) = std::sync::mpsc::channel::<Vec<PathBuf>>();
+    app.on_open_urls(move |urls| {
+        let paths: Vec<PathBuf> = urls
+            .iter()
+            .filter_map(|u| launch::file_url_to_path(u))
+            .collect();
+        if !paths.is_empty() {
+            let _ = tx.send(paths);
+        }
+    });
+    rx
+}
+
+/// Opens what [`listen_for_open_urls`] received. The system callback has no access to the
+/// app, so the window picks the paths up from this polling task.
+pub fn forward_open_urls(rx: std::sync::mpsc::Receiver<Vec<PathBuf>>, cx: &mut App) {
+    cx.spawn(async move |cx| {
+        loop {
+            cx.background_executor()
+                .timer(std::time::Duration::from_millis(200))
+                .await;
+            while let Ok(paths) = rx.try_recv() {
+                cx.update(|cx| {
+                    if !open_in_running_window(paths.clone(), cx) {
+                        open_main_window(
+                            launch::Launch {
+                                open: paths,
+                                ..Default::default()
+                            },
+                            cx,
+                        );
+                    }
+                });
+            }
+        }
+    })
+    .detach();
+}
+
+/// Opens the main window and does what the launch asked for.
+pub fn open_main_window(launch: launch::Launch, cx: &mut App) {
     let options = WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
             None,
@@ -106,13 +178,28 @@ pub fn open_main_window(initial: Vec<PathBuf>, cx: &mut App) {
         let path = settings_path();
         let settings = path.as_deref().map(Settings::load).unwrap_or_default();
         let main = cx.new(|cx| MainView::new(settings, path, window, cx));
+        cx.set_global(MainRef {
+            window: window.window_handle(),
+            view: main.downgrade(),
+        });
         main.update(cx, |m, cx| {
             let pick = m.settings.theme;
             brand::choose(pick, window, cx);
+            // Passwords go to the system keychain when it works; if not, nothing is kept.
+            if rz_services::KeychainStore::available() {
+                m.vault = std::sync::Arc::new(rz_services::KeychainStore);
+            }
             m.show_first_run_notice(cx);
+            m.start_background_services(cx);
         });
-        for p in initial {
+        for p in launch.open {
             main.update(cx, |m, cx| m.open_path(p, None, window, cx));
+        }
+        for p in launch.extract_here {
+            main.update(cx, |m, cx| m.extract_here(p, cx));
+        }
+        if !launch.compress.is_empty() {
+            main.update(cx, |m, cx| m.open_compress(launch.compress, window, cx));
         }
         cx.new(|cx| Root::new(main, window, cx))
     });

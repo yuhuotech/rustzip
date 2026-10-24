@@ -1,0 +1,240 @@
+//! What the window does with the outside world: update checks, the anonymous install
+//! report and remembered passwords. Everything that waits on a network or the keychain
+//! runs on the background executor; the window only receives the result.
+
+use crate::view::{MainView, Notice, PasswordTarget};
+use gpui_kit::{Context, Window};
+use rz_app::stats::{StatsState, report_if_due};
+use rz_app::update::{Update, Updater, current_platform};
+use rz_services::{
+    HttpFetcher, HttpSender, UPDATE_MANIFEST_URL, UPDATE_PUBLIC_KEY, environment, stats_url,
+};
+use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+#[derive(Debug, Clone)]
+pub enum UpdateState {
+    Available(Update),
+    Downloading(Update),
+}
+
+/// The name an archive is remembered under: its file name, never its location.
+pub fn password_label(archive: &Path) -> String {
+    archive
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default()
+}
+
+fn today() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| i64::try_from(d.as_secs() / 86_400).unwrap_or(0))
+}
+
+/// Hands a downloaded installer to the operating system.
+fn open_with_system(path: &Path) {
+    let (program, target): (&str, PathBuf) = match std::env::consts::OS {
+        "macos" => ("open", path.to_path_buf()),
+        "windows" => ("explorer", path.to_path_buf()),
+        // A tarball is not an installer: show the folder it was saved in.
+        _ => (
+            "xdg-open",
+            path.parent()
+                .map_or_else(|| path.to_path_buf(), Path::to_path_buf),
+        ),
+    };
+    let _ = Command::new(program).arg(target).spawn();
+}
+
+/// The file name a download is saved under, taken from its URL and made harmless.
+fn download_name(url: &str) -> String {
+    let last = url.rsplit('/').next().unwrap_or("");
+    let last = last.split(['?', '#']).next().unwrap_or("");
+    let clean: String = last
+        .chars()
+        .filter(|c| c.is_alphanumeric() || matches!(c, '.' | '-' | '_'))
+        .collect();
+    if clean.is_empty() || clean.starts_with('.') {
+        "RustZIP-update".into()
+    } else {
+        clean
+    }
+}
+
+impl MainView {
+    /// Called once after the window is up. Neither check may delay or break startup.
+    pub fn start_background_services(&mut self, cx: &mut Context<Self>) {
+        self.check_for_update(cx);
+        self.report_install(cx);
+    }
+
+    fn check_for_update(&mut self, cx: &mut Context<Self>) {
+        if !self.settings.check_updates {
+            return;
+        }
+        cx.spawn(async move |this, cx| {
+            let found = cx
+                .background_executor()
+                .spawn(async {
+                    let fetcher = HttpFetcher::new();
+                    Updater::new(&fetcher, UPDATE_MANIFEST_URL, UPDATE_PUBLIC_KEY)
+                        .check(env!("CARGO_PKG_VERSION"), &current_platform())
+                })
+                .await;
+            // Offline, a missing manifest and a bad one all look the same to the user: no update.
+            if let Ok(Some(update)) = found {
+                let _ = this.update(cx, |this, cx| {
+                    this.update = Some(UpdateState::Available(update));
+                    cx.notify();
+                });
+            }
+        })
+        .detach();
+    }
+
+    /// Downloads, verifies and opens the new version. Nothing is installed by us.
+    pub fn install_update(&mut self, cx: &mut Context<Self>) {
+        let Some(UpdateState::Available(update)) = self.update.clone() else {
+            return;
+        };
+        self.update = Some(UpdateState::Downloading(update.clone()));
+        cx.notify();
+        cx.spawn(async move |this, cx| {
+            let job = update.clone();
+            let saved = cx
+                .background_executor()
+                .spawn(async move {
+                    let fetcher = HttpFetcher::new();
+                    let bytes = Updater::new(&fetcher, UPDATE_MANIFEST_URL, UPDATE_PUBLIC_KEY)
+                        .download(&job)
+                        .map_err(|e| e.to_string())?;
+                    let dir = std::env::temp_dir().join(format!("RustZIP-update-{}", job.version));
+                    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+                    let file = dir.join(download_name(&job.asset.url));
+                    std::fs::write(&file, bytes).map_err(|e| e.to_string())?;
+                    Ok::<_, String>(file)
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| match saved {
+                Ok(file) => {
+                    this.update = None;
+                    open_with_system(&file);
+                    this.say(
+                        Notice::Info(format!(
+                            "新版本 {} 已下载并通过签名验证,请按安装程序提示完成更新",
+                            update.version
+                        )),
+                        cx,
+                    );
+                }
+                Err(e) => {
+                    this.update = Some(UpdateState::Available(update));
+                    this.say(Notice::Error(format!("更新没有成功:{e}。可以稍后再试")), cx);
+                }
+            });
+        })
+        .detach();
+    }
+
+    /// Sends the anonymous activation or daily report when one is due.
+    pub fn report_install(&mut self, cx: &mut Context<Self>) {
+        // Nothing is sent before the user has seen the notice, and never against their answer.
+        if !self.settings.send_install_stats || !self.settings.privacy_notice_seen {
+            return;
+        }
+        let (Some(url), Some(dir)) = (
+            stats_url(),
+            self.settings_path
+                .as_deref()
+                .and_then(Path::parent)
+                .map(Path::to_path_buf),
+        ) else {
+            return;
+        };
+        cx.background_executor()
+            .spawn(async move {
+                let path = dir.join("stats.json");
+                let mut state = StatsState::load(&path);
+                let sender = HttpSender::new(&url);
+                if report_if_due(&mut state, true, today(), &environment(), &sender).is_some() {
+                    let _ = state.save(&path);
+                }
+            })
+            .detach();
+    }
+
+    // ----- remembered passwords --------------------------------------------------------
+
+    pub(crate) fn remember_password(&self, archive: &Path, secret: &str, cx: &mut Context<Self>) {
+        let (vault, label, secret) = (
+            self.vault.clone(),
+            password_label(archive),
+            secret.to_string(),
+        );
+        cx.background_executor()
+            .spawn(async move {
+                let _ = vault.set(&label, &secret);
+            })
+            .detach();
+    }
+
+    pub(crate) fn open_with_saved_password(
+        &mut self,
+        path: PathBuf,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let (vault, label) = (self.vault.clone(), password_label(&path));
+        cx.spawn_in(window, async move |this, cx| {
+            let saved = cx
+                .background_executor()
+                .spawn(async move { vault.get(&label) })
+                .await;
+            let _ = this.update_in(cx, |this, window, cx| match saved {
+                Some(pw) => this.open_path(path, Some(pw), window, cx),
+                None => this.ask_password(PasswordTarget::Open(path), false, window, cx),
+            });
+        })
+        .detach();
+    }
+
+    /// Removes every remembered password, for the settings page.
+    pub fn forget_all_passwords(&mut self, cx: &mut Context<Self>) {
+        let vault = self.vault.clone();
+        cx.background_executor()
+            .spawn(async move {
+                for label in vault.labels() {
+                    let _ = vault.delete(&label);
+                }
+            })
+            .detach();
+        self.say(Notice::Info("已清除保存的密码".into()), cx);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn download_names_cannot_escape_the_folder() {
+        assert_eq!(
+            download_name("https://x/y/RustZIP-0.2.0.dmg"),
+            "RustZIP-0.2.0.dmg"
+        );
+        assert_eq!(download_name("https://x/y/a.dmg?token=1#f"), "a.dmg");
+        assert_eq!(download_name("https://x/y/"), "RustZIP-update");
+        assert_eq!(download_name("https://x/..%2f..%2fevil"), "RustZIP-update");
+        assert!(!download_name("https://x/a b/../../etc").contains('/'));
+    }
+
+    #[test]
+    fn a_password_is_filed_under_the_archive_name_only() {
+        assert_eq!(
+            password_label(Path::new("/home/me/secret/Taxes 2025.7z")),
+            "Taxes 2025.7z"
+        );
+    }
+}

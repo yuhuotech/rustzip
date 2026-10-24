@@ -6347,6 +6347,7 @@ dependencies = [
  "rz-core",
  "rz-engine",
  "rz-formats",
+ "rz-services",
  "tempfile",
 ]
 

@@ -49,6 +49,8 @@ pub struct Settings {
     pub send_install_stats: bool,
     /// The first-launch privacy notice has been shown and acknowledged.
     pub privacy_notice_seen: bool,
+    /// Keep passwords that opened an archive in the system keychain. Off unless asked for.
+    pub remember_passwords: bool,
     pub max_ratio: u64,
     pub ratio_check_above_mb: u64,
     pub max_total_gb: u64,
@@ -70,6 +72,7 @@ impl Default for Settings {
             check_updates: true,
             send_install_stats: true,
             privacy_notice_seen: false,
+            remember_passwords: false,
             max_ratio: 2000,
             ratio_check_above_mb: 256,
             max_total_gb: 1024,
