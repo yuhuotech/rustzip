@@ -878,7 +878,10 @@ impl Render for MainView {
             }))
             // With nothing open the welcome screen has its own buttons; a toolbar of
             // disabled buttons would only be noise.
-            .when(has_archive, |d| d.child(self.render_toolbar(cx)))
+            .when(has_archive, |d| {
+                d.child(self.render_tab_strip(cx))
+                    .child(self.render_toolbar(cx))
+            })
             .child(if has_archive {
                 self.render_browser(window.viewport_size().width, cx)
                     .into_any_element()
@@ -894,11 +897,41 @@ impl Render for MainView {
 }
 
 impl MainView {
-    /// A row in the sidebar for an archive that is open: click to switch, × to close.
-    fn open_row(&self, ix: usize, cx: &mut Context<Self>) -> AnyElement {
+    /// One tab per open archive, with a "+" to open another.
+    fn render_tab_strip(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let p = palette(cx);
+        h_flex()
+            .id("tabs")
+            .h(px(36.))
+            .px_2()
+            .gap_1()
+            .items_end()
+            .flex_none()
+            .bg(p.panel)
+            .border_b_1()
+            .border_color(p.line)
+            .children(
+                (0..self.archives.len())
+                    .map(|ix| self.tab(ix, cx))
+                    .collect::<Vec<_>>(),
+            )
+            .child(
+                div().h(px(32.)).flex().items_center().child(
+                    Button::new("new-tab")
+                        .ghost()
+                        .icon(IconName::Plus)
+                        .tooltip("打开压缩包")
+                        .on_click(cx.listener(|this, _, window, cx| this.pick_archive(window, cx))),
+                ),
+            )
+    }
+
+    /// A tab for an archive that is open: click to switch, × to close.
+    fn tab(&self, ix: usize, cx: &mut Context<Self>) -> AnyElement {
         let p = palette(cx);
         let on = ix == self.active;
-        let name = self.archives[ix]
+        let a = &self.archives[ix];
+        let name = a
             .path
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
@@ -906,22 +939,30 @@ impl MainView {
         h_flex()
             .id(("open", ix))
             .gap_1p5()
-            .px_2()
-            .h(px(26.))
-            .rounded(px(6.))
+            .px_3()
+            .h(px(32.))
+            .max_w(px(240.))
+            .rounded_t(px(8.))
             .cursor_pointer()
-            .text_color(if on { p.accent } else { p.fg })
-            .when(on, |d| d.bg(p.accent_soft))
-            .hover(|d| d.bg(if on { p.accent_soft } else { p.hover }))
+            .text_color(if on { p.fg } else { p.fg2 })
+            .when(on, |d| d.bg(p.win))
+            .hover(|d| d.bg(if on { p.win } else { p.hover }))
             .on_click(cx.listener(move |this, _, _, cx| this.activate_tab(ix, cx)))
+            .child(Icon::new(IconName::Inbox).size_4().text_color(if on {
+                p.accent
+            } else {
+                p.fg3
+            }))
             .child(
                 div()
-                    .flex_1()
                     .min_w_0()
                     .overflow_hidden()
                     .text_ellipsis()
                     .child(name),
             )
+            .when(a.password.is_some(), |d| {
+                d.child(div().text_size(px(11.)).text_color(p.fg3).child("已加密"))
+            })
             .child(
                 div()
                     .id(("close-open", ix))
@@ -1118,10 +1159,8 @@ impl MainView {
             .flex_1()
             .min_h_0()
             .items_stretch()
-            // The sidebar only earns its width when there is something to switch between.
-            .when(self.archives.len() > 1, |d| {
-                d.child(self.render_sidebar(cx))
-            })
+            // The sidebar needs room; below this width the file list wins.
+            .when(width >= px(560.), |d| d.child(self.render_sidebar(cx)))
             .child(
                 v_flex()
                     .flex_1()
@@ -1171,14 +1210,18 @@ impl MainView {
             .bg(p.panel)
             .border_r_1()
             .border_color(p.line)
-            // Several archives can be open at once; they switch here instead of in a tab strip.
-            .when(self.archives.len() > 1, |d| {
-                d.child(heading("已打开")).children(
-                    (0..self.archives.len())
-                        .map(|ix| self.open_row(ix, cx))
-                        .collect::<Vec<_>>(),
-                )
-            })
+            .child(heading("位置"))
+            .child(
+                h_flex()
+                    .gap_2()
+                    .px_2()
+                    .py_1p5()
+                    .rounded(px(8.))
+                    .bg(p.accent_soft)
+                    .text_color(p.accent)
+                    .child(Icon::new(IconName::Inbox).size_4())
+                    .child("当前压缩包"),
+            )
             .child(heading("最近打开"))
             .children(
                 self.settings
@@ -1189,6 +1232,18 @@ impl MainView {
                     .map(|(ix, path)| self.recent_row(ix, path, cx))
                     .collect::<Vec<_>>(),
             )
+            .child(div().flex_1())
+            // Not built yet; shown dimmed so the layout matches the design and says so.
+            .child(heading("快速操作"))
+            .children(["转换格式", "修复压缩包", "密码本"].map(|label| {
+                h_flex()
+                    .gap_2()
+                    .px_2()
+                    .py_1p5()
+                    .text_color(p.fg3)
+                    .child(div().flex_1().child(label))
+                    .child(div().text_size(px(11.)).child("即将推出"))
+            }))
     }
 
     fn render_breadcrumbs(&self, cx: &mut Context<Self>) -> impl IntoElement {
