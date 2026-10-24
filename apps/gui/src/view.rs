@@ -772,7 +772,7 @@ impl Render for MainView {
             .relative()
             .bg(p.win)
             .text_color(p.fg)
-            .text_size(px(12.))
+            .text_size(px(13.))
             .key_context("RustZip")
             .on_action(cx.listener(|this, _: &OpenArchiveDialog, window, cx| {
                 this.pick_archive(window, cx);
@@ -858,7 +858,7 @@ impl MainView {
         let has_sel = self.current().is_some_and(|a| a.selected.is_some());
         h_flex()
             .id("toolbar")
-            .h(px(42.))
+            .h(px(46.))
             .px_3()
             .gap_1()
             .items_center()
@@ -868,7 +868,6 @@ impl MainView {
             .child(
                 Button::new("extract-all")
                     .primary()
-                    .small()
                     .label("解压全部")
                     .disabled(!has)
                     .on_click(cx.listener(|this, _, window, cx| this.extract(false, window, cx))),
@@ -876,7 +875,6 @@ impl MainView {
             .child(
                 Button::new("extract-selected")
                     .ghost()
-                    .small()
                     .label("解压所选")
                     .disabled(!has_sel)
                     .on_click(cx.listener(|this, _, window, cx| this.extract(true, window, cx))),
@@ -884,7 +882,6 @@ impl MainView {
             .child(
                 Button::new("test")
                     .ghost()
-                    .small()
                     .label("测试")
                     .disabled(!has)
                     .on_click(cx.listener(|this, _, _, cx| this.start_test(cx))),
@@ -893,7 +890,6 @@ impl MainView {
             .child(
                 Button::new("compress")
                     .ghost()
-                    .small()
                     .label("新建压缩")
                     .on_click(cx.listener(|this, _, window, cx| this.pick_sources(window, cx))),
             )
@@ -901,7 +897,7 @@ impl MainView {
             .child(
                 div()
                     .w(px(190.))
-                    .child(Input::new(&self.search).small().id("search")),
+                    .child(Input::new(&self.search).id("search")),
             )
     }
 
@@ -913,10 +909,10 @@ impl MainView {
             .items_center()
             .justify_center()
             .gap_2()
-            .child(div().text_size(px(20.)).child("RustZIP"))
+            .child(div().text_size(px(22.)).child("RustZIP"))
             .child(
                 div()
-                    .text_size(px(12.))
+                    .text_size(px(13.))
                     .text_color(p.fg2)
                     .child("把压缩包拖到这里打开,把文件拖到这里压缩"),
             )
@@ -927,7 +923,6 @@ impl MainView {
                     .child(
                         Button::new("empty-open")
                             .primary()
-                            .small()
                             .label("打开压缩包")
                             .on_click(
                                 cx.listener(|this, _, window, cx| this.pick_archive(window, cx)),
@@ -936,7 +931,6 @@ impl MainView {
                     .child(
                         Button::new("empty-compress")
                             .outline()
-                            .small()
                             .label("新建压缩")
                             .on_click(
                                 cx.listener(|this, _, window, cx| this.pick_sources(window, cx)),
@@ -949,7 +943,7 @@ impl MainView {
                         .mt_4()
                         .gap_0p5()
                         .w(px(300.))
-                        .child(div().text_color(p.fg3).text_size(px(10.)).child("最近打开"))
+                        .child(div().text_color(p.fg3).text_size(px(11.)).child("最近打开"))
                         .children(
                             self.settings
                                 .recent
@@ -1003,11 +997,11 @@ impl MainView {
                     .min_w_0()
                     .child(self.render_breadcrumbs(cx))
                     .child(
-                        div()
-                            .id("files")
-                            .flex_1()
-                            .min_h_0()
-                            .child(DataTable::new(&self.table).xsmall().bordered(false)),
+                        div().id("files").flex_1().min_h_0().child(
+                            DataTable::new(&self.table)
+                                .with_size(px(28.))
+                                .bordered(false),
+                        ),
                     ),
             )
             .child(
@@ -1030,7 +1024,7 @@ impl MainView {
                 .px_2()
                 .pt_2()
                 .pb_1()
-                .text_size(px(10.))
+                .text_size(px(11.))
                 .text_color(p.fg3)
                 .child(text)
         };
@@ -1076,7 +1070,7 @@ impl MainView {
             .unwrap_or_default();
         h_flex()
             .id("breadcrumbs")
-            .h(px(32.))
+            .h(px(36.))
             .px_3()
             .gap_1()
             .items_center()
@@ -1154,7 +1148,7 @@ impl MainView {
                             .gap_3()
                             .items_center()
                             .child(badge_chip(&row, cx))
-                            .child(div().text_size(px(13.)).child(row.name.clone())),
+                            .child(div().text_size(px(14.)).child(row.name.clone())),
                     )
                     .child(
                         v_flex()
@@ -1380,7 +1374,7 @@ impl MainView {
         };
         h_flex()
             .id("status")
-            .h(px(26.))
+            .h(px(28.))
             .px_3()
             .gap_4()
             .items_center()
@@ -1388,7 +1382,7 @@ impl MainView {
             .bg(p.panel)
             .border_t_1()
             .border_color(p.line)
-            .text_size(px(11.))
+            .text_size(px(12.))
             .child(left.flex_1().overflow_hidden().text_ellipsis())
             .when_some(self.current(), |d, a| {
                 d.child(
@@ -1437,7 +1431,7 @@ impl MainView {
         let p = palette(cx);
         v_flex()
             .gap_3()
-            .child(div().text_size(px(14.)).child("需要密码"))
+            .child(div().text_size(px(15.)).child("需要密码"))
             .when(prompt.wrong, |d| {
                 d.child(div().text_color(p.danger).child("密码不正确,请再试一次"))
             })
@@ -1475,7 +1469,7 @@ impl MainView {
         };
         v_flex()
             .gap_4()
-            .child(div().text_size(px(15.)).child("新建压缩"))
+            .child(div().text_size(px(16.)).child("新建压缩"))
             .child(div().text_color(p.fg3).child(format!(
                 "已选 {} 项:{}",
                 names.len(),

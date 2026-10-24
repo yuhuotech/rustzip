@@ -24,8 +24,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-const WIDTH: f32 = 860.;
-const HEIGHT: f32 = 560.;
+const WIDTH: f32 = 900.;
+const HEIGHT: f32 = 580.;
 
 fn make_archive(dir: &Path) -> PathBuf {
     let src = dir.join("项目文档");

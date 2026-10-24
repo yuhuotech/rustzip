@@ -107,8 +107,8 @@ pub fn badge_chip(row: &Row, cx: &App) -> Div {
         Badge::Other => (p.hover, p.fg2),
     };
     div()
-        .w(px(28.))
-        .h(px(16.))
+        .w(px(32.))
+        .h(px(18.))
         .rounded(px(5.))
         .flex()
         .items_center()
@@ -116,7 +116,7 @@ pub fn badge_chip(row: &Row, cx: &App) -> Div {
         .flex_none()
         .bg(bg)
         .text_color(fg)
-        .text_size(px(8.))
+        .text_size(px(9.))
         .child(badge_label(&row.name, row.kind))
 }
 
@@ -131,6 +131,19 @@ impl TableDelegate for FileRows {
 
     fn column(&self, ix: usize, _: &App) -> Column {
         self.columns[ix].clone()
+    }
+
+    fn render_th(
+        &mut self,
+        col_ix: usize,
+        _: &mut Window,
+        cx: &mut Context<TableState<Self>>,
+    ) -> impl IntoElement {
+        // Column titles are labels, not content: a notch smaller than the rows.
+        div()
+            .size_full()
+            .text_size(px(12.))
+            .child(self.column(col_ix, cx).name)
     }
 
     fn perform_sort(
@@ -168,7 +181,7 @@ impl TableDelegate for FileRows {
                 h_flex()
                     .gap_2()
                     .items_center()
-                    .text_size(px(12.))
+                    .text_size(px(13.))
                     .child(badge_chip(row, cx))
                     .child(div().overflow_hidden().text_ellipsis().child(shown))
                     .when(row.encrypted, |d| {
@@ -204,7 +217,7 @@ fn mono(text: String, color: Hsla, cx: &App) -> AnyElement {
         .w_full()
         .text_right()
         .text_color(color)
-        .text_size(px(11.))
+        .text_size(px(12.))
         .font_family(cx.theme().mono_font_family.clone())
         .child(text)
         .into_any_element()

@@ -87,7 +87,7 @@ pub fn apply(cx: &mut App) {
         ..c
     };
     Theme::update(cx, |t| {
-        t.font_size = px(12.);
+        t.font_size = px(13.);
         t.button_primary = p.accent;
         t.button_primary_hover = shade(p.accent, if p.win.l < 0.5 { 0.06 } else { -0.05 });
         t.button_primary_active = shade(p.accent, if p.win.l < 0.5 { 0.1 } else { -0.09 });
