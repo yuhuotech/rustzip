@@ -5,6 +5,7 @@
 
 pub mod assets;
 pub mod brand;
+pub mod dialog;
 pub mod launch;
 pub mod recent;
 pub mod rows;

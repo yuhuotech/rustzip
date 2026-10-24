@@ -4,6 +4,7 @@
 //! this file decides only where things go on screen.
 
 use crate::brand::{self, palette};
+use crate::dialog::{Dialog, Tone};
 use crate::recent::{self, RecentList, RecentSort};
 use crate::rows::FileRows;
 use crate::services::UpdateState;
@@ -3654,14 +3655,16 @@ impl MainView {
 
     fn render_overlay(&self, _: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
         let p = palette(cx);
-        let card = match self.overlay.as_ref()? {
-            Overlay::Password(prompt) => self.password_card(prompt, cx).into_any_element(),
-            Overlay::Compress(form) => self.compress_card(form, cx).into_any_element(),
-            Overlay::Settings => self.settings_card(cx).into_any_element(),
-            Overlay::Privacy => self.privacy_card(cx).into_any_element(),
-            Overlay::ConfirmDelete(paths) => self.delete_card(paths, cx).into_any_element(),
-            Overlay::Rename(prompt) => self.rename_card(prompt, cx).into_any_element(),
-            Overlay::ConfirmTrash(path) => self.trash_card(path, cx).into_any_element(),
+        // Dialogs built with `dialog::Dialog` bring their own padding and footer; the
+        // others are still plain content that the window pads.
+        let (card, framed) = match self.overlay.as_ref()? {
+            Overlay::Password(prompt) => (self.password_card(prompt, cx).into_any_element(), false),
+            Overlay::Compress(form) => (self.compress_card(form, cx).into_any_element(), false),
+            Overlay::Settings => (self.settings_card(cx).into_any_element(), false),
+            Overlay::Privacy => (self.privacy_card(cx).into_any_element(), false),
+            Overlay::ConfirmDelete(paths) => (self.delete_card(paths, cx), true),
+            Overlay::Rename(prompt) => (self.rename_card(prompt, cx).into_any_element(), false),
+            Overlay::ConfirmTrash(path) => (self.trash_card(path, cx).into_any_element(), false),
         };
         Some(
             div()
@@ -3675,11 +3678,11 @@ impl MainView {
                 .occlude()
                 .child(
                     v_flex()
-                        .w(px(420.))
+                        .w(px(if framed { 440. } else { 420. }))
                         .max_w_full()
-                        .p_4()
-                        .gap_3()
+                        .when(!framed, |d| d.p_4().gap_3())
                         .rounded(px(12.))
+                        .overflow_hidden()
                         .bg(p.win)
                         .border_1()
                         .border_color(p.line)
@@ -3715,41 +3718,75 @@ impl MainView {
             )
     }
 
-    fn delete_card(&self, paths: &[String], cx: &mut Context<Self>) -> impl IntoElement {
+    fn delete_card(&self, paths: &[String], cx: &mut Context<Self>) -> AnyElement {
         let p = palette(cx);
-        let what = match paths {
-            [one] => format!("“{}”", one.rsplit('/').next().unwrap_or(one)),
-            many => format!("这 {} 项", many.len()),
+        let kind_of = |path: &str| {
+            self.current()
+                .and_then(|a| a.tree.find(path))
+                .map(|r| r.kind)
         };
-        v_flex()
-            .gap_3()
-            .child(div().text_size(px(16.)).child(format!("从压缩包里删除{what}?")))
+        // What is being deleted, in words, and the names under it.
+        let title = match paths {
+            [one] if kind_of(one) == Some(RowKind::Dir) => "删除这个文件夹?".to_string(),
+            [_] => "删除这个文件?".to_string(),
+            many => format!("删除选中的 {} 项?", many.len()),
+        };
+        let shown = paths.iter().take(3).map(|path| {
+            div()
+                .overflow_hidden()
+                .text_ellipsis()
+                .child(path.rsplit('/').next().unwrap_or(path).to_string())
+        });
+        let more = paths.len().saturating_sub(3);
+        let names = v_flex()
+            .gap_1()
+            .px_3()
+            .py_2()
+            .rounded(px(8.))
+            .bg(p.panel)
+            .border_1()
+            .border_color(p.line)
+            .text_size(px(13.))
+            .text_color(p.fg)
+            .children(shown)
+            .when(more > 0, |d| {
+                d.child(
+                    div()
+                        .text_color(p.fg3)
+                        .child(format!("…以及另外 {more} 项")),
+                )
+            });
+        let note = div()
+            .text_size(px(12.))
+            .line_height(px(18.))
+            .text_color(p.fg3)
             .child(
-                div().text_color(p.fg2).child(
-                    "删除会重新生成整个压缩包:先在旁边写好新文件,检查无误后才替换原文件,中途失败原文件不受影响。删除后无法撤销。",
-                ),
-            )
-            .child(
-                h_flex()
-                    .justify_end()
-                    .gap_2()
-                    .child(
-                        Button::new("delete-cancel")
-                            .outline()
-                            .icon(IconName::Close)
-                            .label("取消")
-                            .on_click(cx.listener(|this, _, _, cx| this.close_overlay(cx))),
-                    )
-                    .child(
-                        Button::new("delete-ok")
-                            .danger()
-                            .bg(p.danger)
-                            .text_color(hsla(0., 0., 1., 1.))
-                            .icon(Icon::new(gpui_kit::assets::IconName::Trash))
-                            .label("删除")
-                            .on_click(cx.listener(|this, _, _, cx| this.confirm_delete(cx))),
-                    ),
-            )
+                "为了安全,会先在旁边生成一个新的压缩包,检查无误后才替换原文件;中途出错时原文件不受影响。",
+            );
+        Dialog {
+            tone: Tone::Danger,
+            icon: Icon::new(gpui_kit::assets::IconName::Trash),
+            title,
+            lead: Some("会从压缩包里移除,删除后无法撤销。".into()),
+            body: Some(v_flex().gap_3().child(names).child(note).into_any_element()),
+            buttons: vec![
+                Button::new("delete-cancel")
+                    .outline()
+                    .icon(IconName::Close)
+                    .label("取消")
+                    .on_click(cx.listener(|this, _, _, cx| this.close_overlay(cx)))
+                    .into_any_element(),
+                Button::new("delete-ok")
+                    .danger()
+                    .bg(p.danger)
+                    .text_color(hsla(0., 0., 1., 1.))
+                    .icon(Icon::new(gpui_kit::assets::IconName::Trash))
+                    .label("删除")
+                    .on_click(cx.listener(|this, _, _, cx| this.confirm_delete(cx)))
+                    .into_any_element(),
+            ],
+        }
+        .render(&p)
     }
 
     fn settings_card(&self, cx: &mut Context<Self>) -> impl IntoElement {
