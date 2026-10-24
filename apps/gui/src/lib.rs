@@ -187,6 +187,7 @@ pub fn open_main_window(launch: launch::Launch, cx: &mut App) {
         });
         main.update(cx, |m, cx| {
             let pick = m.settings.theme;
+            brand::set_accent(&m.settings.accent, cx);
             brand::choose(pick, window, cx);
             // Passwords go to the system keychain when it works; if not, nothing is kept.
             if rz_services::KeychainStore::available() {

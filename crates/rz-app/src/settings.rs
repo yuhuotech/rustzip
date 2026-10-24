@@ -33,6 +33,9 @@ pub struct Settings {
     /// BCP 47 tag such as `zh-CN`, or `auto` to follow the system.
     pub language: String,
     pub theme: Theme,
+    /// Accent colour: the name of a preset (`teal`, `graphite`...) or `#rrggbb`.
+    /// The interface decides what it knows; anything else falls back to the default.
+    pub accent: String,
     /// Output format for new archives, as a file extension (`zip`, `7z`, `tar.zst`...).
     pub default_format: String,
     pub default_level: u32,
@@ -62,6 +65,7 @@ impl Default for Settings {
         Self {
             language: "auto".into(),
             theme: Theme::System,
+            accent: "teal".into(),
             default_format: "zip".into(),
             default_level: 6,
             threads: 0,
@@ -92,6 +96,9 @@ impl Settings {
         self.max_ratio = self.max_ratio.clamp(10, 1_000_000);
         self.ratio_check_above_mb = self.ratio_check_above_mb.min(1 << 20);
         self.max_total_gb = self.max_total_gb.clamp(1, 1 << 20);
+        if self.accent.trim().is_empty() {
+            self.accent = "teal".into();
+        }
         if self.language.trim().is_empty() {
             self.language = "auto".into();
         }

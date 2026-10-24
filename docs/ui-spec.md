@@ -35,6 +35,8 @@
 
 语义色(警告、危险)与强调色是两回事,不得混用。
 
+**强调色可配置。** 上表是默认值(青绿)。设置里"主色"可选青绿、石墨、深蓝、紫罗兰、玫红,保存在 `settings.json` 的 `accent` 字段;也可以手写 `"#rrggbb"`(明暗主题共用)。换主色只改 `accent`、`accent-soft`、`accent-ink` 三个令牌,组件里不得绕过令牌。非默认色的 `accent-soft` 由强调色与窗口色混合得出(浅色 12%、深色 20%),`accent-ink` 按亮度取白或近黑。石墨在浅色下近黑、深色下近白,是最克制的选择。
+
 ## 3. 字体
 
 - 界面字体**跟随系统**:macOS 苹方、Windows 微软雅黑 UI(或 Segoe UI Variable)、Linux 思源黑体(Noto Sans CJK)。视觉稿用 Geist 仅为预览效果。

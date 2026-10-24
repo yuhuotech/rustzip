@@ -702,6 +702,27 @@ fn settings_changes_are_saved_and_the_theme_follows_the_choice(cx: &mut TestAppC
 }
 
 #[gpui_kit::test]
+fn the_accent_colour_is_saved_and_repaints_the_theme(cx: &mut TestAppContext) {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("cfg/settings.json");
+    let (handle, view) = open_window(cx, Some(path.clone()));
+    let before = cx.update(|cx| cx.theme().primary);
+
+    with_view(cx, handle, &view, |v, _, cx| v.set_accent("rose", cx));
+    let after = cx.update(|cx| cx.theme().primary);
+    assert_ne!(before, after);
+    assert_eq!(Settings::load(&path).accent, "rose");
+
+    // A hand-written colour works too, and a bad one falls back to the default.
+    with_view(cx, handle, &view, |v, _, cx| v.set_accent("#336699", cx));
+    assert_ne!(cx.update(|cx| cx.theme().primary), after);
+    with_view(cx, handle, &view, |v, _, cx| {
+        v.set_accent("not a colour", cx)
+    });
+    assert_eq!(cx.update(|cx| cx.theme().primary), before);
+}
+
+#[gpui_kit::test]
 fn the_privacy_notice_shows_once_and_records_the_answer(cx: &mut TestAppContext) {
     let tmp = tempfile::tempdir().unwrap();
     let path = tmp.path().join("settings.json");

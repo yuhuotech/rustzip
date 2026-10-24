@@ -86,6 +86,10 @@ fn window(
             cx,
             move |window, cx| {
                 Theme::change(mode, Some(window), cx);
+                // RZ_SHOT_ACCENT=graphite (or #rrggbb) previews another accent.
+                if let Ok(accent) = std::env::var("RZ_SHOT_ACCENT") {
+                    rustzip_gui::brand::set_accent(&accent, cx);
+                }
                 rustzip_gui::brand::apply(cx);
                 let settings = Settings {
                     recent,
@@ -100,11 +104,15 @@ fn window(
 }
 
 fn shoot(cx: &mut Ctx, handle: WindowHandle<Root>, dir: &Path, name: &str) {
-    cx.update_window(handle.into(), |_, window, cx| {
-        window.refresh();
-        window.render_frame(cx);
-    })
-    .unwrap();
+    // Images decode in the background, so draw once, let that finish, and draw again.
+    for _ in 0..2 {
+        cx.update_window(handle.into(), |_, window, cx| {
+            window.refresh();
+            window.render_frame(cx);
+        })
+        .unwrap();
+        cx.run_until_parked();
+    }
     let image = cx.capture_screenshot(handle.into()).unwrap();
     let path = dir.join(format!("{name}.png"));
     image.save(&path).unwrap();

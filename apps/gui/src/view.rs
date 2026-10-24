@@ -831,6 +831,14 @@ impl MainView {
         brand::choose(pick, window, cx);
     }
 
+    /// Switches the accent colour everywhere at once and remembers it.
+    pub fn set_accent(&mut self, spec: &str, cx: &mut Context<Self>) {
+        let spec = spec.to_string();
+        self.change_settings(|s| s.accent = spec.clone(), cx);
+        brand::set_accent(&spec, cx);
+        brand::apply(cx);
+    }
+
     /// Closes the first-run notice; `keep_stats` is the user's answer to it.
     pub fn answer_privacy(&mut self, keep_stats: bool, cx: &mut Context<Self>) {
         self.change_settings(
@@ -1062,17 +1070,7 @@ impl MainView {
             .items_center()
             .justify_center()
             .gap_3()
-            .child(
-                div()
-                    .size(px(64.))
-                    .rounded(px(16.))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .bg(p.accent_soft)
-                    .text_color(p.accent)
-                    .child(Icon::new(IconName::Inbox).size_8()),
-            )
+            .child(img(logo()).size(px(96.)))
             .child(div().text_size(px(28.)).child("RustZIP"))
             .child(
                 h_flex()
@@ -1729,6 +1727,35 @@ impl MainView {
                     .into_any_element(),
             ))
             .child(group(
+                "主色",
+                h_flex()
+                    .gap_2()
+                    .children(
+                        brand::accents(p.win.l < 0.5)
+                            .into_iter()
+                            .enumerate()
+                            .map(|(ix, (id, _, colour))| {
+                                let on = s.accent == id;
+                                div()
+                                    .id(("accent", ix))
+                                    .size(px(28.))
+                                    .rounded_full()
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .cursor_pointer()
+                                    .border_2()
+                                    .border_color(if on { p.fg } else { p.win })
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        this.set_accent(id, cx);
+                                    }))
+                                    .child(div().size(px(20.)).rounded_full().bg(colour))
+                            })
+                            .collect::<Vec<_>>(),
+                    )
+                    .into_any_element(),
+            ))
+            .child(group(
                 "文件已存在时",
                 h_flex()
                     .gap_1()
@@ -1957,6 +1984,19 @@ impl MainView {
 }
 
 /// Starts following the system theme; call once per window.
+/// The app icon, decoded once. It is drawn at 96 px, so the 256 px image stays sharp
+/// on high-density screens.
+fn logo() -> Arc<Image> {
+    static LOGO: std::sync::OnceLock<Arc<Image>> = std::sync::OnceLock::new();
+    LOGO.get_or_init(|| {
+        Arc::new(Image::from_bytes(
+            ImageFormat::Png,
+            include_bytes!("../../../packaging/icons/hicolor/256.png").to_vec(),
+        ))
+    })
+    .clone()
+}
+
 pub fn init_window(window: &mut Window, cx: &mut App) {
     brand::follow_system(window, cx);
 }
