@@ -11,8 +11,7 @@
 use gpui_kit::component::{Theme, ThemeMode};
 use gpui_kit::test::TestWindowExt;
 use gpui_kit::{
-    AppContext, Bounds, Entity, HeadlessAppContext, WindowHandle, assets::Assets, base::Root, px,
-    size,
+    AppContext, Bounds, Entity, HeadlessAppContext, WindowHandle, base::Root, px, size,
 };
 use rustzip_gui::view::{MainView, load_archive};
 use rz_app::settings::Settings;
@@ -52,6 +51,12 @@ fn make_archive(dir: &Path) -> PathBuf {
         let data: Vec<u8> = (0..len).map(|i| ((i * 31 + len) % 251) as u8).collect();
         fs::write(src.join(name), data).unwrap();
     }
+    // One real picture, so the details panel has something to show.
+    image::RgbaImage::from_fn(320, 200, |x, y| {
+        image::Rgba([(x * 255 / 320) as u8, (y * 255 / 200) as u8, 170, 255])
+    })
+    .save(src.join("设计稿/主窗口.png"))
+    .unwrap();
     let out = dir.join("项目文档.zip");
     compress(
         &[src],
@@ -143,7 +148,7 @@ fn main() {
     for (mode, tag) in [(ThemeMode::Light, "light"), (ThemeMode::Dark, "dark")] {
         let mut cx = HeadlessAppContext::with_platform(
             gpui_kit::platform::current_platform(true).text_system(),
-            Arc::new(Assets),
+            Arc::new(rustzip_gui::assets::AppAssets),
             gpui_kit::platform::current_headless_renderer,
         );
         cx.update(gpui_kit::init);
@@ -170,6 +175,22 @@ fn main() {
         })
         .unwrap();
         shoot(&mut cx, handle, &out_dir, &format!("{tag}-3-selected"));
+
+        // 3b. A picture selected: the panel shows it, and the archive has been tested.
+        act(&mut cx, handle, &view, |v, _, cx| {
+            v.navigate("项目文档/设计稿", cx);
+            if let Some(a) = v.archives.first_mut() {
+                a.verified = Some(true);
+            }
+        });
+        cx.update_window(handle.into(), |_, _, cx| {
+            table.update(cx, |t, cx| t.set_selected_row(0, cx));
+        })
+        .unwrap();
+        shoot(&mut cx, handle, &out_dir, &format!("{tag}-3b-picture"));
+        act(&mut cx, handle, &view, |v, _, cx| {
+            v.navigate("项目文档", cx)
+        });
 
         // 4. The compress form.
         let src = work.path().join("项目文档");

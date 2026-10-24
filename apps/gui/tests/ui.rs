@@ -196,6 +196,60 @@ fn folders_open_on_double_click_and_the_way_back_works(cx: &mut TestAppContext) 
 }
 
 #[gpui_kit::test]
+fn a_picture_is_previewed_and_other_files_are_not(cx: &mut TestAppContext) {
+    let tmp = tempfile::tempdir().unwrap();
+    let src = tmp.path().join("pics");
+    fs::create_dir_all(&src).unwrap();
+    fs::write(src.join("note.txt"), "text").unwrap();
+    image::RgbaImage::from_pixel(8, 8, image::Rgba([10, 150, 130, 255]))
+        .save(src.join("pic.png"))
+        .unwrap();
+    let archive = tmp.path().join("p.zip");
+    compress(
+        &[src],
+        &archive,
+        OutputFormat::from_path(&archive).unwrap(),
+        &CreateOptions::default(),
+        &CancelToken::new(),
+        &mut NoProgress,
+    )
+    .unwrap();
+    let (handle, view) = open_window(cx, None);
+    open_sync(cx, handle, &view, &archive, None);
+    with_view(cx, handle, &view, |v, _, cx| v.navigate("pics", cx));
+    let table = cx.update(|cx| view.read(cx).table.clone());
+    let select = |cx: &mut TestAppContext, ix: usize| {
+        cx.update_window(handle.into(), |_, _, cx| {
+            table.update(cx, |_, cx| cx.emit(TableEvent::SelectRow(ix)));
+        })
+        .unwrap();
+        cx.run_until_parked();
+        draw(cx, handle);
+    };
+
+    // Rows are note.txt, pic.png.
+    select(cx, 1);
+    cx.update(|cx| {
+        let pv = view.read(cx).preview.as_ref().expect("a preview");
+        assert_eq!(pv.path, "pics/pic.png");
+    });
+    select(cx, 0);
+    cx.update(|cx| assert!(view.read(cx).preview.is_none()));
+}
+
+#[gpui_kit::test]
+fn a_finished_test_marks_the_archive_as_verified(cx: &mut TestAppContext) {
+    let tmp = tempfile::tempdir().unwrap();
+    let archive = make_archive(tmp.path(), "a.zip", None);
+    let (handle, view) = open_window(cx, None);
+    open_sync(cx, handle, &view, &archive, None);
+    cx.update(|cx| assert_eq!(view.read(cx).current().unwrap().verified, None));
+    with_view(cx, handle, &view, |v, _, cx| v.start_test(cx));
+    wait_for_tasks(cx, handle, &view);
+    cx.update(|cx| assert_eq!(view.read(cx).current().unwrap().verified, Some(true)));
+}
+
+#[gpui_kit::test]
 fn selecting_a_row_fills_the_details_and_double_clicking_a_file_does_nothing(
     cx: &mut TestAppContext,
 ) {

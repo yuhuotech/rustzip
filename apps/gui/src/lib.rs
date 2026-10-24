@@ -3,6 +3,7 @@
 //! Everything that is not drawing lives in `rz-app`; this crate only turns that
 //! into windows. Colours come from `brand`, never from the views.
 
+pub mod assets;
 pub mod brand;
 pub mod launch;
 pub mod rows;

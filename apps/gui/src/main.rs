@@ -5,7 +5,7 @@ fn main() {
     // Archives named on the command line, or the file manager's Extract here / Compress.
     let launch = rustzip_gui::launch::parse_args(std::env::args_os().skip(1));
     // Without the icon assets every icon in the kit's controls is silently blank.
-    let app = gpui_kit::application().with_assets(gpui_kit::assets::Assets);
+    let app = gpui_kit::application().with_assets(rustzip_gui::assets::AppAssets);
     let opened_by_system = rustzip_gui::listen_for_open_urls(&app);
     app.run(move |cx| {
         gpui_kit::init(cx);

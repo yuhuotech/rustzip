@@ -4,7 +4,7 @@
 //! this file decides only where things go on screen.
 
 use crate::brand::{self, palette};
-use crate::rows::{FileRows, badge_chip};
+use crate::rows::FileRows;
 use crate::services::UpdateState;
 use crate::{CloseTab, ExtractAll, FocusSearch, NewArchiveDialog, OpenArchiveDialog, OpenSettings};
 use gpui_kit::component::button::*;
@@ -21,7 +21,7 @@ use rz_app::settings::{OnConflict, Settings, Theme};
 use rz_app::tasks::{ErrorCode, JobKind, JobSpec, TaskId, TaskInfo, TaskManager, TaskState};
 use rz_core::{CreateOptions, Error};
 use rz_formats::OutputFormat;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -39,6 +39,27 @@ pub struct OpenArchive {
     pub cwd: String,
     /// Path of the selected row.
     pub selected: Option<String>,
+    /// Result of the last integrity test: `Some(true)` passed, `Some(false)` failed.
+    pub verified: Option<bool>,
+}
+
+/// How a row of the left menu behaves.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Nav {
+    /// The page being shown.
+    Current,
+    /// Works.
+    Live,
+    /// Designed but not built yet.
+    Soon,
+}
+
+/// The picture shown in the details panel for the selected file.
+pub struct Preview {
+    pub archive: PathBuf,
+    /// Path of the file inside the archive.
+    pub path: String,
+    pub image: Arc<Image>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -141,9 +162,12 @@ pub struct MainView {
     pub notice: Option<Notice>,
     pub overlay: Option<Overlay>,
     pub loading: Option<PathBuf>,
+    pub preview: Option<Preview>,
     polling: bool,
     /// Tasks already reported, so each result is announced once.
     announced: HashSet<TaskId>,
+    /// Which archive each running integrity test belongs to.
+    tests: HashMap<TaskId, PathBuf>,
 }
 
 /// Reads the whole entry list of an archive. Runs off the UI thread.
@@ -157,6 +181,19 @@ pub fn load_archive(path: &Path, password: Option<&str>) -> Result<(ArchiveTree,
         ArchiveTree::build(entries),
         reader.format_name().to_string(),
     ))
+}
+
+/// `128402` as `128,402`.
+fn group_digits(n: u64) -> String {
+    let digits = n.to_string();
+    let mut out = String::with_capacity(digits.len() + digits.len() / 3);
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    out
 }
 
 fn format_speed(bps: u64) -> String {
@@ -226,8 +263,10 @@ impl MainView {
             notice: None,
             overlay: None,
             loading: None,
+            preview: None,
             polling: false,
             announced: HashSet::new(),
+            tests: HashMap::new(),
         }
     }
 
@@ -331,6 +370,7 @@ impl MainView {
                     password,
                     cwd: String::new(),
                     selected: None,
+                    verified: None,
                 });
                 self.active = self.archives.len() - 1;
                 self.overlay = None;
@@ -430,6 +470,7 @@ impl MainView {
             a.cwd = rz_core::clean_path(dir);
             a.selected = None;
         }
+        self.preview = None;
         self.apply_view(cx);
     }
 
@@ -457,6 +498,7 @@ impl MainView {
                     if let Some(a) = self.current_mut() {
                         a.selected = Some(path);
                     }
+                    self.load_preview(cx);
                     cx.notify();
                 }
             }
@@ -554,14 +596,88 @@ impl MainView {
             password: a.password.clone(),
             encoding: self.settings.forced_encoding().map(str::to_string),
         };
-        self.submit(spec, cx);
+        let archive = a.path.clone();
+        let id = self.submit(spec, cx);
+        self.tests.insert(id, archive);
     }
 
-    fn submit(&mut self, spec: JobSpec, cx: &mut Context<Self>) {
-        self.tasks.submit(spec);
+    fn submit(&mut self, spec: JobSpec, cx: &mut Context<Self>) -> TaskId {
+        let id = self.tasks.submit(spec);
         self.notice = None;
         self.refresh_tasks(cx);
         self.ensure_polling(cx);
+        id
+    }
+
+    /// Starts reading the selected picture so the details panel can show it.
+    ///
+    /// Only pictures of a sensible size are read; everything else keeps the type tile.
+    pub fn load_preview(&mut self, cx: &mut Context<Self>) {
+        let Some(row) = self.selected_row() else {
+            self.preview = None;
+            return;
+        };
+        let Some(a) = self.current() else { return };
+        let format = rz_app::preview::image_format(&row.name);
+        let entry = row.entry.and_then(|ix| a.tree.entries().get(ix).cloned());
+        let (Some(format), Some(entry), RowKind::File) = (format, entry, row.kind) else {
+            self.preview = None;
+            return;
+        };
+        let (archive, password) = (a.path.clone(), a.password.clone());
+        if self
+            .preview
+            .as_ref()
+            .is_some_and(|p| p.archive == archive && p.path == row.path)
+        {
+            return;
+        }
+        self.preview = None;
+        if row.size > rz_app::preview::MAX_IMAGE_BYTES {
+            return;
+        }
+        let encoding = self.settings.forced_encoding().map(str::to_string);
+        let path = row.path;
+        cx.spawn(async move |this, cx| {
+            let (archive_bg, encoding_bg) = (archive.clone(), encoding);
+            let data = cx
+                .background_executor()
+                .spawn(async move {
+                    rz_app::preview::read_entry(
+                        &archive_bg,
+                        &entry,
+                        password.as_deref(),
+                        encoding_bg.as_deref(),
+                        rz_app::preview::MAX_IMAGE_BYTES,
+                    )
+                })
+                .await;
+            // A picture that cannot be read just keeps the type tile.
+            let Ok(data) = data else { return };
+            let format = match format {
+                rz_app::preview::ImageFormat::Png => ImageFormat::Png,
+                rz_app::preview::ImageFormat::Jpeg => ImageFormat::Jpeg,
+                rz_app::preview::ImageFormat::Gif => ImageFormat::Gif,
+                rz_app::preview::ImageFormat::Webp => ImageFormat::Webp,
+                rz_app::preview::ImageFormat::Bmp => ImageFormat::Bmp,
+            };
+            let image = Arc::new(Image::from_bytes(format, data));
+            let _ = this.update(cx, |this, cx| {
+                // The selection may have moved on while the file was being read.
+                let still_here = this.current().is_some_and(|a| {
+                    a.path == archive && a.selected.as_deref() == Some(path.as_str())
+                });
+                if still_here {
+                    this.preview = Some(Preview {
+                        archive,
+                        path,
+                        image,
+                    });
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
     }
 
     /// Re-reads the task list and announces tasks that just ended.
@@ -570,6 +686,16 @@ impl MainView {
         for t in self.task_view.clone() {
             if !t.state.is_finished() || !self.announced.insert(t.id) {
                 continue;
+            }
+            if let Some(path) = self.tests.remove(&t.id) {
+                let verdict = match (&t.state, &t.error) {
+                    (TaskState::Done, _) => Some(true),
+                    (TaskState::Failed, Some(e)) if e.code != ErrorCode::Password => Some(false),
+                    _ => None,
+                };
+                if let Some(a) = self.archives.iter_mut().find(|a| a.path == path) {
+                    a.verified = verdict;
+                }
             }
             match (&t.state, &t.error, &t.summary) {
                 (TaskState::Done, _, Some(s)) => {
@@ -1141,8 +1267,10 @@ impl MainView {
         h_flex()
             .id(("recent", ix))
             .gap_2()
-            .px_2()
-            .py_1p5()
+            .pl_6()
+            .pr_2()
+            .h(px(28.))
+            .text_size(px(12.))
             .rounded(px(8.))
             .cursor_pointer()
             .hover(|d| d.bg(p.hover))
@@ -1204,6 +1332,36 @@ impl MainView {
                 .text_color(p.fg3)
                 .child(text)
         };
+        // One row: icon, label and, on the right, a count or "coming soon".
+        let mono = cx.theme().mono_font_family.clone();
+        let nav = |icon: Icon, label: &'static str, count: Option<String>, state: Nav| {
+            let (fg, icon_fg) = match state {
+                Nav::Current => (p.accent, p.accent),
+                Nav::Live => (p.fg, p.fg2),
+                Nav::Soon => (p.fg3, p.fg3),
+            };
+            h_flex()
+                .gap_2p5()
+                .px_2()
+                .h(px(32.))
+                .rounded(px(8.))
+                .text_color(fg)
+                .when(state == Nav::Current, |d| d.bg(p.accent_soft))
+                .child(icon.size_4().text_color(icon_fg))
+                .child(div().flex_1().child(label))
+                .when_some(count, |d, n| {
+                    d.child(
+                        div()
+                            .text_size(px(12.))
+                            .text_color(p.fg3)
+                            .font_family(mono.clone())
+                            .child(n),
+                    )
+                })
+                .when(state == Nav::Soon, |d| {
+                    d.child(div().text_size(px(11.)).child("即将推出"))
+                })
+        };
         v_flex()
             .id("sidebar")
             .w(px(168.))
@@ -1214,39 +1372,48 @@ impl MainView {
             .border_r_1()
             .border_color(p.line)
             .child(heading("位置"))
-            .child(
-                h_flex()
-                    .gap_2()
-                    .px_2()
-                    .py_1p5()
-                    .rounded(px(8.))
-                    .bg(p.accent_soft)
-                    .text_color(p.accent)
-                    .child(Icon::new(IconName::Inbox).size_4())
-                    .child("当前压缩包"),
-            )
-            .child(heading("最近打开"))
+            .child(nav(
+                Icon::new(IconName::Inbox),
+                "当前压缩包",
+                None,
+                Nav::Current,
+            ))
+            .child(nav(
+                Icon::new(gpui_kit::assets::IconName::Clock),
+                "最近打开",
+                Some(self.settings.recent.len().to_string()),
+                Nav::Live,
+            ))
             .children(
                 self.settings
                     .recent
                     .iter()
-                    .take(8)
+                    .take(5)
                     .enumerate()
                     .map(|(ix, path)| self.recent_row(ix, path, cx))
                     .collect::<Vec<_>>(),
             )
-            .child(div().flex_1())
-            // Not built yet; shown dimmed so the layout matches the design and says so.
+            .child(nav(Icon::new(IconName::Star), "常用位置", None, Nav::Soon))
             .child(heading("快速操作"))
-            .children(["转换格式", "修复压缩包", "密码本"].map(|label| {
-                h_flex()
-                    .gap_2()
-                    .px_2()
-                    .py_1p5()
-                    .text_color(p.fg3)
-                    .child(div().flex_1().child(label))
-                    .child(div().text_size(px(11.)).child("即将推出"))
-            }))
+            // These three are not built yet; they stay in the layout, dimmed and labelled.
+            .child(nav(
+                Icon::new(gpui_kit::assets::IconName::ArrowLeftRight),
+                "转换格式",
+                None,
+                Nav::Soon,
+            ))
+            .child(nav(
+                Icon::new(gpui_kit::assets::IconName::Wrench),
+                "修复压缩包",
+                None,
+                Nav::Soon,
+            ))
+            .child(nav(
+                Icon::new(gpui_kit::assets::IconName::KeyRound),
+                "密码本",
+                None,
+                Nav::Soon,
+            ))
     }
 
     fn render_breadcrumbs(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -1341,23 +1508,63 @@ impl MainView {
         match self.selected_row() {
             Some(row) => {
                 let kind = match row.kind {
-                    RowKind::Dir => "文件夹",
-                    RowKind::File => "文件",
-                    RowKind::Link => "链接",
+                    RowKind::Dir => "文件夹".to_string(),
+                    RowKind::File => rz_app::preview::type_name(&row.name),
+                    RowKind::Link => "链接".to_string(),
                 };
+                let picture = self
+                    .preview
+                    .as_ref()
+                    .filter(|pv| pv.archive == a.path && pv.path == row.path)
+                    .map(|pv| pv.image.clone());
+                let (tile_bg, tile_fg) = crate::rows::badge_colors(&row, cx);
                 v_flex()
                     .gap_4()
+                    // The picture itself for images, otherwise a tile in the file type's colour.
                     .child(
-                        h_flex()
-                            .gap_3()
+                        div()
+                            .id("preview")
+                            .h(px(140.))
+                            .w_full()
+                            .rounded(px(12.))
+                            .overflow_hidden()
+                            .flex()
                             .items_center()
-                            .child(badge_chip(&row, cx))
-                            .child(div().text_size(px(14.)).child(row.name.clone())),
+                            .justify_center()
+                            .bg(tile_bg)
+                            .when_some(picture, |d, image| {
+                                d.child(img(image).max_w_full().max_h_full())
+                            })
+                            .when(self.preview_is_missing(&row), |d| {
+                                d.child(
+                                    div()
+                                        .size(px(56.))
+                                        .rounded(px(14.))
+                                        .flex()
+                                        .items_center()
+                                        .justify_center()
+                                        .bg(p.win)
+                                        .text_color(tile_fg)
+                                        .text_size(px(15.))
+                                        .child(rz_app::browse::badge_label(&row.name, row.kind)),
+                                )
+                            }),
+                    )
+                    .child(
+                        v_flex()
+                            .gap_0p5()
+                            .child(
+                                div()
+                                    .text_size(px(15.))
+                                    .overflow_hidden()
+                                    .text_ellipsis()
+                                    .child(row.name.clone()),
+                            )
+                            .child(div().text_color(p.fg3).child(kind)),
                     )
                     .child(
                         v_flex()
                             .gap_2()
-                            .child(kv("类型", kind.to_string()))
                             .child(kv("原始大小", format_size(row.size)))
                             // Folders have no packed size of their own.
                             .when_some(
@@ -1380,6 +1587,9 @@ impl MainView {
                     .child(
                         Button::new("extract-this")
                             .primary()
+                            .w_full()
+                            .h(px(36.))
+                            .icon(IconName::ArrowDown)
                             .label("解压此项")
                             .on_click(
                                 cx.listener(|this, _, window, cx| this.extract(true, window, cx)),
@@ -1387,25 +1597,75 @@ impl MainView {
                     )
                     .into_any_element()
             }
+            // Nothing picked: describe the archive itself.
             None => v_flex()
-                .gap_3()
+                .gap_4()
                 .child(
                     div()
-                        .text_color(p.fg3)
-                        .child("选择一个文件或文件夹查看详情"),
+                        .h(px(140.))
+                        .w_full()
+                        .rounded(px(12.))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .bg(p.accent_soft)
+                        .text_color(p.accent)
+                        .child(Icon::new(gpui_kit::assets::IconName::FileArchive).size(px(56.))),
+                )
+                .child(
+                    v_flex()
+                        .gap_0p5()
+                        .child(
+                            div()
+                                .text_size(px(15.))
+                                .overflow_hidden()
+                                .text_ellipsis()
+                                .child(
+                                    a.path
+                                        .file_name()
+                                        .map(|n| n.to_string_lossy().into_owned())
+                                        .unwrap_or_default(),
+                                ),
+                        )
+                        .child(
+                            div()
+                                .text_color(p.fg3)
+                                .child(format!("{} 压缩包", a.format.to_uppercase())),
+                        ),
                 )
                 .child(
                     v_flex()
                         .gap_2()
-                        .child(kv("格式", a.format.clone()))
-                        .child(kv("文件数", a.tree.total_files().to_string()))
+                        .child(kv("文件数", group_digits(a.tree.total_files() as u64)))
                         .child(kv("原始大小", format_size(a.tree.total_size())))
                         .when_some(a.tree.total_packed(), |d, packed| {
                             d.child(kv("压缩后", format_size(packed)))
-                        }),
+                        })
+                        .when_some(
+                            compression_ratio(a.tree.total_size(), a.tree.total_packed()),
+                            |d, r| d.child(kv("节省", r)),
+                        ),
+                )
+                .child(
+                    Button::new("extract-all-side")
+                        .primary()
+                        .w_full()
+                        .h(px(36.))
+                        .icon(IconName::ArrowDown)
+                        .label("解压全部")
+                        .on_click(
+                            cx.listener(|this, _, window, cx| this.extract(false, window, cx)),
+                        ),
                 )
                 .into_any_element(),
         }
+    }
+
+    /// Whether the selected file still needs its type tile, i.e. no picture is ready for it.
+    fn preview_is_missing(&self, row: &Row) -> bool {
+        !self.preview.as_ref().is_some_and(|pv| {
+            pv.path == row.path && self.current().is_some_and(|a| a.path == pv.archive)
+        })
     }
 
     fn render_tasks(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -1563,25 +1823,74 @@ impl MainView {
             )),
             (None, None, Some(a)) => {
                 let t = &a.tree;
-                let mut s = format!(
-                    "{} 个文件 · {}",
-                    t.total_files(),
-                    format_size(t.total_size())
-                );
-                if let Some(packed) = t.total_packed() {
-                    s.push_str(&format!(" → {}", format_size(packed)));
-                    if let Some(r) = compression_ratio(t.total_size(), Some(packed)) {
-                        s.push_str(&format!(" · 节省 {r}"));
-                    }
-                }
-                div().text_color(p.fg2).child(s)
+                let mono = cx.theme().mono_font_family.clone();
+                // Packed size as a share of the original: 34% means it shrank to a third.
+                let share = t
+                    .total_packed()
+                    .filter(|_| t.total_size() > 0)
+                    .map(|packed| packed as f64 * 100. / t.total_size() as f64);
+                h_flex()
+                    .gap_4()
+                    .text_color(p.fg2)
+                    .when_some(a.verified, |d, ok| {
+                        d.child(
+                            h_flex()
+                                .gap_1p5()
+                                .text_color(if ok { p.accent } else { p.danger })
+                                .child(
+                                    if ok {
+                                        Icon::new(gpui_kit::assets::IconName::ShieldCheck)
+                                    } else {
+                                        Icon::new(IconName::CircleX)
+                                    }
+                                    .size_4(),
+                                )
+                                .child(if ok {
+                                    "校验通过"
+                                } else {
+                                    "校验未通过"
+                                }),
+                        )
+                    })
+                    .child(
+                        div()
+                            .font_family(mono.clone())
+                            .child(format!("{} 项", group_digits(t.total_files() as u64))),
+                    )
+                    .child(
+                        div()
+                            .font_family(mono.clone())
+                            .child(match t.total_packed() {
+                                Some(packed) => format!(
+                                    "{} → {}",
+                                    format_size(t.total_size()),
+                                    format_size(packed)
+                                ),
+                                None => format_size(t.total_size()),
+                            }),
+                    )
+                    .when_some(share, |d, n| {
+                        d.child(
+                            div()
+                                .px_2()
+                                .rounded_full()
+                                .bg(p.accent_soft)
+                                .text_color(p.accent)
+                                .font_family(mono)
+                                .child(if n < 10. {
+                                    format!("压缩率 {n:.1}%")
+                                } else {
+                                    format!("压缩率 {n:.0}%")
+                                }),
+                        )
+                    })
             }
             (None, None, None) => div().text_color(p.fg3).child("就绪"),
         };
         h_flex()
             .id("status")
-            .h(px(28.))
-            .px_3()
+            .h(px(34.))
+            .px_4()
             .gap_4()
             .items_center()
             .flex_none()
@@ -1607,11 +1916,18 @@ impl MainView {
                 ),
             })
             .when_some(self.current(), |d, a| {
+                let encrypted = a.tree.entries().iter().any(|e| e.encrypted);
                 d.child(
-                    div()
+                    h_flex()
+                        .gap_1p5()
                         .text_color(p.fg3)
                         .font_family(cx.theme().mono_font_family.clone())
-                        .child(a.format.to_uppercase()),
+                        .child(a.format.to_uppercase())
+                        .when(encrypted, |d| {
+                            d.child("·")
+                                .child(Icon::new(gpui_kit::assets::IconName::Lock).size_3())
+                                .child("已加密")
+                        }),
                 )
             })
     }

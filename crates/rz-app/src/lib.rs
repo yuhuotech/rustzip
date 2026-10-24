@@ -7,6 +7,7 @@
 
 pub mod browse;
 pub mod passwords;
+pub mod preview;
 pub mod settings;
 pub mod smart;
 pub mod stats;

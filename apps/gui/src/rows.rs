@@ -119,10 +119,10 @@ fn sort_key_for(col_ix: usize) -> SortKey {
     }
 }
 
-/// The coloured badge in front of a name.
-pub fn badge_chip(row: &Row, cx: &App) -> Div {
+/// Background and text colours of a file's badge.
+pub fn badge_colors(row: &Row, cx: &App) -> (Hsla, Hsla) {
     let p = palette(cx);
-    let (bg, fg) = match badge(&row.name, row.kind) {
+    match badge(&row.name, row.kind) {
         Badge::Folder => (p.accent_soft, p.accent),
         Badge::Image => (
             hsla(217. / 360., 0.9, 0.6, 0.16),
@@ -139,7 +139,12 @@ pub fn badge_chip(row: &Row, cx: &App) -> Div {
             hsla(330. / 360., 0.7, 0.55, 1.),
         ),
         Badge::Other => (p.hover, p.fg2),
-    };
+    }
+}
+
+/// The coloured badge in front of a name.
+pub fn badge_chip(row: &Row, cx: &App) -> Div {
+    let (bg, fg) = badge_colors(row, cx);
     div()
         .w(px(32.))
         .h(px(18.))
