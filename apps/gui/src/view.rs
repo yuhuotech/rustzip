@@ -868,6 +868,7 @@ impl MainView {
             .child(
                 Button::new("extract-all")
                     .primary()
+                    .icon(IconName::ArrowDown)
                     .label("解压全部")
                     .disabled(!has)
                     .on_click(cx.listener(|this, _, window, cx| this.extract(false, window, cx))),
@@ -875,6 +876,7 @@ impl MainView {
             .child(
                 Button::new("extract-selected")
                     .ghost()
+                    .icon(IconName::FolderOpen)
                     .label("解压所选")
                     .disabled(!has_sel)
                     .on_click(cx.listener(|this, _, window, cx| this.extract(true, window, cx))),
@@ -882,6 +884,7 @@ impl MainView {
             .child(
                 Button::new("test")
                     .ghost()
+                    .icon(IconName::CircleCheck)
                     .label("测试")
                     .disabled(!has)
                     .on_click(cx.listener(|this, _, _, cx| this.start_test(cx))),
@@ -890,6 +893,7 @@ impl MainView {
             .child(
                 Button::new("compress")
                     .ghost()
+                    .icon(IconName::Plus)
                     .label("新建压缩")
                     .on_click(cx.listener(|this, _, window, cx| this.pick_sources(window, cx))),
             )
@@ -908,21 +912,41 @@ impl MainView {
             .flex_1()
             .items_center()
             .justify_center()
-            .gap_2()
-            .child(div().text_size(px(22.)).child("RustZIP"))
+            .gap_3()
             .child(
                 div()
-                    .text_size(px(13.))
-                    .text_color(p.fg2)
-                    .child("把压缩包拖到这里打开,把文件拖到这里压缩"),
+                    .size(px(64.))
+                    .rounded(px(16.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .bg(p.accent_soft)
+                    .text_color(p.accent)
+                    .child(Icon::new(IconName::Inbox).size_8()),
             )
+            .child(div().text_size(px(28.)).child("RustZIP"))
             .child(
                 h_flex()
-                    .mt_1()
+                    .gap_1p5()
+                    .text_size(px(14.))
+                    .text_color(p.fg2)
+                    .child(Icon::new(IconName::ArrowDown).size_4())
+                    .child("把压缩包或文件拖到窗口里,或从下面开始"),
+            )
+            // Each entry point gets its own full-width row; two buttons side by side
+            // looked like one cramped control in the middle of a mostly empty window.
+            .child(
+                v_flex()
+                    .mt_3()
                     .gap_2()
+                    .w(px(360.))
                     .child(
                         Button::new("empty-open")
                             .primary()
+                            .h(px(44.))
+                            .w_full()
+                            .text_size(px(15.))
+                            .icon(IconName::FolderOpen)
                             .label("打开压缩包")
                             .on_click(
                                 cx.listener(|this, _, window, cx| this.pick_archive(window, cx)),
@@ -931,6 +955,10 @@ impl MainView {
                     .child(
                         Button::new("empty-compress")
                             .outline()
+                            .h(px(44.))
+                            .w_full()
+                            .text_size(px(15.))
+                            .icon(IconName::Plus)
                             .label("新建压缩")
                             .on_click(
                                 cx.listener(|this, _, window, cx| this.pick_sources(window, cx)),
@@ -942,7 +970,7 @@ impl MainView {
                     v_flex()
                         .mt_4()
                         .gap_0p5()
-                        .w(px(300.))
+                        .w(px(360.))
                         .child(div().text_color(p.fg3).text_size(px(11.)).child("最近打开"))
                         .children(
                             self.settings
