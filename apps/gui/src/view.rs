@@ -4,6 +4,7 @@
 //! this file decides only where things go on screen.
 
 use crate::brand::{self, palette};
+use crate::recent::{self, RecentList, RecentSort};
 use crate::rows::FileRows;
 use crate::services::UpdateState;
 use crate::{CloseTab, ExtractAll, FocusSearch, NewArchiveDialog, OpenArchiveDialog, OpenSettings};
@@ -156,6 +157,24 @@ pub enum Overlay {
     Privacy,
     /// Deleting these entries from the archive, waiting for the user to agree.
     ConfirmDelete(Vec<String>),
+    /// A new name for an entry of the archive, or for an archive file.
+    Rename(RenamePrompt),
+    /// Moving an archive file to the trash, waiting for the user to agree.
+    ConfirmTrash(PathBuf),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RenameTarget {
+    /// A file or folder inside the open archive, by its path there.
+    Entry(String),
+    /// An archive file on disk.
+    File(PathBuf),
+}
+
+pub struct RenamePrompt {
+    pub target: RenameTarget,
+    pub input: Entity<InputState>,
+    pub error: Option<String>,
 }
 
 pub struct MainView {
@@ -171,10 +190,14 @@ pub struct MainView {
     pub vault: Arc<dyn SecretStore>,
     pub update: Option<crate::services::UpdateState>,
     pub notice: Option<Notice>,
+    notice_gen: u64,
     pub overlay: Option<Overlay>,
     pub loading: Option<PathBuf>,
     pub preview: Option<Preview>,
     pub page: Page,
+    pub recent: RecentList,
+    /// Opens an unpacked file with the program the system uses for it. Replaced in tests.
+    pub opener: Arc<dyn Fn(&Path) + Send + Sync>,
     polling: bool,
     /// Tasks already reported, so each result is announced once.
     announced: HashSet<TaskId>,
@@ -276,10 +299,13 @@ impl MainView {
             vault: Arc::new(MemoryStore::default()),
             update: None,
             notice: None,
+            notice_gen: 0,
             overlay: None,
             loading: None,
             preview: None,
             page: Page::Archive,
+            recent: RecentList::default(),
+            opener: Arc::new(crate::services::open_file_with_system),
             polling: false,
             announced: HashSet::new(),
             tests: HashMap::new(),
@@ -312,9 +338,36 @@ impl MainView {
         }
     }
 
+    /// Shows a message in the status bar for a few seconds. Errors stay a little longer.
     pub(crate) fn say(&mut self, notice: Notice, cx: &mut Context<Self>) {
+        self.notice_gen += 1;
+        let gen_now = self.notice_gen;
+        let secs = match notice {
+            Notice::Info(_) => 6,
+            Notice::Error(_) => 12,
+        };
         self.notice = Some(notice);
+        cx.spawn(async move |this, cx| {
+            cx.background_executor()
+                .timer(Duration::from_secs(secs))
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                // A newer message, or the user moving on, has already replaced this one.
+                if this.notice_gen == gen_now && this.notice.is_some() {
+                    this.notice = None;
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
         cx.notify();
+    }
+
+    /// The user moved on to something else: what the last action reported no longer
+    /// belongs in the status bar, which goes back to describing what is on screen.
+    fn leave_notice(&mut self) {
+        self.notice_gen += 1;
+        self.notice = None;
     }
 
     /// Pushes the active archive, folder and search text into the list.
@@ -412,6 +465,11 @@ impl MainView {
         if ix < self.archives.len() {
             self.archives.remove(ix);
             self.active = self.active.min(self.archives.len().saturating_sub(1));
+            if self.archives.is_empty() {
+                // The welcome page has no pages to switch between.
+                self.page = Page::Archive;
+            }
+            self.leave_notice();
             self.apply_view(cx);
         }
     }
@@ -420,12 +478,19 @@ impl MainView {
         if ix < self.archives.len() {
             self.active = ix;
             self.page = Page::Archive;
+            self.leave_notice();
             self.apply_view(cx);
         }
     }
 
     pub fn show_page(&mut self, page: Page, cx: &mut Context<Self>) {
+        if self.page != page {
+            self.leave_notice();
+        }
         self.page = page;
+        if page == Page::Recent {
+            self.refresh_recent(cx);
+        }
         cx.notify();
     }
 
@@ -495,6 +560,7 @@ impl MainView {
             a.cwd = rz_core::clean_path(dir);
             a.selected = None;
         }
+        self.leave_notice();
         self.preview = None;
         self.apply_view(cx);
     }
@@ -523,17 +589,28 @@ impl MainView {
                     if let Some(a) = self.current_mut() {
                         a.selected = Some(path);
                     }
+                    self.leave_notice();
                     self.load_preview(cx);
                     cx.notify();
                 }
             }
             TableEvent::DoubleClickedRow(ix) => {
-                if let Some(row) = row_at(*ix, cx)
-                    && row.kind == RowKind::Dir
-                {
-                    // Leaving a search by opening a folder also clears the search.
-                    self.search.update(cx, |s, cx| s.set_value("", window, cx));
-                    self.navigate(&row.path, cx);
+                if let Some(row) = row_at(*ix, cx) {
+                    match row.kind {
+                        RowKind::Dir => {
+                            // Leaving a search by opening a folder also clears the search.
+                            self.search.update(cx, |s, cx| s.set_value("", window, cx));
+                            self.navigate(&row.path, cx);
+                        }
+                        // Like in a folder: a double click opens the file with its program.
+                        RowKind::File => {
+                            if let Some(a) = self.current_mut() {
+                                a.selected = Some(row.path);
+                            }
+                            self.open_selected(cx);
+                        }
+                        RowKind::Link => {}
+                    }
                 }
             }
             _ => {}
@@ -700,15 +777,347 @@ impl MainView {
     fn submit_edit(&mut self, edit: rz_app::modify::Edit, cx: &mut Context<Self>) {
         let Some(a) = self.current() else { return };
         let archive = a.path.clone();
+        self.submit_edit_on(archive, edit, cx);
+    }
+
+    /// Queues a change to an open archive, which need not be the one on screen.
+    fn submit_edit_on(
+        &mut self,
+        archive: PathBuf,
+        edit: rz_app::modify::Edit,
+        cx: &mut Context<Self>,
+    ) {
+        let password = self
+            .archives
+            .iter()
+            .find(|a| a.path == archive)
+            .and_then(|a| a.password.clone());
+        let mut opts = self.settings.extract_options(password);
+        opts.only = None;
         let spec = JobSpec::Edit {
             archive: archive.clone(),
             edit,
-            opts: self.extract_options(None),
+            opts,
             level: self.settings.default_level,
             encoding: self.settings.forced_encoding().map(str::to_string),
         };
         let id = self.submit(spec, cx);
         self.edits.insert(id, archive);
+    }
+
+    // ----- renaming ---------------------------------------------------------------------
+
+    fn open_rename(
+        &mut self,
+        target: RenameTarget,
+        current: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let input = cx.new(|cx| InputState::new(window, cx).placeholder("新名称"));
+        input.update(cx, |s, cx| s.set_value(current, window, cx));
+        self.overlay = Some(Overlay::Rename(RenamePrompt {
+            target,
+            input,
+            error: None,
+        }));
+        cx.notify();
+    }
+
+    /// Renames the picked file or folder inside the archive.
+    pub fn ask_rename_entry(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let picked = self.picked_paths(cx);
+        let [path] = picked.as_slice() else { return };
+        if !self.can_edit() {
+            return;
+        }
+        let name = path.rsplit('/').next().unwrap_or(path).to_string();
+        self.open_rename(RenameTarget::Entry(path.clone()), &name, window, cx);
+    }
+
+    /// Renames the selected recent archive on disk.
+    pub fn ask_rename_file(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(item) = self.recent.selected_item().filter(|i| i.exists) else {
+            return;
+        };
+        let (path, name) = (item.path.clone(), item.name.clone());
+        self.open_rename(RenameTarget::File(path), &name, window, cx);
+    }
+
+    pub fn submit_rename(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(Overlay::Rename(mut prompt)) = self.overlay.take() else {
+            return;
+        };
+        let name = prompt.input.read(cx).value().trim().to_string();
+        if !rz_app::modify::valid_name(&name) {
+            prompt.error = Some("名称不能为空,也不能含有 / \\ : * ? \" < > |".into());
+            self.overlay = Some(Overlay::Rename(prompt));
+            cx.notify();
+            return;
+        }
+        match prompt.target {
+            RenameTarget::Entry(path) => {
+                if path.rsplit('/').next() != Some(name.as_str()) {
+                    self.submit_edit(
+                        rz_app::modify::Edit::Rename {
+                            path,
+                            new_name: name,
+                        },
+                        cx,
+                    );
+                }
+            }
+            RenameTarget::File(from) => self.rename_file(from, name, window, cx),
+        }
+        cx.notify();
+    }
+
+    fn rename_file(
+        &mut self,
+        from: PathBuf,
+        name: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(to) = from.parent().map(|d| d.join(&name)) else {
+            return;
+        };
+        if to == from {
+            return;
+        }
+        let (a, b) = (from.clone(), to.clone());
+        cx.spawn_in(window, async move |this, cx| {
+            let result = cx
+                .background_executor()
+                .spawn(async move {
+                    // `rename` would silently replace an existing file on most systems.
+                    if b.exists() {
+                        return Err(std::io::Error::from(std::io::ErrorKind::AlreadyExists));
+                    }
+                    std::fs::rename(&a, &b)
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| match result {
+                Ok(()) => {
+                    for r in &mut this.settings.recent {
+                        if *r == from {
+                            *r = to.clone();
+                        }
+                    }
+                    for a in &mut this.archives {
+                        if a.path == from {
+                            a.path = to.clone();
+                        }
+                    }
+                    this.save_settings();
+                    this.recent.selected = Some(to);
+                    this.refresh_recent(cx);
+                    this.say(Notice::Info("已重命名".into()), cx);
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => this.say(
+                    Notice::Error("这个文件夹里已经有同名文件,换一个名字".into()),
+                    cx,
+                ),
+                Err(e) => this.say(Notice::Error(format!("重命名失败:{e}")), cx),
+            });
+        })
+        .detach();
+    }
+
+    // ----- recent archives --------------------------------------------------------------
+
+    /// Reads the sizes and dates of the recent files in the background.
+    pub fn refresh_recent(&mut self, cx: &mut Context<Self>) {
+        let paths = self.settings.recent.clone();
+        cx.spawn(async move |this, cx| {
+            let items = cx
+                .background_executor()
+                .spawn(async move { recent::scan(&paths) })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                this.recent.set_items(items);
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub fn select_recent(&mut self, path: PathBuf, cx: &mut Context<Self>) {
+        self.recent.selected = Some(path);
+        self.leave_notice();
+        cx.notify();
+    }
+
+    pub fn sort_recent(&mut self, key: RecentSort, cx: &mut Context<Self>) {
+        self.recent.sort_by(key);
+        cx.notify();
+    }
+
+    /// Takes a file off the list; the file itself stays where it is.
+    pub fn forget_recent(&mut self, path: &Path, cx: &mut Context<Self>) {
+        self.settings.recent.retain(|p| p != path);
+        self.save_settings();
+        self.recent.items.retain(|i| i.path != path);
+        self.recent.selected = None;
+        cx.notify();
+    }
+
+    pub fn clear_recent(&mut self, cx: &mut Context<Self>) {
+        self.settings.recent.clear();
+        self.save_settings();
+        self.recent.set_items(Vec::new());
+        self.recent.selected = None;
+        cx.notify();
+    }
+
+    /// Unpacks the selected recent archive next to it, optionally into a folder named
+    /// after it.
+    pub fn extract_recent(&mut self, into_named_folder: bool, cx: &mut Context<Self>) {
+        let Some(item) = self.recent.selected_item().filter(|i| i.exists) else {
+            return;
+        };
+        let archive = item.path.clone();
+        let Some(parent) = archive.parent() else {
+            return;
+        };
+        let dest = if into_named_folder {
+            parent.join(recent::archive_stem(&archive))
+        } else {
+            parent.to_path_buf()
+        };
+        let spec = JobSpec::Extract {
+            archive,
+            dest,
+            opts: self.settings.extract_options(None),
+            smart: false,
+            encoding: self.settings.forced_encoding().map(str::to_string),
+        };
+        self.submit(spec, cx);
+    }
+
+    pub fn ask_trash(&mut self, cx: &mut Context<Self>) {
+        if let Some(item) = self.recent.selected_item().filter(|i| i.exists) {
+            self.overlay = Some(Overlay::ConfirmTrash(item.path.clone()));
+            cx.notify();
+        }
+    }
+
+    /// Moves the archive to the system trash, so it can still be brought back.
+    pub fn confirm_trash(&mut self, cx: &mut Context<Self>) {
+        let Some(Overlay::ConfirmTrash(path)) = self.overlay.take() else {
+            return;
+        };
+        cx.notify();
+        cx.spawn(async move |this, cx| {
+            let target = path.clone();
+            let result = cx
+                .background_executor()
+                .spawn(async move { rz_services::move_to_trash(&target) })
+                .await;
+            let _ = this.update(cx, |this, cx| match result {
+                Ok(()) => {
+                    // It is gone from disk, so it must not stay open or listed.
+                    if let Some(ix) = this.archives.iter().position(|a| a.path == path) {
+                        this.close_tab(ix, cx);
+                    }
+                    this.forget_recent(&path, cx);
+                    this.say(Notice::Info("已移到废纸篓 / 回收站".into()), cx);
+                }
+                Err(e) => this.say(Notice::Error(format!("没能删除:{e}")), cx),
+            });
+        })
+        .detach();
+    }
+
+    // ----- opening a file from inside an archive ------------------------------------------
+
+    /// Watches a file that was unpacked for viewing. When the program that opened it saves
+    /// a change, the new content goes back into the archive.
+    ///
+    /// The check runs every moment and only acts once the file has stopped changing, so a
+    /// program that saves in several steps does not trigger several rewrites.
+    fn watch_scratch(
+        &mut self,
+        scratch: PathBuf,
+        archive: PathBuf,
+        entry: String,
+        cx: &mut Context<Self>,
+    ) {
+        fn stamp(path: &Path) -> Option<(Option<std::time::SystemTime>, u64)> {
+            let m = std::fs::metadata(path).ok()?;
+            Some((m.modified().ok(), m.len()))
+        }
+        cx.spawn(async move |this, cx| {
+            let first = {
+                let p = scratch.clone();
+                cx.background_executor()
+                    .spawn(async move { stamp(&p) })
+                    .await
+            };
+            let (mut saved, mut waiting) = (first, None);
+            let mut missing = 0u32;
+            loop {
+                cx.background_executor()
+                    .timer(Duration::from_millis(1200))
+                    .await;
+                let p = scratch.clone();
+                let now = cx
+                    .background_executor()
+                    .spawn(async move { stamp(&p) })
+                    .await;
+                // Closing the archive, or the scratch file going away, ends the watch.
+                let open = this
+                    .update(cx, |this, _| {
+                        this.archives.iter().any(|a| a.path == archive)
+                    })
+                    .unwrap_or(false);
+                if !open {
+                    break;
+                }
+                let Some(now) = now else {
+                    // Some programs replace the file by deleting and recreating it.
+                    missing += 1;
+                    if missing > 50 {
+                        break;
+                    }
+                    continue;
+                };
+                missing = 0;
+                if Some(now) == saved {
+                    waiting = None;
+                    continue;
+                }
+                if waiting != Some(now) {
+                    waiting = Some(now);
+                    continue;
+                }
+                // Changed, and unchanged since the last look: save it back.
+                let (scratch2, archive2, entry2) =
+                    (scratch.clone(), archive.clone(), entry.clone());
+                let sent = this
+                    .update(cx, |this, cx| {
+                        // One rewrite at a time per archive; try again on the next look.
+                        if this.edits.values().any(|p| *p == archive2) {
+                            return false;
+                        }
+                        this.submit_edit_on(
+                            archive2,
+                            rz_app::modify::Edit::Replace {
+                                entry: entry2,
+                                with: scratch2,
+                            },
+                            cx,
+                        );
+                        true
+                    })
+                    .unwrap_or(false);
+                if sent {
+                    saved = Some(now);
+                    waiting = None;
+                }
+            }
+        })
+        .detach();
     }
 
     /// Reads the archive again after it was changed, keeping the folder being shown.
@@ -733,7 +1142,14 @@ impl MainView {
                             while !a.cwd.is_empty() && !a.tree.is_dir(&a.cwd) {
                                 a.cwd = rz_app::browse::parent_dir(&a.cwd);
                             }
-                            a.selected = None;
+                            // Keep the pick when the item is still there, so saving a file
+                            // from its editor does not lose the user's place.
+                            if a.selected
+                                .as_deref()
+                                .is_some_and(|s| a.tree.find(s).is_none())
+                            {
+                                a.selected = None;
+                            }
                             a.verified = None;
                         }
                         this.preview = None;
@@ -748,7 +1164,7 @@ impl MainView {
 
     /// Unpacks the picked file to a scratch folder and opens it with the program the
     /// system uses for that kind of file.
-    pub fn preview_selected(&mut self, cx: &mut Context<Self>) {
+    pub fn open_selected(&mut self, cx: &mut Context<Self>) {
         let Some(row) = self.selected_row() else {
             self.say(Notice::Info("先在列表里选一个文件".into()), cx);
             return;
@@ -770,6 +1186,9 @@ impl MainView {
         let (archive, password) = (a.path.clone(), a.password.clone());
         let encoding = self.settings.forced_encoding().map(str::to_string);
         let name = crate::services::scratch_name(&row.name);
+        // Formats that can be rewritten get their changes saved back; the rest are read-only.
+        let writable = rz_app::modify::is_editable(&archive);
+        let (entry_path, archive_key) = (row.path.clone(), archive.clone());
         self.say(Notice::Info(format!("正在准备 {}…", row.name)), cx);
         cx.spawn(async move |this, cx| {
             let result = cx
@@ -787,9 +1206,19 @@ impl MainView {
                 .await;
             let _ = this.update(cx, |this, cx| match result {
                 Ok(path) => {
-                    crate::services::open_file_with_system(&path);
-                    this.notice = None;
-                    cx.notify();
+                    (this.opener)(&path);
+                    if writable {
+                        this.say(
+                            Notice::Info("已用系统程序打开;保存后会自动写回压缩包".into()),
+                            cx,
+                        );
+                        this.watch_scratch(path, archive_key, entry_path, cx);
+                    } else {
+                        this.say(
+                            Notice::Info("已用系统程序打开(这种压缩包只读,改动不会写回)".into()),
+                            cx,
+                        );
+                    }
                 }
                 Err(Error::LimitExceeded(_)) => this.say(
                     Notice::Info("文件太大,不适合预览;请用“解压到…”取出来".into()),
@@ -918,16 +1347,19 @@ impl MainView {
                         JobKind::Edit => format!("{what}完成:压缩包现在有 {} 项", s.files),
                         _ => format!("{what}完成:{} 个文件,{}", s.files, format_size(s.bytes)),
                     };
-                    self.notice = Some(Notice::Info(msg));
+                    self.say(Notice::Info(msg), cx);
                     if self.settings.open_folder_when_done && t.kind == JobKind::Extract {
                         cx.reveal_path(&s.output);
                     }
                 }
                 (TaskState::Failed, Some(err), _) if err.code == ErrorCode::Password => {
-                    self.notice = Some(Notice::Error(format!("{}需要密码", t.title)));
+                    self.say(Notice::Error(format!("{}需要密码", t.title)), cx);
                 }
                 (TaskState::Failed, Some(err), _) => {
-                    self.notice = Some(Notice::Error(format!("{}失败:{}", t.title, err.message)));
+                    self.say(
+                        Notice::Error(format!("{}失败:{}", t.title, err.message)),
+                        cx,
+                    );
                 }
                 _ => {}
             }
@@ -1338,12 +1770,22 @@ impl MainView {
             .into_any_element()
     }
 
-    fn render_toolbar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    /// The buttons follow what the user is doing: files of an archive, or the list of
+    /// recent archives.
+    fn render_toolbar(&self, cx: &mut Context<Self>) -> AnyElement {
+        match self.page {
+            Page::Archive => self.render_archive_toolbar(cx).into_any_element(),
+            Page::Recent => self.render_recent_toolbar(cx).into_any_element(),
+        }
+    }
+
+    fn render_archive_toolbar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let p = palette(cx);
         let has = self.current().is_some();
         let has_sel = self.current().is_some_and(|a| a.selected.is_some())
             || !self.table.read(cx).delegate().marked().is_empty();
         let editable = self.can_edit();
+        let one_picked = self.picked_paths(cx).len() == 1;
         // Previews open one file at a time.
         let can_preview = self.selected_row().is_some_and(|r| r.kind == RowKind::File)
             && self.table.read(cx).delegate().marked().len() <= 1;
@@ -1384,6 +1826,14 @@ impl MainView {
                     .on_click(cx.listener(|this, _, _, cx| this.start_test(cx))),
             )
             .child(
+                Button::new("rename")
+                    .ghost()
+                    .icon(IconName::Replace)
+                    .label("重命名")
+                    .disabled(!one_picked || !editable)
+                    .on_click(cx.listener(|this, _, window, cx| this.ask_rename_entry(window, cx))),
+            )
+            .child(
                 Button::new("delete")
                     .ghost()
                     .icon(Icon::new(gpui_kit::assets::IconName::Trash))
@@ -1399,7 +1849,7 @@ impl MainView {
                     .icon(IconName::Eye)
                     .label("预览")
                     .disabled(!can_preview)
-                    .on_click(cx.listener(|this, _, _, cx| this.preview_selected(cx))),
+                    .on_click(cx.listener(|this, _, _, cx| this.open_selected(cx))),
             )
             .child(div().flex_1())
             .child(
@@ -1564,66 +2014,150 @@ impl MainView {
             })
     }
 
-    /// The archives opened lately, as a page of their own.
+    /// The archives opened lately, as a list like the one in a folder: one line each, with
+    /// where it is, when it was made and last changed, and click-to-sort column titles.
     fn render_recent_page(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let p = palette(cx);
-        let rows = self
-            .settings
-            .recent
+        let mono = cx.theme().mono_font_family.clone();
+        let list = &self.recent;
+        let time = |t: Option<i64>| t.map_or_else(|| "—".to_string(), crate::local_time);
+        // Column widths; name and place share what is left.
+        const W_TIME: f32 = 136.;
+        const W_SIZE: f32 = 76.;
+
+        let title = |id: &'static str, label: &'static str, key: RecentSort, right: bool| {
+            let on = list.sort == key;
+            h_flex()
+                .id(id)
+                .gap_1()
+                .h_full()
+                .cursor_pointer()
+                .when(right, |d| d.justify_end())
+                .text_color(if on { p.fg } else { p.fg3 })
+                .hover(|d| d.text_color(p.fg))
+                .on_click(cx.listener(move |this, _, _, cx| this.sort_recent(key, cx)))
+                .child(label)
+                .when(on, |d| {
+                    d.child(
+                        Icon::new(if list.ascending {
+                            IconName::ArrowUp
+                        } else {
+                            IconName::ArrowDown
+                        })
+                        .size_3(),
+                    )
+                })
+        };
+        let header = h_flex()
+            .h(px(32.))
+            .px_3()
+            .gap_3()
+            .flex_none()
+            .text_size(px(12.))
+            .border_b_1()
+            .border_color(p.line)
+            .child(
+                title("recent-th-name", "名称", RecentSort::Name, false)
+                    .flex_1()
+                    .min_w_0(),
+            )
+            .child(
+                title("recent-th-folder", "位置", RecentSort::Folder, false)
+                    .flex_1()
+                    .min_w_0(),
+            )
+            .child(title("recent-th-created", "创建时间", RecentSort::Created, false).w(px(W_TIME)))
+            .child(
+                title(
+                    "recent-th-modified",
+                    "修改时间",
+                    RecentSort::Modified,
+                    false,
+                )
+                .w(px(W_TIME)),
+            )
+            .child(title("recent-th-size", "大小", RecentSort::Size, true).w(px(W_SIZE)));
+
+        let rows = list
+            .items
             .iter()
             .enumerate()
-            .map(|(ix, path)| {
-                let target = path.clone();
-                let name = path
-                    .file_name()
-                    .map(|n| n.to_string_lossy().into_owned())
-                    .unwrap_or_default();
-                let folder = path
-                    .parent()
-                    .map(|d| d.to_string_lossy().into_owned())
-                    .unwrap_or_default();
-                let open = self.archives.iter().any(|a| a.path == *path);
+            .map(|(ix, item)| {
+                let on = list.selected.as_ref() == Some(&item.path);
+                let open = self.archives.iter().any(|a| a.path == item.path);
+                let (single, double) = (item.path.clone(), item.path.clone());
+                let dim = if item.exists { p.fg } else { p.fg3 };
                 h_flex()
                     .id(("recent", ix))
-                    .gap_3()
+                    .h(px(36.))
                     .px_3()
-                    .h(px(56.))
-                    .rounded(px(10.))
+                    .gap_3()
+                    .flex_none()
                     .cursor_pointer()
-                    .hover(|d| d.bg(p.hover))
-                    .on_click(cx.listener(move |this, _, window, cx| {
-                        this.open_path(target.clone(), None, window, cx);
+                    .text_color(dim)
+                    .when(on, |d| d.bg(p.accent_soft))
+                    .when(!on, |d| d.hover(|d| d.bg(p.hover)))
+                    .on_click(cx.listener(move |this, ev: &ClickEvent, window, cx| {
+                        this.select_recent(single.clone(), cx);
+                        if ev.click_count() >= 2 {
+                            this.open_path(double.clone(), None, window, cx);
+                        }
                     }))
                     .child(
-                        div()
-                            .size(px(36.))
-                            .rounded(px(10.))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .flex_none()
-                            .bg(p.accent_soft)
-                            .text_color(p.accent)
-                            .child(Icon::new(gpui_kit::assets::IconName::FileArchive).size_5()),
-                    )
-                    .child(
-                        v_flex()
+                        h_flex()
                             .flex_1()
                             .min_w_0()
-                            .child(div().text_size(px(14.)).child(name))
+                            .gap_2()
+                            .child(
+                                Icon::new(gpui_kit::assets::IconName::FileArchive)
+                                    .size_4()
+                                    .text_color(if on { p.accent } else { p.fg3 }),
+                            )
                             .child(
                                 div()
-                                    .text_size(px(12.))
-                                    .text_color(p.fg3)
                                     .overflow_hidden()
                                     .text_ellipsis()
-                                    .child(folder),
-                            ),
+                                    .child(item.name.clone()),
+                            )
+                            .when(open, |d| {
+                                d.child(div().text_size(px(11.)).text_color(p.fg3).child("已打开"))
+                            }),
                     )
-                    .when(open, |d| {
-                        d.child(div().text_size(px(12.)).text_color(p.fg3).child("已打开"))
-                    })
-                    .child(Icon::new(IconName::ChevronRight).size_4().text_color(p.fg3))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .overflow_hidden()
+                            .text_ellipsis()
+                            .text_size(px(12.))
+                            .text_color(p.fg3)
+                            .child(item.folder.clone()),
+                    )
+                    .child(
+                        div()
+                            .w(px(W_TIME))
+                            .text_size(px(12.))
+                            .font_family(mono.clone())
+                            .child(time(item.created)),
+                    )
+                    .child(
+                        div()
+                            .w(px(W_TIME))
+                            .text_size(px(12.))
+                            .font_family(mono.clone())
+                            .child(time(item.modified)),
+                    )
+                    .child(
+                        div()
+                            .w(px(W_SIZE))
+                            .text_right()
+                            .text_size(px(12.))
+                            .font_family(mono.clone())
+                            .child(match (item.exists, item.size) {
+                                (true, Some(n)) => format_size(n),
+                                _ => "已移走".to_string(),
+                            }),
+                    )
                     .into_any_element()
             })
             .collect::<Vec<_>>();
@@ -1631,26 +2165,209 @@ impl MainView {
             .id("recent-page")
             .flex_1()
             .min_w_0()
-            .p_6()
-            .gap_4()
-            .child(
-                v_flex()
-                    .gap_1()
-                    .child(div().text_size(px(18.)).child("最近打开"))
-                    .child(
-                        div()
-                            .text_color(p.fg3)
-                            .child("点一下就在新标签页里打开,文件已被移走时会提示"),
-                    ),
-            )
+            .child(header)
             .when(rows.is_empty(), |d| {
                 d.child(
                     div()
+                        .p_6()
                         .text_color(p.fg3)
                         .child("还没有打开过压缩包。打开的压缩包会记在这里。"),
                 )
             })
-            .child(v_flex().gap_1().children(rows))
+            .child(
+                v_flex()
+                    .id("recent-rows")
+                    .flex_1()
+                    .min_h_0()
+                    .overflow_y_scroll()
+                    .children(rows),
+            )
+    }
+
+    /// Toolbar of the recent page: what can be done with the archive picked in the list,
+    /// which depends on the archive.
+    fn render_recent_toolbar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let p = palette(cx);
+        let bar = h_flex()
+            .id("toolbar")
+            .h(px(46.))
+            .px_3()
+            .gap_1()
+            .items_center()
+            .flex_none()
+            .border_b_1()
+            .border_color(p.line);
+        let divider = || div().w(px(1.)).h(px(16.)).mx_1p5().bg(p.line);
+        let Some(item) = self.recent.selected_item() else {
+            // Nothing picked: the list itself is what there is to work with.
+            return bar
+                .child(
+                    Button::new("recent-open-other")
+                        .primary()
+                        .icon(IconName::FolderOpen)
+                        .label("打开压缩包…")
+                        .on_click(cx.listener(|this, _, window, cx| this.pick_archive(window, cx))),
+                )
+                .child(
+                    Button::new("recent-new")
+                        .ghost()
+                        .icon(IconName::Plus)
+                        .label("新建压缩")
+                        .on_click(cx.listener(|this, _, window, cx| this.pick_sources(window, cx))),
+                )
+                .child(divider())
+                .child(
+                    Button::new("recent-clear")
+                        .ghost()
+                        .icon(IconName::Delete)
+                        .label("清空记录")
+                        .disabled(self.settings.recent.is_empty())
+                        .on_click(cx.listener(|this, _, _, cx| this.clear_recent(cx))),
+                );
+        };
+        let (path, exists) = (item.path.clone(), item.exists);
+        // A file that is gone can only be taken off the list.
+        // A single-file format (.gz and the like) has no folder of files to speak of.
+        let several = !matches!(
+            rz_formats::OutputFormat::from_path(&path),
+            Some(rz_formats::OutputFormat::Single(_))
+        );
+        let forget = path.clone();
+        bar.when(exists, |d| {
+            d.child(
+                Button::new("recent-open")
+                    .primary()
+                    .icon(IconName::FolderOpen)
+                    .label("打开")
+                    .on_click(cx.listener({
+                        let path = path.clone();
+                        move |this, _, window, cx| this.open_path(path.clone(), None, window, cx)
+                    })),
+            )
+            .child(
+                Button::new("recent-extract-here")
+                    .ghost()
+                    .icon(IconName::ArrowDown)
+                    .label("解压到当前文件夹")
+                    .on_click(cx.listener(|this, _, _, cx| this.extract_recent(false, cx))),
+            )
+            .when(several, |d| {
+                d.child(
+                    Button::new("recent-extract-named")
+                        .ghost()
+                        .icon(IconName::Folder)
+                        .label("解压到同名文件夹")
+                        .on_click(cx.listener(|this, _, _, cx| this.extract_recent(true, cx))),
+                )
+            })
+            .child(divider())
+            .child(
+                Button::new("recent-reveal")
+                    .ghost()
+                    .icon(IconName::ExternalLink)
+                    .label("在文件夹中显示")
+                    .on_click(cx.listener({
+                        let path = path.clone();
+                        move |_, _, _, cx| cx.reveal_path(&path)
+                    })),
+            )
+            .child(
+                Button::new("recent-rename")
+                    .ghost()
+                    .icon(IconName::Replace)
+                    .label("重命名")
+                    .on_click(cx.listener(|this, _, window, cx| this.ask_rename_file(window, cx))),
+            )
+            .child(
+                Button::new("recent-trash")
+                    .ghost()
+                    .icon(Icon::new(gpui_kit::assets::IconName::Trash))
+                    .label("删除")
+                    .text_color(p.danger)
+                    .on_click(cx.listener(|this, _, _, cx| this.ask_trash(cx))),
+            )
+            .child(divider())
+        })
+        .child(
+            Button::new("recent-forget")
+                .ghost()
+                .icon(IconName::Close)
+                .label("从列表移除")
+                .on_click(cx.listener(move |this, _, _, cx| this.forget_recent(&forget, cx))),
+        )
+    }
+
+    fn rename_card(&self, prompt: &RenamePrompt, cx: &mut Context<Self>) -> impl IntoElement {
+        let p = palette(cx);
+        let title = match prompt.target {
+            RenameTarget::Entry(_) => "重命名(压缩包内)",
+            RenameTarget::File(_) => "重命名压缩包文件",
+        };
+        v_flex()
+            .gap_3()
+            .child(div().text_size(px(16.)).child(title))
+            .child(Input::new(&prompt.input))
+            .when_some(prompt.error.clone(), |d, e| {
+                d.child(div().text_color(p.danger).child(e))
+            })
+            .child(
+                h_flex()
+                    .justify_end()
+                    .gap_2()
+                    .child(
+                        Button::new("rename-cancel")
+                            .outline()
+                            .icon(IconName::Close)
+                            .label("取消")
+                            .on_click(cx.listener(|this, _, _, cx| this.close_overlay(cx))),
+                    )
+                    .child(
+                        Button::new("rename-ok")
+                            .primary()
+                            .icon(IconName::Check)
+                            .label("重命名")
+                            .on_click(
+                                cx.listener(|this, _, window, cx| this.submit_rename(window, cx)),
+                            ),
+                    ),
+            )
+    }
+
+    fn trash_card(&self, path: &Path, cx: &mut Context<Self>) -> impl IntoElement {
+        let p = palette(cx);
+        let name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        v_flex()
+            .gap_3()
+            .child(div().text_size(px(16.)).child(format!("删除“{name}”?")))
+            .child(
+                div()
+                    .text_color(p.fg2)
+                    .child("文件会被移到废纸篓(Windows 为回收站),需要时还能恢复。"),
+            )
+            .child(
+                h_flex()
+                    .justify_end()
+                    .gap_2()
+                    .child(
+                        Button::new("trash-cancel")
+                            .outline()
+                            .icon(IconName::Close)
+                            .label("取消")
+                            .on_click(cx.listener(|this, _, _, cx| this.close_overlay(cx))),
+                    )
+                    .child(
+                        Button::new("trash-ok")
+                            .danger()
+                            .bg(p.danger)
+                            .text_color(hsla(0., 0., 1., 1.))
+                            .icon(Icon::new(gpui_kit::assets::IconName::Trash))
+                            .label("删除")
+                            .on_click(cx.listener(|this, _, _, cx| this.confirm_trash(cx))),
+                    ),
+            )
     }
 
     fn render_sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -2156,6 +2873,16 @@ impl MainView {
                     .map(|n| n.to_string_lossy().into_owned())
                     .unwrap_or_default()
             )),
+            // The list of recent archives has its own description, not the open archive's.
+            (None, None, Some(_)) if self.page == Page::Recent => {
+                let total = self.recent.items.len();
+                let missing = self.recent.items.iter().filter(|i| !i.exists).count();
+                div().text_color(p.fg2).child(if missing > 0 {
+                    format!("{total} 个最近的压缩包 · {missing} 个已移走")
+                } else {
+                    format!("{total} 个最近的压缩包")
+                })
+            }
             (None, None, Some(a)) => {
                 let t = &a.tree;
                 let mono = cx.theme().mono_font_family.clone();
@@ -2250,21 +2977,24 @@ impl MainView {
                         .child(format!("正在下载 {}…", u.version)),
                 ),
             })
-            .when_some(self.current(), |d, a| {
-                let encrypted = a.tree.entries().iter().any(|e| e.encrypted);
-                d.child(
-                    h_flex()
-                        .gap_1p5()
-                        .text_color(p.fg3)
-                        .font_family(cx.theme().mono_font_family.clone())
-                        .child(a.format.to_uppercase())
-                        .when(encrypted, |d| {
-                            d.child("·")
-                                .child(Icon::new(gpui_kit::assets::IconName::Lock).size_3())
-                                .child("已加密")
-                        }),
-                )
-            })
+            .when_some(
+                self.current().filter(|_| self.page == Page::Archive),
+                |d, a| {
+                    let encrypted = a.tree.entries().iter().any(|e| e.encrypted);
+                    d.child(
+                        h_flex()
+                            .gap_1p5()
+                            .text_color(p.fg3)
+                            .font_family(cx.theme().mono_font_family.clone())
+                            .child(a.format.to_uppercase())
+                            .when(encrypted, |d| {
+                                d.child("·")
+                                    .child(Icon::new(gpui_kit::assets::IconName::Lock).size_3())
+                                    .child("已加密")
+                            }),
+                    )
+                },
+            )
     }
 
     fn render_overlay(&self, _: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
@@ -2275,6 +3005,8 @@ impl MainView {
             Overlay::Settings => self.settings_card(cx).into_any_element(),
             Overlay::Privacy => self.privacy_card(cx).into_any_element(),
             Overlay::ConfirmDelete(paths) => self.delete_card(paths, cx).into_any_element(),
+            Overlay::Rename(prompt) => self.rename_card(prompt, cx).into_any_element(),
+            Overlay::ConfirmTrash(path) => self.trash_card(path, cx).into_any_element(),
         };
         Some(
             div()

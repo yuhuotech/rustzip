@@ -42,7 +42,10 @@ fn open_window(
                     .as_deref()
                     .map(Settings::load)
                     .unwrap_or_default();
-                cx.new(|cx| MainView::new(settings, settings_path, window, cx))
+                let view = cx.new(|cx| MainView::new(settings, settings_path, window, cx));
+                // A test must never start a real program on the machine running it.
+                view.update(cx, |v, _| v.opener = std::sync::Arc::new(|_| {}));
+                view
             },
         )
         .expect("open window");
@@ -323,6 +326,241 @@ fn archives_that_cannot_be_rewritten_refuse_to_be_edited(cx: &mut TestAppContext
         v.add_files(vec![gz.clone()], cx)
     });
     cx.update(|cx| assert!(view.read(cx).task_view.is_empty()));
+}
+
+#[gpui_kit::test]
+fn double_clicking_a_file_opens_it_and_saving_it_writes_it_back(cx: &mut TestAppContext) {
+    use std::sync::{Arc, Mutex};
+    let tmp = tempfile::tempdir().unwrap();
+    let archive = make_archive(tmp.path(), "a.zip", None);
+    let (handle, view) = open_window(cx, None);
+    open_sync(cx, handle, &view, &archive, None);
+    with_view(cx, handle, &view, |v, _, cx| v.navigate("proj", cx));
+
+    // Instead of starting a program, remember what would have been opened.
+    let opened: Arc<Mutex<Vec<(PathBuf, String)>>> = Arc::default();
+    let sink = opened.clone();
+    cx.update(|cx| {
+        view.update(cx, |v, _| {
+            v.opener = Arc::new(move |p: &Path| {
+                let text = fs::read_to_string(p).unwrap_or_default();
+                sink.lock().unwrap().push((p.to_path_buf(), text));
+            });
+        })
+    });
+    let table = cx.update(|cx| view.read(cx).table.clone());
+    // Row 2 is readme.txt.
+    cx.update_window(handle.into(), |_, _, cx| {
+        table.update(cx, |_, cx| cx.emit(TableEvent::DoubleClickedRow(2)));
+    })
+    .unwrap();
+    cx.executor().advance_clock(Duration::from_millis(50));
+    cx.run_until_parked();
+    let (scratch, text) = opened.lock().unwrap().first().cloned().expect("opened");
+    assert_eq!(text, "hello rustzip");
+    assert_eq!(scratch.file_name().unwrap(), "readme.txt");
+
+    // The program saves a change: after it has settled, it goes back into the archive.
+    fs::write(&scratch, "changed in the editor").unwrap();
+    for _ in 0..6 {
+        cx.executor().advance_clock(Duration::from_millis(1300));
+        cx.run_until_parked();
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    wait_for_tasks(cx, handle, &view);
+    cx.run_until_parked();
+    let out = tmp.path().join("out");
+    let mut reader = rz_formats::open(&archive).unwrap();
+    rz_engine::extract(
+        &mut *reader,
+        &out,
+        &ExtractOptions::default(),
+        &CancelToken::new(),
+        &mut NoProgress,
+    )
+    .unwrap();
+    assert_eq!(
+        fs::read_to_string(out.join("proj/readme.txt")).unwrap(),
+        "changed in the editor"
+    );
+    assert_eq!(
+        fs::read_to_string(out.join("proj/src/main.rs")).unwrap(),
+        "fn main() {}"
+    );
+    let _ = fs::remove_dir_all(scratch.parent().and_then(Path::parent).unwrap());
+}
+
+#[gpui_kit::test]
+fn notices_fade_and_disappear_when_the_user_moves_on(cx: &mut TestAppContext) {
+    let tmp = tempfile::tempdir().unwrap();
+    let archive = make_archive(tmp.path(), "a.zip", None);
+    let (handle, view) = open_window(cx, None);
+    open_sync(cx, handle, &view, &archive, None);
+
+    // A result is shown for a few seconds and then goes by itself.
+    with_view(cx, handle, &view, |v, _, cx| v.start_test(cx));
+    wait_for_tasks(cx, handle, &view);
+    cx.update(|cx| assert!(view.read(cx).notice.is_some()));
+    cx.executor().advance_clock(Duration::from_secs(7));
+    cx.run_until_parked();
+    cx.update(|cx| assert!(view.read(cx).notice.is_none()));
+
+    // Or as soon as the user goes to another folder, page or file.
+    with_view(cx, handle, &view, |v, _, cx| v.start_test(cx));
+    wait_for_tasks(cx, handle, &view);
+    cx.update(|cx| assert!(view.read(cx).notice.is_some()));
+    with_view(cx, handle, &view, |v, _, cx| v.navigate("proj", cx));
+    cx.update(|cx| assert!(view.read(cx).notice.is_none()));
+
+    with_view(cx, handle, &view, |v, _, cx| v.start_test(cx));
+    wait_for_tasks(cx, handle, &view);
+    with_view(cx, handle, &view, |v, _, cx| {
+        v.show_page(rustzip_gui::view::Page::Recent, cx)
+    });
+    cx.update(|cx| assert!(view.read(cx).notice.is_none()));
+}
+
+#[gpui_kit::test]
+fn the_recent_page_selects_sorts_and_acts_on_the_chosen_archive(cx: &mut TestAppContext) {
+    use rustzip_gui::recent::RecentSort;
+    use rustzip_gui::view::{Overlay as O, Page};
+    let tmp = tempfile::tempdir().unwrap();
+    let a = make_archive(tmp.path(), "alpha.zip", None);
+    let b = make_archive(tmp.path(), "beta.zip", None);
+    let gone = tmp.path().join("gone.zip");
+    let settings_path = tmp.path().join("cfg/settings.json");
+    let settings = Settings {
+        recent: vec![a.clone(), b.clone(), gone.clone()],
+        // The test platform cannot show a folder.
+        open_folder_when_done: false,
+        ..Settings::default()
+    };
+    settings.save(&settings_path).unwrap();
+    let (handle, view) = open_window(cx, Some(settings_path.clone()));
+    open_sync(cx, handle, &view, &a, None);
+    with_view(cx, handle, &view, |v, _, cx| v.show_page(Page::Recent, cx));
+    cx.run_until_parked();
+
+    let names = |cx: &mut TestAppContext| -> Vec<String> {
+        cx.update(|cx| {
+            view.read(cx)
+                .recent
+                .items
+                .iter()
+                .map(|i| i.name.clone())
+                .collect()
+        })
+    };
+    assert_eq!(names(cx).len(), 3);
+    // Missing files are listed, marked as gone, and come last by date.
+    cx.update(|cx| {
+        let items = &view.read(cx).recent.items;
+        assert!(!items.iter().find(|i| i.name == "gone.zip").unwrap().exists);
+        assert!(
+            items
+                .iter()
+                .find(|i| i.name == "beta.zip")
+                .unwrap()
+                .size
+                .is_some()
+        );
+    });
+    with_view(cx, handle, &view, |v, _, cx| {
+        v.sort_recent(RecentSort::Name, cx)
+    });
+    assert_eq!(names(cx), ["alpha.zip", "beta.zip", "gone.zip"]);
+    with_view(cx, handle, &view, |v, _, cx| {
+        v.sort_recent(RecentSort::Name, cx)
+    });
+    assert_eq!(names(cx), ["gone.zip", "beta.zip", "alpha.zip"]);
+
+    // Picking an archive unpacks it next to itself, either loose or into a named folder.
+    with_view(cx, handle, &view, |v, _, cx| v.select_recent(b.clone(), cx));
+    with_view(cx, handle, &view, |v, _, cx| v.extract_recent(true, cx));
+    wait_for_tasks(cx, handle, &view);
+    assert!(tmp.path().join("beta/proj/readme.txt").is_file());
+    with_view(cx, handle, &view, |v, _, cx| v.extract_recent(false, cx));
+    wait_for_tasks(cx, handle, &view);
+    assert!(tmp.path().join("proj/readme.txt").is_file());
+
+    // A rename of the file on disk follows through the list, the tab and the settings.
+    with_view(cx, handle, &view, |v, w, cx| v.ask_rename_file(w, cx));
+    cx.update(|cx| assert!(matches!(&view.read(cx).overlay, Some(O::Rename(_)))));
+    with_view(cx, handle, &view, |v, _, cx| v.close_overlay(cx));
+    with_view(cx, handle, &view, |v, _, cx| v.select_recent(a.clone(), cx));
+    with_view(cx, handle, &view, |v, w, cx| v.ask_rename_file(w, cx));
+    let input = cx.update(|cx| match &view.read(cx).overlay {
+        Some(O::Rename(p)) => p.input.clone(),
+        _ => panic!("rename card"),
+    });
+    cx.update_window(handle.into(), |_, window, cx| {
+        input.update(cx, |s, cx| s.set_value("renamed.zip", window, cx));
+    })
+    .unwrap();
+    with_view(cx, handle, &view, |v, w, cx| v.submit_rename(w, cx));
+    cx.run_until_parked();
+    std::thread::sleep(Duration::from_millis(100));
+    cx.run_until_parked();
+    assert!(tmp.path().join("renamed.zip").is_file());
+    assert!(!a.exists());
+    cx.update(|cx| {
+        let v = view.read(cx);
+        assert_eq!(v.current().unwrap().path, tmp.path().join("renamed.zip"));
+        assert!(v.settings.recent.contains(&tmp.path().join("renamed.zip")));
+    });
+
+    // Forgetting only removes the line; the file stays.
+    with_view(cx, handle, &view, |v, _, cx| v.forget_recent(&b, cx));
+    assert!(b.exists());
+    cx.update(|cx| assert!(!view.read(cx).settings.recent.contains(&b)));
+}
+
+#[gpui_kit::test]
+fn renaming_inside_an_archive_changes_the_entry_and_refuses_bad_names(cx: &mut TestAppContext) {
+    use rustzip_gui::view::Overlay as O;
+    let tmp = tempfile::tempdir().unwrap();
+    let archive = make_archive(tmp.path(), "a.zip", None);
+    let (handle, view) = open_window(cx, None);
+    open_sync(cx, handle, &view, &archive, None);
+    with_view(cx, handle, &view, |v, _, cx| v.navigate("proj", cx));
+    let table = cx.update(|cx| view.read(cx).table.clone());
+    cx.update_window(handle.into(), |_, _, cx| {
+        table.update(cx, |_, cx| cx.emit(TableEvent::SelectRow(2)));
+    })
+    .unwrap();
+
+    let ask = |cx: &mut TestAppContext, name: &str| {
+        with_view(cx, handle, &view, |v, w, cx| v.ask_rename_entry(w, cx));
+        let input = cx.update(|cx| match &view.read(cx).overlay {
+            Some(O::Rename(p)) => p.input.clone(),
+            _ => panic!("rename card"),
+        });
+        cx.update_window(handle.into(), |_, window, cx| {
+            input.update(cx, |s, cx| s.set_value(name, window, cx));
+        })
+        .unwrap();
+        with_view(cx, handle, &view, |v, w, cx| v.submit_rename(w, cx));
+    };
+
+    // A name with a slash is refused and the card stays open with the reason.
+    ask(cx, "a/b.txt");
+    cx.update(|cx| {
+        assert!(matches!(&view.read(cx).overlay, Some(O::Rename(p)) if p.error.is_some()));
+    });
+    with_view(cx, handle, &view, |v, w, cx| {
+        let Some(O::Rename(p)) = &v.overlay else {
+            panic!()
+        };
+        let input = p.input.clone();
+        input.update(cx, |s, cx| s.set_value("说明书.txt", w, cx));
+        v.submit_rename(w, cx);
+    });
+    wait_for_tasks(cx, handle, &view);
+    cx.run_until_parked();
+    draw(cx, handle);
+    assert_eq!(row_names(cx, &view), ["docs", "src", "说明书.txt"]);
+    let (tree, _) = load_archive(&archive, None).unwrap();
+    assert!(tree.find("proj/说明书.txt").is_some() && tree.find("proj/readme.txt").is_none());
 }
 
 #[gpui_kit::test]

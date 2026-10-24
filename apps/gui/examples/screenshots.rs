@@ -154,7 +154,13 @@ fn main() {
         cx.update(gpui_kit::init);
 
         // 1. Nothing open yet.
-        let (handle, view) = window(&mut cx, mode, vec![archive.clone()]);
+        // One archive that exists and two that were moved away or never existed.
+        let recent = vec![
+            archive.clone(),
+            work.path().join("旧项目备份.7z"),
+            work.path().join("photos.zip"),
+        ];
+        let (handle, view) = window(&mut cx, mode, recent);
         shoot(&mut cx, handle, &out_dir, &format!("{tag}-1-empty"));
 
         // 2. An archive open at its top level.
@@ -196,7 +202,20 @@ fn main() {
         act(&mut cx, handle, &view, |v, _, cx| {
             v.show_page(rustzip_gui::view::Page::Recent, cx);
         });
+        // The scan of the files runs in the background; give it a moment.
+        std::thread::sleep(std::time::Duration::from_millis(200));
         shoot(&mut cx, handle, &out_dir, &format!("{tag}-3c-recent"));
+        // With one archive picked, the buttons are the ones for that archive.
+        let pick = archive.clone();
+        act(&mut cx, handle, &view, move |v, _, cx| {
+            v.select_recent(pick, cx);
+        });
+        shoot(
+            &mut cx,
+            handle,
+            &out_dir,
+            &format!("{tag}-3e-recent-picked"),
+        );
         act(&mut cx, handle, &view, |v, _, cx| {
             v.show_page(rustzip_gui::view::Page::Archive, cx);
         });

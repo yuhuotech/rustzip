@@ -8,10 +8,12 @@
 
 mod http;
 mod keychain;
+mod recycle;
 mod sysinfo;
 
 pub use http::{HttpFetcher, HttpSender};
 pub use keychain::KeychainStore;
+pub use recycle::move_to_trash;
 pub use sysinfo::environment;
 
 /// Where the update manifest lives: a file attached to the latest GitHub release.

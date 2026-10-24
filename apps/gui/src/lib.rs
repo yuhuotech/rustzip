@@ -6,6 +6,7 @@
 pub mod assets;
 pub mod brand;
 pub mod launch;
+pub mod recent;
 pub mod rows;
 pub mod services;
 pub mod view;

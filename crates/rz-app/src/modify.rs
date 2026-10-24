@@ -19,6 +19,21 @@ pub enum Edit {
     Delete(Vec<String>),
     /// Copy these files and folders into the folder `into` of the archive (`""` for the top).
     Add { into: String, sources: Vec<PathBuf> },
+    /// Give an entry (file or folder) another name, keeping it in the same folder.
+    Rename { path: String, new_name: String },
+    /// Put the content of a file on disk in place of an existing file entry. Used to save
+    /// a file that was opened from the archive and edited.
+    Replace { entry: String, with: PathBuf },
+}
+
+/// Whether `name` can be the name of one item: no folders, no tricks.
+pub fn valid_name(name: &str) -> bool {
+    !name.is_empty()
+        && name != "."
+        && name != ".."
+        && name.trim() == name
+        && !name.contains(['/', '\\', '\0', ':', '*', '?', '"', '<', '>', '|'])
+        && !name.chars().any(char::is_control)
 }
 
 #[derive(Debug, Default)]
@@ -148,6 +163,45 @@ pub fn edit_archive(
                 }
                 copy_tree(src, &target, cancel)?;
             }
+        }
+        Edit::Rename { path, new_name } => {
+            if !valid_name(new_name) {
+                return Err(Error::UnsafePath(new_name.clone()));
+            }
+            let from = safe_join(&stage, &clean_path(path))?;
+            let to = from
+                .parent()
+                .ok_or_else(|| Error::UnsafePath(path.clone()))?
+                .join(new_name);
+            if fs::symlink_metadata(&from).is_err() {
+                return Err(Error::Io(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    path.clone(),
+                )));
+            }
+            if fs::symlink_metadata(&to).is_ok() {
+                return Err(Error::Io(std::io::Error::new(
+                    std::io::ErrorKind::AlreadyExists,
+                    new_name.clone(),
+                )));
+            }
+            fs::rename(&from, &to)?;
+        }
+        Edit::Replace { entry, with } => {
+            let target = safe_join(&stage, &clean_path(entry))?;
+            // Only an existing file is replaced; a folder or a missing entry means the
+            // archive changed since the file was opened, and guessing would lose data.
+            match fs::symlink_metadata(&target) {
+                Ok(m) if m.is_file() => {}
+                _ => {
+                    return Err(Error::Io(std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        entry.clone(),
+                    )))
+                }
+            }
+            fs::remove_file(&target)?;
+            copy_tree(with, &target, cancel)?;
         }
     }
     cancel.check()?;
@@ -420,6 +474,88 @@ mod tests {
         let r = run(&archive, &Edit::Delete(vec!["../escape".into()]), None);
         assert!(matches!(r, Err(Error::UnsafePath(_))));
         assert_eq!(fs::read(&archive).unwrap(), before);
+    }
+
+    #[test]
+    fn renaming_moves_an_entry_and_refuses_clashes_and_bad_names() {
+        let tmp = tempfile::tempdir().unwrap();
+        let archive = make(tmp.path(), "t.7z", None);
+        let rename = |path: &str, to: &str| {
+            run(
+                &archive,
+                &Edit::Rename {
+                    path: path.into(),
+                    new_name: to.into(),
+                },
+                None,
+            )
+        };
+        rename("data/a.txt", "first.txt").unwrap();
+        // A folder is renamed together with what is inside it.
+        rename("data/sub", "more").unwrap();
+        assert_eq!(
+            names(&archive, None),
+            ["data/first.txt", "data/more/b.txt", "data/more/c.txt"]
+        );
+        let before = fs::read(&archive).unwrap();
+        assert!(matches!(
+            rename("data/first.txt", "more"),
+            Err(Error::Io(_))
+        ));
+        assert!(matches!(
+            rename("data/first.txt", "../x"),
+            Err(Error::UnsafePath(_))
+        ));
+        assert!(matches!(
+            rename("data/first.txt", "a/b"),
+            Err(Error::UnsafePath(_))
+        ));
+        assert!(rename("data/none.txt", "x").is_err());
+        assert_eq!(fs::read(&archive).unwrap(), before);
+        assert!(valid_name("报告 终稿.pdf") && !valid_name(" x") && !valid_name(".."));
+    }
+
+    #[test]
+    fn replacing_a_file_swaps_its_content_and_keeps_everything_else() {
+        let tmp = tempfile::tempdir().unwrap();
+        let archive = make(tmp.path(), "t.zip", None);
+        let edited = tmp.path().join("whatever-name.txt");
+        fs::write(&edited, "edited!").unwrap();
+        run(
+            &archive,
+            &Edit::Replace {
+                entry: "data/sub/b.txt".into(),
+                with: edited.clone(),
+            },
+            None,
+        )
+        .unwrap();
+        assert_eq!(names(&archive, None).len(), 3);
+        let out = tmp.path().join("out");
+        let mut r = rz_formats::open(&archive).unwrap();
+        extract(
+            &mut *r,
+            &out,
+            &ExtractOptions::default(),
+            &CancelToken::new(),
+            &mut NoProgress,
+        )
+        .unwrap();
+        assert_eq!(
+            fs::read_to_string(out.join("data/sub/b.txt")).unwrap(),
+            "edited!"
+        );
+        assert_eq!(fs::read_to_string(out.join("data/a.txt")).unwrap(), "alpha");
+        // An entry that is no longer there is not silently recreated.
+        let r = run(
+            &archive,
+            &Edit::Replace {
+                entry: "data/gone.txt".into(),
+                with: edited,
+            },
+            None,
+        );
+        assert!(r.is_err());
     }
 
     #[test]
