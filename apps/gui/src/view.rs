@@ -887,20 +887,28 @@ impl MainView {
             if !t.state.is_finished() || !self.announced.insert(t.id) {
                 continue;
             }
-            if let Some(path) = self.tests.remove(&t.id) {
-                let verdict = match (&t.state, &t.error) {
-                    (TaskState::Done, _) => Some(true),
-                    (TaskState::Failed, Some(e)) if e.code != ErrorCode::Password => Some(false),
-                    _ => None,
-                };
-                if let Some(a) = self.archives.iter_mut().find(|a| a.path == path) {
-                    a.verified = verdict;
+            // A task that stopped for a missing password is retried as a new task, which
+            // takes over these records, so they must survive until then.
+            let needs_password = t.state == TaskState::Failed
+                && t.error
+                    .as_ref()
+                    .is_some_and(|e| e.code == ErrorCode::Password);
+            if !needs_password {
+                if let Some(path) = self.tests.remove(&t.id) {
+                    let verdict = match t.state {
+                        TaskState::Done => Some(true),
+                        TaskState::Failed => Some(false),
+                        _ => None,
+                    };
+                    if let Some(a) = self.archives.iter_mut().find(|a| a.path == path) {
+                        a.verified = verdict;
+                    }
                 }
-            }
-            if let Some(path) = self.edits.remove(&t.id)
-                && t.state == TaskState::Done
-            {
-                self.reload_archive(path, cx);
+                if let Some(path) = self.edits.remove(&t.id)
+                    && t.state == TaskState::Done
+                {
+                    self.reload_archive(path, cx);
+                }
             }
             match (&t.state, &t.error, &t.summary) {
                 (TaskState::Done, _, Some(s)) => {
@@ -1013,7 +1021,14 @@ impl MainView {
         match p.target {
             PasswordTarget::Open(path) => self.open_path(path, Some(pw), window, cx),
             PasswordTarget::Task(id) => {
-                if self.tasks.retry_with_password(id, &pw).is_some() {
+                if let Some(new) = self.tasks.retry_with_password(id, &pw) {
+                    // The retry is a new task; it inherits what the failed one was for.
+                    if let Some(path) = self.edits.remove(&id) {
+                        self.edits.insert(new, path);
+                    }
+                    if let Some(path) = self.tests.remove(&id) {
+                        self.tests.insert(new, path);
+                    }
                     self.refresh_tasks(cx);
                     self.ensure_polling(cx);
                 }
@@ -2341,6 +2356,8 @@ impl MainView {
                     .child(
                         Button::new("delete-ok")
                             .danger()
+                            .bg(p.danger)
+                            .text_color(hsla(0., 0., 1., 1.))
                             .icon(Icon::new(gpui_kit::assets::IconName::Trash))
                             .label("删除")
                             .on_click(cx.listener(|this, _, _, cx| this.confirm_delete(cx))),

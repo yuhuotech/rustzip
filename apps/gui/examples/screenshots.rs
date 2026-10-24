@@ -201,6 +201,15 @@ fn main() {
             v.show_page(rustzip_gui::view::Page::Archive, cx);
         });
 
+        // 3d. Asking before deleting from the archive.
+        cx.update_window(handle.into(), |_, _, cx| {
+            table.update(cx, |t, cx| t.set_selected_row(3, cx));
+        })
+        .unwrap();
+        act(&mut cx, handle, &view, |v, _, cx| v.ask_delete(cx));
+        shoot(&mut cx, handle, &out_dir, &format!("{tag}-3d-delete"));
+        act(&mut cx, handle, &view, |v, _, cx| v.close_overlay(cx));
+
         // 4. The compress form.
         let src = work.path().join("项目文档");
         act(&mut cx, handle, &view, move |v, w, cx| {
