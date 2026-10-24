@@ -169,7 +169,10 @@ pub fn open_main_window(launch: launch::Launch, cx: &mut App) {
         window_min_size: Some(size(px(640.), px(420.))),
         titlebar: Some(TitlebarOptions {
             title: Some("RustZIP".into()),
-            ..TitlebarOptions::default()
+            // On macOS the tab strip sits in the title bar next to the window buttons.
+            // Windows and Linux are unverified, so they keep the system title bar.
+            appears_transparent: view::TABS_IN_TITLEBAR,
+            traffic_light_position: view::TABS_IN_TITLEBAR.then(|| point(px(14.), px(13.))),
         }),
         ..WindowOptions::default()
     };

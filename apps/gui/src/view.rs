@@ -26,6 +26,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
+/// Whether the tabs share the title bar row with the window buttons (macOS only).
+pub const TABS_IN_TITLEBAR: bool = cfg!(target_os = "macos");
+
 /// One archive shown in a tab.
 pub struct OpenArchive {
     pub path: PathBuf,
@@ -902,8 +905,10 @@ impl MainView {
         let p = palette(cx);
         h_flex()
             .id("tabs")
-            .h(px(36.))
+            .h(px(38.))
             .px_2()
+            // Leave room for the traffic lights that sit in the same row.
+            .when(TABS_IN_TITLEBAR, |d| d.pl(px(84.)))
             .gap_1()
             .items_end()
             .flex_none()
