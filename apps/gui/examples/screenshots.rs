@@ -216,6 +216,15 @@ fn main() {
             &out_dir,
             &format!("{tag}-3e-recent-picked"),
         );
+        // The two dialogs that belong to a picked archive file.
+        act(&mut cx, handle, &view, |v, w, cx| v.ask_rename_file(w, cx));
+        shoot(&mut cx, handle, &out_dir, &format!("{tag}-3g-rename"));
+        act(&mut cx, handle, &view, |v, _, cx| {
+            v.close_overlay(cx);
+            v.ask_trash(cx);
+        });
+        shoot(&mut cx, handle, &out_dir, &format!("{tag}-3h-trash"));
+        act(&mut cx, handle, &view, |v, _, cx| v.close_overlay(cx));
         act(&mut cx, handle, &view, |v, _, cx| {
             v.show_page(rustzip_gui::view::Page::Archive, cx);
         });

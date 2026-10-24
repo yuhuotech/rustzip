@@ -33,52 +33,62 @@ impl Dialog {
             Tone::Danger => (p.danger.opacity(0.12), p.danger),
             Tone::Neutral => (p.accent_soft, p.accent),
         };
+        let has_body = self.body.is_some();
+        // The heading and the buttons stay put; a tall body scrolls between them.
         v_flex()
-            .child(
-                v_flex()
-                    .gap_4()
-                    .px_5()
-                    .pt_5()
-                    .pb_5()
-                    .child(
-                        h_flex()
-                            .gap_4()
-                            .items_start()
-                            .child(
-                                div()
-                                    .size(px(40.))
-                                    .flex_none()
-                                    .rounded(px(12.))
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .bg(tint)
-                                    .text_color(ink)
-                                    .child(self.icon.size_5()),
-                            )
-                            .child(
-                                v_flex()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .gap_1()
-                                    .child(
-                                        div().text_size(px(16.)).text_color(p.fg).child(self.title),
-                                    )
-                                    .when_some(self.lead, |d, lead| {
-                                        d.child(
-                                            div()
-                                                .text_size(px(13.))
-                                                .line_height(px(20.))
-                                                .text_color(p.fg2)
-                                                .child(lead),
-                                        )
-                                    }),
-                            ),
-                    )
-                    .when_some(self.body, |d, body| d.child(body)),
-            )
+            .min_h_0()
             .child(
                 h_flex()
+                    .flex_none()
+                    .gap_4()
+                    .items_start()
+                    .px_5()
+                    .pt_5()
+                    .pb(px(if has_body { 16. } else { 20. }))
+                    .child(
+                        div()
+                            .size(px(40.))
+                            .flex_none()
+                            .rounded(px(12.))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .bg(tint)
+                            .text_color(ink)
+                            .child(self.icon.size_5()),
+                    )
+                    .child(
+                        v_flex()
+                            .flex_1()
+                            .min_w_0()
+                            .gap_1()
+                            .child(div().text_size(px(16.)).text_color(p.fg).child(self.title))
+                            .when_some(self.lead, |d, lead| {
+                                d.child(
+                                    div()
+                                        .text_size(px(13.))
+                                        .line_height(px(20.))
+                                        .text_color(p.fg2)
+                                        .child(lead),
+                                )
+                            }),
+                    ),
+            )
+            .when_some(self.body, |d, body| {
+                d.child(
+                    div()
+                        .id("dialog-body")
+                        .flex_1()
+                        .min_h_0()
+                        .overflow_y_scroll()
+                        .px_5()
+                        .pb_5()
+                        .child(body),
+                )
+            })
+            .child(
+                h_flex()
+                    .flex_none()
                     .justify_end()
                     .gap_2()
                     .px_5()

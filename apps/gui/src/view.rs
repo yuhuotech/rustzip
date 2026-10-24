@@ -2940,77 +2940,92 @@ impl MainView {
         )
     }
 
-    fn rename_card(&self, prompt: &RenamePrompt, cx: &mut Context<Self>) -> impl IntoElement {
+    fn rename_card(&self, prompt: &RenamePrompt, cx: &mut Context<Self>) -> AnyElement {
         let p = palette(cx);
-        let title = match prompt.target {
-            RenameTarget::Entry(_) => "重命名(压缩包内)",
-            RenameTarget::File(_) => "重命名压缩包文件",
+        let (title, lead) = match prompt.target {
+            RenameTarget::Entry(_) => ("重命名", "改的是压缩包里的名字,会重新生成压缩包。"),
+            RenameTarget::File(_) => ("重命名压缩包", "改的是这个压缩包文件在磁盘上的名字。"),
         };
-        v_flex()
-            .gap_3()
-            .child(div().text_size(px(16.)).child(title))
-            .child(Input::new(&prompt.input))
-            .when_some(prompt.error.clone(), |d, e| {
-                d.child(div().text_color(p.danger).child(e))
-            })
-            .child(
-                h_flex()
-                    .justify_end()
+        Dialog {
+            tone: Tone::Neutral,
+            icon: Icon::new(IconName::Replace),
+            title: title.into(),
+            lead: Some(lead.into()),
+            body: Some(
+                v_flex()
                     .gap_2()
-                    .child(
-                        Button::new("rename-cancel")
-                            .outline()
-                            .icon(IconName::Close)
-                            .label("取消")
-                            .on_click(cx.listener(|this, _, _, cx| this.close_overlay(cx))),
-                    )
-                    .child(
-                        Button::new("rename-ok")
-                            .primary()
-                            .icon(IconName::Check)
-                            .label("重命名")
-                            .on_click(
-                                cx.listener(|this, _, window, cx| this.submit_rename(window, cx)),
-                            ),
-                    ),
-            )
+                    .child(Input::new(&prompt.input))
+                    .when_some(prompt.error.clone(), |d, e| {
+                        d.child(div().text_color(p.danger).child(e))
+                    })
+                    .into_any_element(),
+            ),
+            buttons: vec![
+                Button::new("rename-cancel")
+                    .outline()
+                    .icon(IconName::Close)
+                    .label("取消")
+                    .on_click(cx.listener(|this, _, _, cx| this.close_overlay(cx)))
+                    .into_any_element(),
+                Button::new("rename-ok")
+                    .primary()
+                    .icon(IconName::Check)
+                    .label("重命名")
+                    .on_click(cx.listener(|this, _, window, cx| this.submit_rename(window, cx)))
+                    .into_any_element(),
+            ],
+        }
+        .render(&p)
     }
 
-    fn trash_card(&self, path: &Path, cx: &mut Context<Self>) -> impl IntoElement {
+    fn trash_card(&self, path: &Path, cx: &mut Context<Self>) -> AnyElement {
         let p = palette(cx);
         let name = path
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_default();
-        v_flex()
-            .gap_3()
-            .child(div().text_size(px(16.)).child(format!("删除“{name}”?")))
-            .child(
+        Dialog {
+            tone: Tone::Danger,
+            icon: Icon::new(gpui_kit::assets::IconName::Trash),
+            title: if path.is_dir() {
+                "删除这个文件夹?".into()
+            } else {
+                "删除这个文件?".into()
+            },
+            lead: Some("会移到废纸篓(Windows 为回收站),需要时还能恢复。".into()),
+            body: Some(
                 div()
-                    .text_color(p.fg2)
-                    .child("文件会被移到废纸篓(Windows 为回收站),需要时还能恢复。"),
-            )
-            .child(
-                h_flex()
-                    .justify_end()
-                    .gap_2()
-                    .child(
-                        Button::new("trash-cancel")
-                            .outline()
-                            .icon(IconName::Close)
-                            .label("取消")
-                            .on_click(cx.listener(|this, _, _, cx| this.close_overlay(cx))),
-                    )
-                    .child(
-                        Button::new("trash-ok")
-                            .danger()
-                            .bg(p.danger)
-                            .text_color(hsla(0., 0., 1., 1.))
-                            .icon(Icon::new(gpui_kit::assets::IconName::Trash))
-                            .label("删除")
-                            .on_click(cx.listener(|this, _, _, cx| this.confirm_trash(cx))),
-                    ),
-            )
+                    .px_3()
+                    .py_2()
+                    .rounded(px(8.))
+                    .bg(p.panel)
+                    .border_1()
+                    .border_color(p.line)
+                    .text_size(px(13.))
+                    .text_color(p.fg)
+                    .overflow_hidden()
+                    .text_ellipsis()
+                    .child(name)
+                    .into_any_element(),
+            ),
+            buttons: vec![
+                Button::new("trash-cancel")
+                    .outline()
+                    .icon(IconName::Close)
+                    .label("取消")
+                    .on_click(cx.listener(|this, _, _, cx| this.close_overlay(cx)))
+                    .into_any_element(),
+                Button::new("trash-ok")
+                    .danger()
+                    .bg(p.danger)
+                    .text_color(hsla(0., 0., 1., 1.))
+                    .icon(Icon::new(gpui_kit::assets::IconName::Trash))
+                    .label("删除")
+                    .on_click(cx.listener(|this, _, _, cx| this.confirm_trash(cx)))
+                    .into_any_element(),
+            ],
+        }
+        .render(&p)
     }
 
     fn render_sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -3653,19 +3668,20 @@ impl MainView {
             )
     }
 
-    fn render_overlay(&self, _: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
+    fn render_overlay(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
         let p = palette(cx);
-        // Dialogs built with `dialog::Dialog` bring their own padding and footer; the
-        // others are still plain content that the window pads.
-        let (card, framed) = match self.overlay.as_ref()? {
-            Overlay::Password(prompt) => (self.password_card(prompt, cx).into_any_element(), false),
-            Overlay::Compress(form) => (self.compress_card(form, cx).into_any_element(), false),
-            Overlay::Settings => (self.settings_card(cx).into_any_element(), false),
-            Overlay::Privacy => (self.privacy_card(cx).into_any_element(), false),
-            Overlay::ConfirmDelete(paths) => (self.delete_card(paths, cx), true),
-            Overlay::Rename(prompt) => (self.rename_card(prompt, cx).into_any_element(), false),
-            Overlay::ConfirmTrash(path) => (self.trash_card(path, cx).into_any_element(), false),
+        // Every dialog is built with `dialog::Dialog`: heading, content, button strip.
+        let card = match self.overlay.as_ref()? {
+            Overlay::Password(prompt) => self.password_card(prompt, cx),
+            Overlay::Compress(form) => self.compress_card(form, cx),
+            Overlay::Settings => self.settings_card(cx),
+            Overlay::Privacy => self.privacy_card(cx),
+            Overlay::ConfirmDelete(paths) => self.delete_card(paths, cx),
+            Overlay::Rename(prompt) => self.rename_card(prompt, cx),
+            Overlay::ConfirmTrash(path) => self.trash_card(path, cx),
         };
+        // A tall dialog (settings on a small window) scrolls its content, not the frame.
+        let max_height = window.viewport_size().height - px(48.);
         Some(
             div()
                 .id("overlay")
@@ -3678,9 +3694,9 @@ impl MainView {
                 .occlude()
                 .child(
                     v_flex()
-                        .w(px(if framed { 440. } else { 420. }))
+                        .w(px(440.))
                         .max_w_full()
-                        .when(!framed, |d| d.p_4().gap_3())
+                        .max_h(max_height)
                         .rounded(px(12.))
                         .overflow_hidden()
                         .bg(p.win)
@@ -3693,29 +3709,38 @@ impl MainView {
         )
     }
 
-    fn password_card(&self, prompt: &PasswordPrompt, cx: &mut Context<Self>) -> impl IntoElement {
+    fn password_card(&self, prompt: &PasswordPrompt, cx: &mut Context<Self>) -> AnyElement {
         let p = palette(cx);
-        v_flex()
-            .gap_3()
-            .child(div().text_size(px(15.)).child("需要密码"))
-            .when(prompt.wrong, |d| {
-                d.child(div().text_color(p.danger).child("密码不正确,请再试一次"))
-            })
-            .child(Input::new(&prompt.input).mask_toggle())
-            .child(
-                h_flex()
-                    .justify_end()
+        Dialog {
+            tone: Tone::Neutral,
+            icon: Icon::new(gpui_kit::assets::IconName::Lock),
+            title: "需要密码".into(),
+            lead: Some("这个压缩包已加密,输入密码才能继续。".into()),
+            body: Some(
+                v_flex()
                     .gap_2()
-                    .child(
-                        Button::new("pw-cancel")
-                            .outline()
-                            .label("取消")
-                            .on_click(cx.listener(|this, _, _, cx| this.close_overlay(cx))),
-                    )
-                    .child(Button::new("pw-ok").primary().label("确定").on_click(
-                        cx.listener(|this, _, window, cx| this.submit_password(window, cx)),
-                    )),
-            )
+                    .when(prompt.wrong, |d| {
+                        d.child(div().text_color(p.danger).child("密码不正确,请再试一次"))
+                    })
+                    .child(Input::new(&prompt.input).mask_toggle())
+                    .into_any_element(),
+            ),
+            buttons: vec![
+                Button::new("pw-cancel")
+                    .outline()
+                    .icon(IconName::Close)
+                    .label("取消")
+                    .on_click(cx.listener(|this, _, _, cx| this.close_overlay(cx)))
+                    .into_any_element(),
+                Button::new("pw-ok")
+                    .primary()
+                    .icon(IconName::Check)
+                    .label("确定")
+                    .on_click(cx.listener(|this, _, window, cx| this.submit_password(window, cx)))
+                    .into_any_element(),
+            ],
+        }
+        .render(&p)
     }
 
     fn delete_card(&self, paths: &[String], cx: &mut Context<Self>) -> AnyElement {
@@ -3789,7 +3814,7 @@ impl MainView {
         .render(&p)
     }
 
-    fn settings_card(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn settings_card(&self, cx: &mut Context<Self>) -> AnyElement {
         let p = palette(cx);
         let s = &self.settings;
         let segment = |id: &'static str, label: &'static str, on: bool| {
@@ -3816,194 +3841,206 @@ impl MainView {
                 .child(Switch::new(id).checked(on))
         };
         let (theme, conflict) = (s.theme, s.on_conflict);
-        v_flex()
-            .gap_4()
-            .child(div().text_size(px(16.)).child("设置"))
-            .child(group(
-                "外观",
-                h_flex()
-                    .gap_1()
-                    .children(
-                        [
-                            ("theme-system", "跟随系统", Theme::System),
-                            ("theme-light", "浅色", Theme::Light),
-                            ("theme-dark", "深色", Theme::Dark),
-                        ]
-                        .map(|(id, label, t)| {
-                            segment(id, label, theme == t).on_click(
-                                cx.listener(move |this, _, window, cx| {
-                                    this.set_theme(t, window, cx)
-                                }),
+        let body =
+            v_flex()
+                .gap_4()
+                .child(group(
+                    "外观",
+                    h_flex()
+                        .gap_1()
+                        .children(
+                            [
+                                ("theme-system", "跟随系统", Theme::System),
+                                ("theme-light", "浅色", Theme::Light),
+                                ("theme-dark", "深色", Theme::Dark),
+                            ]
+                            .map(|(id, label, t)| {
+                                segment(id, label, theme == t).on_click(cx.listener(
+                                    move |this, _, window, cx| this.set_theme(t, window, cx),
+                                ))
+                            }),
+                        )
+                        .into_any_element(),
+                ))
+                .child(group(
+                    "主色",
+                    h_flex()
+                        .gap_2()
+                        .children(
+                            brand::accents(p.win.l < 0.5)
+                                .into_iter()
+                                .enumerate()
+                                .map(|(ix, (id, _, colour))| {
+                                    let on = s.accent == id;
+                                    div()
+                                        .id(("accent", ix))
+                                        .size(px(28.))
+                                        .rounded_full()
+                                        .flex()
+                                        .items_center()
+                                        .justify_center()
+                                        .cursor_pointer()
+                                        .border_2()
+                                        .border_color(if on { p.fg } else { p.win })
+                                        .on_click(cx.listener(move |this, _, _, cx| {
+                                            this.set_accent(id, cx);
+                                        }))
+                                        .child(div().size(px(20.)).rounded_full().bg(colour))
+                                })
+                                .collect::<Vec<_>>(),
+                        )
+                        .into_any_element(),
+                ))
+                .child(group(
+                    "文件已存在时",
+                    h_flex()
+                        .gap_1()
+                        .children(
+                            [
+                                ("conflict-ask", "询问", OnConflict::Ask),
+                                ("conflict-skip", "跳过", OnConflict::Skip),
+                                ("conflict-replace", "覆盖", OnConflict::Replace),
+                            ]
+                            .map(|(id, label, c)| {
+                                segment(id, label, conflict == c).on_click(cx.listener(
+                                    move |this, _, _, cx| {
+                                        this.change_settings(|s| s.on_conflict = c, cx);
+                                    },
+                                ))
+                            }),
+                        )
+                        .into_any_element(),
+                ))
+                .child(
+                    v_flex()
+                        .gap_3()
+                        .child(
+                            toggle(
+                                "set-smart",
+                                "智能解压",
+                                "压缩包里有多个散文件时,自动放进以压缩包命名的文件夹",
+                                s.smart_extract,
                             )
-                        }),
-                    )
+                            .id("row-smart")
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.change_settings(|s| s.smart_extract = !s.smart_extract, cx);
+                            })),
+                        )
+                        .child(
+                            toggle(
+                                "set-updates",
+                                "自动检查更新",
+                                "启动时在后台检查新版本;更新包会验证签名",
+                                s.check_updates,
+                            )
+                            .id("row-updates")
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.change_settings(|s| s.check_updates = !s.check_updates, cx);
+                            })),
+                        )
+                        .child(
+                            toggle(
+                                "set-passwords",
+                                "记住密码",
+                                "打开加密压缩包成功后,把密码存进系统钥匙串,下次自动尝试",
+                                s.remember_passwords,
+                            )
+                            .id("row-passwords")
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.change_settings(
+                                    |s| s.remember_passwords = !s.remember_passwords,
+                                    cx,
+                                );
+                            })),
+                        )
+                        .when(s.remember_passwords, |d| {
+                            d.child(
+                                h_flex().child(
+                                    Button::new("forget-passwords")
+                                        .outline()
+                                        .small()
+                                        .label("清除已保存的密码")
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.forget_all_passwords(cx);
+                                        })),
+                                ),
+                            )
+                        })
+                        .child(
+                            toggle(
+                                "set-stats",
+                                "匿名安装统计",
+                                "只上报随机编号、版本、系统和语言,不含文件名或使用行为",
+                                s.send_install_stats,
+                            )
+                            .id("row-stats")
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.change_settings(
+                                    |s| s.send_install_stats = !s.send_install_stats,
+                                    cx,
+                                );
+                            })),
+                        ),
+                );
+        Dialog {
+            tone: Tone::Neutral,
+            icon: Icon::new(IconName::Settings),
+            title: "设置".into(),
+            lead: Some("改动会立即保存。".into()),
+            body: Some(body.into_any_element()),
+            buttons: vec![
+                Button::new("settings-close")
+                    .primary()
+                    .icon(IconName::Check)
+                    .label("完成")
+                    .on_click(cx.listener(|this, _, _, cx| this.close_overlay(cx)))
                     .into_any_element(),
-            ))
-            .child(group(
-                "主色",
-                h_flex()
-                    .gap_2()
-                    .children(
-                        brand::accents(p.win.l < 0.5)
-                            .into_iter()
-                            .enumerate()
-                            .map(|(ix, (id, _, colour))| {
-                                let on = s.accent == id;
-                                div()
-                                    .id(("accent", ix))
-                                    .size(px(28.))
-                                    .rounded_full()
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .cursor_pointer()
-                                    .border_2()
-                                    .border_color(if on { p.fg } else { p.win })
-                                    .on_click(cx.listener(move |this, _, _, cx| {
-                                        this.set_accent(id, cx);
-                                    }))
-                                    .child(div().size(px(20.)).rounded_full().bg(colour))
-                            })
-                            .collect::<Vec<_>>(),
-                    )
-                    .into_any_element(),
-            ))
-            .child(group(
-                "文件已存在时",
-                h_flex()
-                    .gap_1()
-                    .children(
-                        [
-                            ("conflict-ask", "询问", OnConflict::Ask),
-                            ("conflict-skip", "跳过", OnConflict::Skip),
-                            ("conflict-replace", "覆盖", OnConflict::Replace),
-                        ]
-                        .map(|(id, label, c)| {
-                            segment(id, label, conflict == c).on_click(cx.listener(
-                                move |this, _, _, cx| {
-                                    this.change_settings(|s| s.on_conflict = c, cx);
-                                },
-                            ))
-                        }),
-                    )
-                    .into_any_element(),
-            ))
-            .child(
-                v_flex()
-                    .gap_3()
-                    .child(
-                        toggle(
-                            "set-smart",
-                            "智能解压",
-                            "压缩包里有多个散文件时,自动放进以压缩包命名的文件夹",
-                            s.smart_extract,
-                        )
-                        .id("row-smart")
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.change_settings(|s| s.smart_extract = !s.smart_extract, cx);
-                        })),
-                    )
-                    .child(
-                        toggle(
-                            "set-updates",
-                            "自动检查更新",
-                            "启动时在后台检查新版本;更新包会验证签名",
-                            s.check_updates,
-                        )
-                        .id("row-updates")
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.change_settings(|s| s.check_updates = !s.check_updates, cx);
-                        })),
-                    )
-                    .child(
-                        toggle(
-                            "set-passwords",
-                            "记住密码",
-                            "打开加密压缩包成功后,把密码存进系统钥匙串,下次自动尝试",
-                            s.remember_passwords,
-                        )
-                        .id("row-passwords")
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.change_settings(
-                                |s| s.remember_passwords = !s.remember_passwords,
-                                cx,
-                            );
-                        })),
-                    )
-                    .when(s.remember_passwords, |d| {
-                        d.child(
-                            h_flex().child(
-                                Button::new("forget-passwords")
-                                    .outline()
-                                    .small()
-                                    .label("清除已保存的密码")
-                                    .on_click(cx.listener(|this, _, _, cx| {
-                                        this.forget_all_passwords(cx);
-                                    })),
-                            ),
-                        )
-                    })
-                    .child(
-                        toggle(
-                            "set-stats",
-                            "匿名安装统计",
-                            "只上报随机编号、版本、系统和语言,不含文件名或使用行为",
-                            s.send_install_stats,
-                        )
-                        .id("row-stats")
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.change_settings(
-                                |s| s.send_install_stats = !s.send_install_stats,
-                                cx,
-                            );
-                        })),
-                    ),
-            )
-            .child(
-                h_flex().justify_end().child(
-                    Button::new("settings-close")
-                        .primary()
-                        .label("完成")
-                        .on_click(cx.listener(|this, _, _, cx| this.close_overlay(cx))),
-                ),
-            )
+            ],
+        }
+        .render(&p)
     }
 
-    fn privacy_card(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn privacy_card(&self, cx: &mut Context<Self>) -> AnyElement {
         let p = palette(cx);
-        v_flex()
-            .gap_3()
-            .child(div().text_size(px(16.)).child("关于匿名统计"))
-            .child(div().text_color(p.fg2).child(
+        Dialog {
+            tone: Tone::Neutral,
+            icon: Icon::new(gpui_kit::assets::IconName::ShieldCheck),
+            title: "关于匿名统计".into(),
+            lead: Some(
                 "RustZIP 是免费开源软件。为了了解有多少人在用,首次启动时会上报一次匿名信息:\
-                 随机编号、软件版本、系统及版本、CPU 架构、界面语言。",
-            ))
-            .child(div().text_color(p.fg2).child(
-                "不会收集文件名、路径、文件内容或任何使用行为。发送失败时直接丢弃,不影响启动。\
-                 你随时可以在设置里关闭。",
-            ))
-            .child(
-                h_flex()
-                    .justify_end()
-                    .gap_2()
+                 随机编号、软件版本、系统及版本、CPU 架构、界面语言。"
+                    .into(),
+            ),
+            body: Some(
+                div()
+                    .text_size(px(13.))
+                    .line_height(px(20.))
+                    .text_color(p.fg2)
                     .child(
-                        Button::new("privacy-off")
-                            .outline()
-                            .icon(IconName::Close)
-                            .label("不参与")
-                            .on_click(cx.listener(|this, _, _, cx| this.answer_privacy(false, cx))),
+                        "不会收集文件名、路径、文件内容或任何使用行为。发送失败时直接丢弃,\
+                         不影响启动。你随时可以在设置里关闭。",
                     )
-                    .child(
-                        Button::new("privacy-on")
-                            .primary()
-                            .icon(IconName::CircleCheck)
-                            .label("好的")
-                            .on_click(cx.listener(|this, _, _, cx| this.answer_privacy(true, cx))),
-                    ),
-            )
+                    .into_any_element(),
+            ),
+            buttons: vec![
+                Button::new("privacy-off")
+                    .outline()
+                    .icon(IconName::Close)
+                    .label("不参与")
+                    .on_click(cx.listener(|this, _, _, cx| this.answer_privacy(false, cx)))
+                    .into_any_element(),
+                Button::new("privacy-on")
+                    .primary()
+                    .icon(IconName::CircleCheck)
+                    .label("好的")
+                    .on_click(cx.listener(|this, _, _, cx| this.answer_privacy(true, cx)))
+                    .into_any_element(),
+            ],
+        }
+        .render(&p)
     }
 
-    fn compress_card(&self, form: &CompressForm, cx: &mut Context<Self>) -> impl IntoElement {
+    fn compress_card(&self, form: &CompressForm, cx: &mut Context<Self>) -> AnyElement {
         let p = palette(cx);
         let names: Vec<String> = form
             .sources
@@ -4018,14 +4055,9 @@ impl MainView {
             let b = Button::new(id).label(label).small();
             if on { b.primary() } else { b.outline() }
         };
-        v_flex()
+        let lead = format!("已选 {} 项:{}", names.len(), names.join("、"));
+        let body = v_flex()
             .gap_4()
-            .child(div().text_size(px(16.)).child("新建压缩"))
-            .child(div().text_color(p.fg3).child(format!(
-                "已选 {} 项:{}",
-                names.len(),
-                names.join("、")
-            )))
             .child(
                 v_flex()
                     .gap_1()
@@ -4075,24 +4107,29 @@ impl MainView {
                         .child(div().text_color(p.fg3).text_size(px(12.)).child("密码"))
                         .child(Input::new(&form.password).mask_toggle()),
                 )
-            })
-            .child(
-                h_flex()
-                    .justify_end()
-                    .gap_2()
-                    .child(
-                        Button::new("compress-cancel")
-                            .outline()
-                            .label("取消")
-                            .on_click(cx.listener(|this, _, _, cx| this.close_overlay(cx))),
-                    )
-                    .child(
-                        Button::new("compress-go")
-                            .primary()
-                            .label("开始压缩")
-                            .on_click(cx.listener(|this, _, _, cx| this.submit_compress(cx))),
-                    ),
-            )
+            });
+        Dialog {
+            tone: Tone::Neutral,
+            icon: Icon::new(gpui_kit::assets::IconName::FileArchive),
+            title: "新建压缩".into(),
+            lead: Some(lead),
+            body: Some(body.into_any_element()),
+            buttons: vec![
+                Button::new("compress-cancel")
+                    .outline()
+                    .icon(IconName::Close)
+                    .label("取消")
+                    .on_click(cx.listener(|this, _, _, cx| this.close_overlay(cx)))
+                    .into_any_element(),
+                Button::new("compress-go")
+                    .primary()
+                    .icon(IconName::Check)
+                    .label("开始压缩")
+                    .on_click(cx.listener(|this, _, _, cx| this.submit_compress(cx)))
+                    .into_any_element(),
+            ],
+        }
+        .render(&p)
     }
 }
 
