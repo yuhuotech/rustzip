@@ -698,7 +698,10 @@ fn settings_changes_are_saved_and_the_theme_follows_the_choice(cx: &mut TestAppC
         v.set_theme(Pick::Light, window, cx);
     });
     cx.update(|cx| assert!(!cx.theme().is_dark()));
-    assert_eq!(cx.update(|cx| cx.theme().primary), Palette::light().accent);
+    assert_eq!(
+        cx.update(|cx| cx.theme().primary),
+        Palette::themed(false).accent
+    );
 }
 
 #[gpui_kit::test]
@@ -775,9 +778,9 @@ fn a_task_can_be_paused_cancelled_and_cleared_from_the_window(cx: &mut TestAppCo
 fn the_brand_colours_survive_a_switch_between_light_and_dark(cx: &mut TestAppContext) {
     let (handle, _view) = open_window(cx, None);
     for (mode, palette) in [
-        (ThemeMode::Dark, Palette::dark()),
-        (ThemeMode::Light, Palette::light()),
-        (ThemeMode::Dark, Palette::dark()),
+        (ThemeMode::Dark, Palette::themed(true)),
+        (ThemeMode::Light, Palette::themed(false)),
+        (ThemeMode::Dark, Palette::themed(true)),
     ] {
         cx.update_window(handle.into(), |_, window, cx| {
             Theme::change(mode, Some(window), cx);

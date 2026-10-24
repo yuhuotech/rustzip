@@ -69,9 +69,14 @@ impl Palette {
         if dark { Self::dark() } else { Self::light() }
     }
 
-    /// The same palette with another accent. Anything unknown keeps the default teal.
+    /// The palette of a theme with the default accent.
+    pub fn themed(dark: bool) -> Self {
+        Self::for_mode(dark).with_accent(DEFAULT_ACCENT, dark)
+    }
+
+    /// The same palette with another accent. Anything unknown gets the default accent.
     pub fn with_accent(mut self, spec: &str, dark: bool) -> Self {
-        let Some(pick) = resolve(spec) else {
+        let Some(pick) = resolve(spec).or_else(|| resolve(DEFAULT_ACCENT)) else {
             return self;
         };
         let (accent, stock) = if dark {
@@ -81,7 +86,7 @@ impl Palette {
         };
         self.accent = hex(accent);
         match stock {
-            // The default keeps its hand-picked companions.
+            // Dark green keeps its hand-picked companions.
             Some((soft, ink)) => {
                 self.accent_soft = hex(soft);
                 self.accent_ink = hex(ink);
@@ -122,15 +127,10 @@ struct Preset {
     stock_dark: Option<(u32, u32)>,
 }
 
+/// What a new install and any unreadable setting use.
+pub const DEFAULT_ACCENT: &str = "graphite";
+
 const PRESETS: [Preset; 5] = [
-    Preset {
-        id: "teal",
-        label: "青绿",
-        light: 0x0d9b82,
-        dark: 0x2fd3a7,
-        stock_light: Some((0xdff4ee, 0xffffff)),
-        stock_dark: Some((0x11342c, 0x04231b)),
-    },
     // Near black in light mode and near white in dark mode: the quietest choice.
     Preset {
         id: "graphite",
@@ -139,6 +139,14 @@ const PRESETS: [Preset; 5] = [
         dark: 0xe3e9ee,
         stock_light: None,
         stock_dark: None,
+    },
+    Preset {
+        id: "teal",
+        label: "墨绿",
+        light: 0x0d9b82,
+        dark: 0x2fd3a7,
+        stock_light: Some((0xdff4ee, 0xffffff)),
+        stock_dark: Some((0x11342c, 0x04231b)),
     },
     Preset {
         id: "blue",
@@ -205,7 +213,7 @@ pub fn palette(cx: &App) -> Palette {
     let base = Palette::for_mode(dark);
     match cx.try_global::<AccentChoice>() {
         Some(c) => base.with_accent(&c.0, dark),
-        None => base,
+        None => base.with_accent(DEFAULT_ACCENT, dark),
     }
 }
 
@@ -323,14 +331,17 @@ mod tests {
     #[test]
     fn accents_resolve_presets_custom_colours_and_fall_back() {
         let base = Palette::light();
-        // The default keeps its hand-picked companions.
+        // Dark green keeps its hand-picked companions.
         assert_eq!(
             base.with_accent("teal", false).accent_soft,
             base.accent_soft
         );
-        // Unknown or malformed values change nothing.
-        assert_eq!(base.with_accent("nonsense", false).accent, base.accent);
-        assert_eq!(base.with_accent("#12345", false).accent, base.accent);
+        // Unknown or malformed values get the default, which is graphite.
+        let default = base.with_accent(DEFAULT_ACCENT, false).accent;
+        assert_eq!(default, hex(0x2b3640));
+        assert_eq!(base.with_accent("nonsense", false).accent, default);
+        assert_eq!(base.with_accent("#12345", false).accent, default);
+        assert_eq!(Palette::themed(false).accent, default);
         // Presets and hex colours are applied.
         assert_eq!(base.with_accent("graphite", false).accent, hex(0x2b3640));
         assert_eq!(base.with_accent("#C43E66", false).accent, hex(0xc43e66));
