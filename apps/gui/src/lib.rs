@@ -26,7 +26,17 @@ actions!(
         FocusSearch,
         CloseTab,
         ExtractAll,
-        OpenSettings
+        OpenSettings,
+        // The right-click menu of the file list, and select-all.
+        RowOpen,
+        RowExtractTo,
+        RowExtractHere,
+        RowExtractNamed,
+        RowCopyPath,
+        RowAddHere,
+        RowRename,
+        RowDelete,
+        SelectAllRows
     ]
 );
 
@@ -41,6 +51,8 @@ pub fn install_app_actions(cx: &mut App) {
         KeyBinding::new("secondary-w", CloseTab, None),
         KeyBinding::new("secondary-e", ExtractAll, None),
         KeyBinding::new("secondary-,", OpenSettings, None),
+        // In the window's own context, so a text box keeps its own select-all.
+        KeyBinding::new("secondary-a", SelectAllRows, Some("RustZip")),
     ]);
     cx.set_menus(vec![
         Menu {

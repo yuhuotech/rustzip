@@ -78,7 +78,9 @@ fn draw(cx: &mut TestAppContext, handle: WindowHandle<Root>) {
 }
 
 fn make_archive(dir: &Path, name: &str, password: Option<&str>) -> PathBuf {
-    let src = dir.join("proj");
+    // The source folder is kept apart, so that extracting next to the archive in a test
+    // cannot be confused with files that were there already.
+    let src = dir.join(format!("{name}.src")).join("proj");
     fs::create_dir_all(src.join("docs")).unwrap();
     fs::create_dir_all(src.join("src")).unwrap();
     fs::write(src.join("readme.txt"), "hello rustzip").unwrap();
@@ -564,6 +566,72 @@ fn renaming_inside_an_archive_changes_the_entry_and_refuses_bad_names(cx: &mut T
 }
 
 #[gpui_kit::test]
+fn the_row_menu_actions_work_on_the_whole_selection(cx: &mut TestAppContext) {
+    use gpui_kit::Focusable as _;
+    use rustzip_gui::{RowCopyPath, RowExtractHere, RowExtractNamed, SelectAllRows};
+    let tmp = tempfile::tempdir().unwrap();
+    let archive = make_archive(tmp.path(), "bundle.zip", None);
+    let settings_path = tmp.path().join("cfg/settings.json");
+    Settings {
+        // The test platform cannot show a folder.
+        open_folder_when_done: false,
+        ..Settings::default()
+    }
+    .save(&settings_path)
+    .unwrap();
+    let (handle, view) = open_window(cx, Some(settings_path));
+    open_sync(cx, handle, &view, &archive, None);
+    with_view(cx, handle, &view, |v, _, cx| v.navigate("proj", cx));
+    assert_eq!(row_names(cx, &view), ["docs", "src", "readme.txt"]);
+
+    // Actions reach the window from whatever has the focus; here, the list.
+    let table = cx.update(|cx| view.read(cx).table.clone());
+    cx.update_window(handle.into(), |_, window, cx| {
+        let focus = table.read(cx).focus_handle(cx);
+        window.focus(&focus, cx);
+    })
+    .unwrap();
+
+    // Select all, through the same action the keyboard shortcut sends.
+    cx.dispatch_action(handle.into(), SelectAllRows);
+    draw(cx, handle);
+    let picked = cx.update(|cx| view.read(cx).picked_paths(cx));
+    assert_eq!(picked, ["proj/docs", "proj/readme.txt", "proj/src"]);
+
+    // Copy the paths of everything picked.
+    cx.dispatch_action(handle.into(), RowCopyPath);
+    let copied = cx.read_from_clipboard().and_then(|c| c.text());
+    assert_eq!(
+        copied.as_deref(),
+        Some("proj/docs\nproj/readme.txt\nproj/src")
+    );
+
+    // Extract all of it into a folder named after the archive.
+    cx.dispatch_action(handle.into(), RowExtractNamed);
+    wait_for_tasks(cx, handle, &view);
+    for f in [
+        "bundle/proj/readme.txt",
+        "bundle/proj/docs/说明.md",
+        "bundle/proj/src/main.rs",
+    ] {
+        assert!(tmp.path().join(f).is_file(), "{f}");
+    }
+
+    // Only src and readme.txt picked: "extract here" next to the archive leaves docs out.
+    with_view(cx, handle, &view, |v, _, cx| {
+        v.table
+            .update(cx, |t, _| t.delegate_mut().mark_only("proj/src"));
+        // Row 2 is readme.txt.
+        v.table.update(cx, |t, _| t.delegate_mut().toggle(2));
+    });
+    cx.dispatch_action(handle.into(), RowExtractHere);
+    wait_for_tasks(cx, handle, &view);
+    assert!(tmp.path().join("proj/src/lib.rs").is_file());
+    assert!(tmp.path().join("proj/readme.txt").is_file());
+    assert!(!tmp.path().join("proj/docs").exists());
+}
+
+#[gpui_kit::test]
 fn a_finished_test_marks_the_archive_as_verified(cx: &mut TestAppContext) {
     let tmp = tempfile::tempdir().unwrap();
     let archive = make_archive(tmp.path(), "a.zip", None);
@@ -850,7 +918,7 @@ fn several_archives_keep_their_own_folder_and_tabs_close_cleanly(cx: &mut TestAp
     let a = make_archive(tmp.path(), "a.zip", None);
     let b = tmp.path().join("b.tar.gz");
     compress(
-        &[tmp.path().join("proj/docs")],
+        &[tmp.path().join("a.zip.src/proj/docs")],
         &b,
         OutputFormat::from_path(&b).unwrap(),
         &CreateOptions::default(),

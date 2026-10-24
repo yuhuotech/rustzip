@@ -7,7 +7,11 @@ use crate::brand::{self, palette};
 use crate::recent::{self, RecentList, RecentSort};
 use crate::rows::FileRows;
 use crate::services::UpdateState;
-use crate::{CloseTab, ExtractAll, FocusSearch, NewArchiveDialog, OpenArchiveDialog, OpenSettings};
+use crate::{
+    CloseTab, ExtractAll, FocusSearch, NewArchiveDialog, OpenArchiveDialog, OpenSettings,
+    RowAddHere, RowCopyPath, RowDelete, RowExtractHere, RowExtractNamed, RowExtractTo, RowOpen,
+    RowRename, SelectAllRows,
+};
 use gpui_kit::component::button::*;
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::progress::Progress;
@@ -377,7 +381,13 @@ impl MainView {
             Some(a) => (Some(a.tree.clone()), a.cwd.clone()),
             None => (None, String::new()),
         };
+        let editable = self.can_edit();
+        let stem = self
+            .current()
+            .map(|a| recent::archive_stem(&a.path))
+            .unwrap_or_default();
         self.table.update(cx, |t, cx| {
+            t.delegate_mut().set_menu_context(editable, &stem);
             t.delegate_mut().show(tree, &cwd, &filter);
             t.refresh(cx);
         });
@@ -727,8 +737,109 @@ impl MainView {
         self.extract(any, window, cx);
     }
 
+    // ----- the right-click menu of the list ------------------------------------------------
+
+    /// Picks every row of the folder being shown (⌘A / Ctrl+A).
+    pub fn select_all_rows(&mut self, cx: &mut Context<Self>) {
+        self.table.update(cx, |t, cx| {
+            t.delegate_mut().mark_all();
+            cx.notify();
+        });
+        self.leave_notice();
+        cx.notify();
+    }
+
+    /// Unpacks the picked items to `dest`, keeping their folders.
+    fn extract_picked_to(&mut self, dest: PathBuf, cx: &mut Context<Self>) {
+        let picked = self.picked_paths(cx);
+        if picked.is_empty() {
+            self.say(Notice::Info("先在列表里选一个文件或文件夹".into()), cx);
+            return;
+        }
+        self.start_extract(dest, Some(picked), cx);
+    }
+
+    /// Next to the archive: "extract here".
+    pub fn extract_picked_here(&mut self, cx: &mut Context<Self>) {
+        let Some(dir) = self
+            .current()
+            .and_then(|a| a.path.parent().map(Path::to_path_buf))
+        else {
+            return;
+        };
+        self.extract_picked_to(dir, cx);
+    }
+
+    /// Next to the archive, in a folder named after it.
+    pub fn extract_picked_named(&mut self, cx: &mut Context<Self>) {
+        let Some(a) = self.current() else { return };
+        let Some(parent) = a.path.parent() else {
+            return;
+        };
+        let dir = parent.join(recent::archive_stem(&a.path));
+        self.extract_picked_to(dir, cx);
+    }
+
+    /// Puts the in-archive paths of the picked items on the clipboard, one per line.
+    pub fn copy_picked_paths(&mut self, cx: &mut Context<Self>) {
+        let picked = self.picked_paths(cx);
+        if picked.is_empty() {
+            return;
+        }
+        let n = picked.len();
+        cx.write_to_clipboard(ClipboardItem::new_string(picked.join("\n")));
+        self.say(Notice::Info(format!("已复制 {n} 个路径")), cx);
+    }
+
+    /// "Open" in the menu: a folder is entered, a file is opened with its program.
+    pub fn open_picked(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let picked = self.picked_paths(cx);
+        let [path] = picked.as_slice() else { return };
+        let Some(row) = self.current().and_then(|a| a.tree.find(path)) else {
+            return;
+        };
+        match row.kind {
+            RowKind::Dir => {
+                self.search.update(cx, |s, cx| s.set_value("", window, cx));
+                self.navigate(path, cx);
+            }
+            RowKind::File => {
+                if let Some(a) = self.current_mut() {
+                    a.selected = Some(path.clone());
+                }
+                self.open_selected(cx);
+            }
+            RowKind::Link => {}
+        }
+    }
+
+    /// Adds files into the one folder that is picked.
+    pub fn add_into_picked_folder(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let picked = self.picked_paths(cx);
+        let [path] = picked.as_slice() else { return };
+        if self
+            .current()
+            .and_then(|a| a.tree.find(path))
+            .map(|r| r.kind)
+            != Some(RowKind::Dir)
+        {
+            return;
+        }
+        self.pick_files_to_add_into(path.clone(), window, cx);
+    }
+
     /// Asks which files to add, then adds them to the folder being shown.
     pub fn pick_files_to_add(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let into = self.current().map(|a| a.cwd.clone()).unwrap_or_default();
+        self.pick_files_to_add_into(into, window, cx);
+    }
+
+    fn pick_files_to_add_into(
+        &mut self,
+        into: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if !self.can_edit() {
             self.say(Notice::Info("这种格式的压缩包不能修改".into()), cx);
             return;
@@ -741,7 +852,7 @@ impl MainView {
         });
         cx.spawn_in(window, async move |this, cx| {
             if let Ok(Ok(Some(paths))) = rx.await {
-                let _ = this.update(cx, |this, cx| this.add_files(paths, cx));
+                let _ = this.update(cx, |this, cx| this.add_files_into(into, paths, cx));
             }
         })
         .detach();
@@ -750,10 +861,14 @@ impl MainView {
     /// Adds files and folders to the folder being shown. The archive is rewritten.
     pub fn add_files(&mut self, sources: Vec<PathBuf>, cx: &mut Context<Self>) {
         let Some(a) = self.current() else { return };
+        let into = a.cwd.clone();
+        self.add_files_into(into, sources, cx);
+    }
+
+    fn add_files_into(&mut self, into: String, sources: Vec<PathBuf>, cx: &mut Context<Self>) {
         if sources.is_empty() || !self.can_edit() {
             return;
         }
-        let into = a.cwd.clone();
         self.submit_edit(rz_app::modify::Edit::Add { into, sources }, cx);
     }
 
@@ -1660,6 +1775,26 @@ impl Render for MainView {
                 this.close_tab(this.active, cx);
             }))
             .on_action(cx.listener(|this, _: &OpenSettings, _, cx| this.open_settings(cx)))
+            // The right-click menu of the file list.
+            .on_action(cx.listener(|this, _: &RowOpen, window, cx| this.open_picked(window, cx)))
+            .on_action(cx.listener(|this, _: &RowExtractTo, window, cx| {
+                this.extract_to(window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &RowExtractHere, _, cx| {
+                this.extract_picked_here(cx);
+            }))
+            .on_action(cx.listener(|this, _: &RowExtractNamed, _, cx| {
+                this.extract_picked_named(cx);
+            }))
+            .on_action(cx.listener(|this, _: &RowCopyPath, _, cx| this.copy_picked_paths(cx)))
+            .on_action(cx.listener(|this, _: &RowAddHere, window, cx| {
+                this.add_into_picked_folder(window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &RowRename, window, cx| {
+                this.ask_rename_entry(window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &RowDelete, _, cx| this.ask_delete(cx)))
+            .on_action(cx.listener(|this, _: &SelectAllRows, _, cx| this.select_all_rows(cx)))
             .on_action(cx.listener(|this, _: &ExtractAll, window, cx| {
                 this.extract(false, window, cx);
             }))

@@ -1,8 +1,13 @@
 //! The file list: a virtualised table whose rows come from the archive tree.
 
 use crate::brand::palette;
-use gpui_kit::component::table::{Column, ColumnSort, TableDelegate, TableState};
-use gpui_kit::component::{ActiveTheme, h_flex};
+use crate::{
+    RowAddHere, RowCopyPath, RowDelete, RowExtractHere, RowExtractNamed, RowExtractTo, RowOpen,
+    RowRename,
+};
+use gpui_kit::component::menu::PopupMenu;
+use gpui_kit::component::table::{Column, ColumnSort, TableDelegate, TableEvent, TableState};
+use gpui_kit::component::{ActiveTheme, Icon, IconName, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 use rz_app::browse::{ArchiveTree, Badge, Row, RowKind, SortKey, badge, badge_label, format_size};
@@ -24,6 +29,10 @@ pub struct FileRows {
     columns: Vec<Column>,
     /// Paths picked with ⌘/Ctrl-click or Shift-click, besides the table's own row.
     marked: BTreeSet<String>,
+    /// Whether the archive can be changed, and the name for "extract to a folder of the
+    /// same name"; both only shape the right-click menu.
+    editable: bool,
+    stem: String,
 }
 
 impl Default for FileRows {
@@ -40,6 +49,8 @@ impl Default for FileRows {
             ascending: true,
             rows: Vec::new(),
             marked: BTreeSet::new(),
+            editable: false,
+            stem: String::new(),
             columns: vec![
                 Column::new("name", "名称").width(px(340.)).sortable(),
                 size,
@@ -58,6 +69,17 @@ impl FileRows {
         self.filter = filter.to_string();
         self.marked.clear();
         self.reload();
+    }
+
+    /// What the right-click menu needs to know about the archive.
+    pub fn set_menu_context(&mut self, editable: bool, stem: &str) {
+        self.editable = editable;
+        self.stem = stem.to_string();
+    }
+
+    /// Picks every row that is listed.
+    pub fn mark_all(&mut self) {
+        self.marked = self.rows.iter().map(|r| r.path.clone()).collect();
     }
 
     /// Everything the user has picked, in path order.
@@ -183,6 +205,87 @@ impl TableDelegate for FileRows {
             .size_full()
             .text_size(px(12.))
             .child(self.column(col_ix, cx).name)
+    }
+
+    /// The right-click menu. Like in a file manager, a right click on something that is
+    /// not part of the selection first selects just that; a click inside the selection
+    /// keeps the whole selection, so a menu entry acts on all of it.
+    fn context_menu(
+        &mut self,
+        row_ix: usize,
+        menu: PopupMenu,
+        _: &mut Window,
+        cx: &mut Context<TableState<Self>>,
+    ) -> PopupMenu {
+        if let Some(row) = self.rows.get(row_ix).cloned()
+            && !self.marked.contains(&row.path)
+        {
+            self.mark_only(&row.path);
+            cx.emit(TableEvent::SelectRow(row_ix));
+        }
+        let picked: Vec<&Row> = self
+            .rows
+            .iter()
+            .filter(|r| self.marked.contains(&r.path))
+            .collect();
+        let one = (picked.len() == 1).then(|| picked[0]);
+        let editable = self.editable;
+        let stem = if self.stem.is_empty() {
+            "同名".to_string()
+        } else {
+            self.stem.clone()
+        };
+        let mut menu = menu;
+        if picked.len() > 1 {
+            menu = menu.label(format!("已选 {} 项", picked.len()));
+        }
+        // Opening is for one thing at a time.
+        menu = match one.map(|r| r.kind) {
+            Some(RowKind::Dir) => {
+                menu.menu_with_icon("打开文件夹", IconName::FolderOpen, Box::new(RowOpen))
+            }
+            Some(RowKind::File) => {
+                menu.menu_with_icon("打开", IconName::ExternalLink, Box::new(RowOpen))
+            }
+            _ => menu,
+        };
+        menu = menu
+            .separator()
+            .menu_with_icon("解压到…", IconName::ArrowDown, Box::new(RowExtractTo))
+            .menu_with_icon(
+                "解压到当前文件夹",
+                IconName::Folder,
+                Box::new(RowExtractHere),
+            )
+            .menu_with_icon(
+                format!("解压到“{stem}”文件夹"),
+                IconName::FolderOpen,
+                Box::new(RowExtractNamed),
+            )
+            .separator()
+            .menu_with_icon("复制路径", IconName::Copy, Box::new(RowCopyPath));
+        // Changing the archive needs a format that can be rewritten.
+        menu = menu.separator();
+        if one.is_some_and(|r| r.kind == RowKind::Dir) {
+            menu = menu.menu_with_icon_and_disabled(
+                "添加文件到此文件夹…",
+                IconName::Plus,
+                Box::new(RowAddHere),
+                !editable,
+            );
+        }
+        menu.menu_with_icon_and_disabled(
+            "重命名",
+            IconName::Replace,
+            Box::new(RowRename),
+            !editable || one.is_none(),
+        )
+        .menu_with_icon_and_disabled(
+            "删除",
+            Icon::new(gpui_kit::assets::IconName::Trash),
+            Box::new(RowDelete),
+            !editable,
+        )
     }
 
     fn render_tr(
