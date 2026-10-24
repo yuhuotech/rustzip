@@ -5,16 +5,17 @@
 
 use crate::brand::{self, palette};
 use crate::rows::{FileRows, badge_chip};
-use crate::{CloseTab, ExtractAll, FocusSearch, NewArchiveDialog, OpenArchiveDialog};
+use crate::{CloseTab, ExtractAll, FocusSearch, NewArchiveDialog, OpenArchiveDialog, OpenSettings};
 use gpui_kit::component::button::*;
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::progress::Progress;
+use gpui_kit::component::switch::Switch;
 use gpui_kit::component::table::{DataTable, TableEvent, TableState};
 use gpui_kit::component::{ActiveTheme, Disableable, Icon, IconName, Sizable, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 use rz_app::browse::{ArchiveTree, Row, RowKind, compression_ratio, format_size};
-use rz_app::settings::Settings;
+use rz_app::settings::{OnConflict, Settings, Theme};
 use rz_app::tasks::{ErrorCode, JobKind, JobSpec, TaskId, TaskInfo, TaskManager, TaskState};
 use rz_core::{CreateOptions, Error};
 use rz_formats::OutputFormat;
@@ -115,6 +116,9 @@ pub struct CompressForm {
 pub enum Overlay {
     Password(PasswordPrompt),
     Compress(CompressForm),
+    Settings,
+    /// Shown once, on the first start: what the anonymous statistics are.
+    Privacy,
 }
 
 pub struct MainView {
@@ -758,6 +762,43 @@ impl MainView {
         self.overlay = None;
         cx.notify();
     }
+
+    pub fn open_settings(&mut self, cx: &mut Context<Self>) {
+        self.overlay = Some(Overlay::Settings);
+        cx.notify();
+    }
+
+    /// Tells a first-time user about the install statistics, once.
+    pub fn show_first_run_notice(&mut self, cx: &mut Context<Self>) {
+        if !self.settings.privacy_notice_seen {
+            self.overlay = Some(Overlay::Privacy);
+            cx.notify();
+        }
+    }
+
+    /// Changes one setting, stores it, and redraws.
+    pub fn change_settings(&mut self, f: impl FnOnce(&mut Settings), cx: &mut Context<Self>) {
+        f(&mut self.settings);
+        self.save_settings();
+        cx.notify();
+    }
+
+    pub fn set_theme(&mut self, pick: Theme, window: &mut Window, cx: &mut Context<Self>) {
+        self.change_settings(|s| s.theme = pick, cx);
+        brand::choose(pick, window, cx);
+    }
+
+    /// Closes the first-run notice; `keep_stats` is the user's answer to it.
+    pub fn answer_privacy(&mut self, keep_stats: bool, cx: &mut Context<Self>) {
+        self.change_settings(
+            |s| {
+                s.send_install_stats = keep_stats;
+                s.privacy_notice_seen = true;
+            },
+            cx,
+        );
+        self.close_overlay(cx);
+    }
 }
 
 // ----- drawing ---------------------------------------------------------------------------
@@ -786,6 +827,7 @@ impl Render for MainView {
             .on_action(cx.listener(|this, _: &CloseTab, _, cx| {
                 this.close_tab(this.active, cx);
             }))
+            .on_action(cx.listener(|this, _: &OpenSettings, _, cx| this.open_settings(cx)))
             .on_action(cx.listener(|this, _: &ExtractAll, window, cx| {
                 this.extract(false, window, cx);
             }))
@@ -796,7 +838,8 @@ impl Render for MainView {
             // disabled buttons would only be noise.
             .when(has_archive, |d| d.child(self.render_toolbar(cx)))
             .child(if has_archive {
-                self.render_browser(cx).into_any_element()
+                self.render_browser(window.viewport_size().width, cx)
+                    .into_any_element()
             } else {
                 self.render_empty(cx).into_any_element()
             })
@@ -903,13 +946,30 @@ impl MainView {
                     .w(px(190.))
                     .child(Input::new(&self.search).id("search")),
             )
+            .child(self.settings_button(cx))
+    }
+
+    fn settings_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        Button::new("open-settings")
+            .ghost()
+            .icon(IconName::Settings)
+            .tooltip("设置")
+            .on_click(cx.listener(|this, _, _, cx| this.open_settings(cx)))
     }
 
     fn render_empty(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let p = palette(cx);
         v_flex()
             .id("empty")
+            .relative()
             .flex_1()
+            .child(
+                div()
+                    .absolute()
+                    .top_2()
+                    .right_2()
+                    .child(self.settings_button(cx)),
+            )
             .items_center()
             .justify_center()
             .gap_3()
@@ -1007,7 +1067,7 @@ impl MainView {
             .into_any_element()
     }
 
-    fn render_browser(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_browser(&self, width: Pixels, cx: &mut Context<Self>) -> impl IntoElement {
         let p = palette(cx);
         // `h_flex` centres its children vertically; the three columns must fill the height.
         h_flex()
@@ -1032,17 +1092,20 @@ impl MainView {
                         ),
                     ),
             )
-            .child(
-                v_flex()
-                    .id("inspector")
-                    .w(px(224.))
-                    .flex_none()
-                    .p_3()
-                    .gap_3()
-                    .border_l_1()
-                    .border_color(p.line)
-                    .child(self.render_inspector(cx)),
-            )
+            // Below this width the file list matters more than the details beside it.
+            .when(width >= px(760.), |d| {
+                d.child(
+                    v_flex()
+                        .id("inspector")
+                        .w(px(224.))
+                        .flex_none()
+                        .p_3()
+                        .gap_3()
+                        .border_l_1()
+                        .border_color(p.line)
+                        .child(self.render_inspector(cx)),
+                )
+            })
     }
 
     fn render_sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -1429,6 +1492,8 @@ impl MainView {
         let card = match self.overlay.as_ref()? {
             Overlay::Password(prompt) => self.password_card(prompt, cx).into_any_element(),
             Overlay::Compress(form) => self.compress_card(form, cx).into_any_element(),
+            Overlay::Settings => self.settings_card(cx).into_any_element(),
+            Overlay::Privacy => self.privacy_card(cx).into_any_element(),
         };
         Some(
             div()
@@ -1479,6 +1544,161 @@ impl MainView {
                     .child(Button::new("pw-ok").primary().label("确定").on_click(
                         cx.listener(|this, _, window, cx| this.submit_password(window, cx)),
                     )),
+            )
+    }
+
+    fn settings_card(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let p = palette(cx);
+        let s = &self.settings;
+        let segment = |id: &'static str, label: &'static str, on: bool| {
+            let b = Button::new(id).label(label).small();
+            if on { b.primary() } else { b.outline() }
+        };
+        let group = |title: &'static str, body: AnyElement| {
+            v_flex()
+                .gap_1()
+                .child(div().text_color(p.fg3).text_size(px(12.)).child(title))
+                .child(body)
+        };
+        // One switch per row, with a line that says what turning it on does.
+        let toggle = |id: &'static str, title: &'static str, hint: &'static str, on: bool| {
+            h_flex()
+                .gap_3()
+                .items_center()
+                .child(
+                    v_flex()
+                        .flex_1()
+                        .child(div().child(title))
+                        .child(div().text_size(px(12.)).text_color(p.fg3).child(hint)),
+                )
+                .child(Switch::new(id).checked(on))
+        };
+        let (theme, conflict) = (s.theme, s.on_conflict);
+        v_flex()
+            .gap_4()
+            .child(div().text_size(px(16.)).child("设置"))
+            .child(group(
+                "外观",
+                h_flex()
+                    .gap_1()
+                    .children(
+                        [
+                            ("theme-system", "跟随系统", Theme::System),
+                            ("theme-light", "浅色", Theme::Light),
+                            ("theme-dark", "深色", Theme::Dark),
+                        ]
+                        .map(|(id, label, t)| {
+                            segment(id, label, theme == t).on_click(
+                                cx.listener(move |this, _, window, cx| {
+                                    this.set_theme(t, window, cx)
+                                }),
+                            )
+                        }),
+                    )
+                    .into_any_element(),
+            ))
+            .child(group(
+                "文件已存在时",
+                h_flex()
+                    .gap_1()
+                    .children(
+                        [
+                            ("conflict-ask", "询问", OnConflict::Ask),
+                            ("conflict-skip", "跳过", OnConflict::Skip),
+                            ("conflict-replace", "覆盖", OnConflict::Replace),
+                        ]
+                        .map(|(id, label, c)| {
+                            segment(id, label, conflict == c).on_click(cx.listener(
+                                move |this, _, _, cx| {
+                                    this.change_settings(|s| s.on_conflict = c, cx);
+                                },
+                            ))
+                        }),
+                    )
+                    .into_any_element(),
+            ))
+            .child(
+                v_flex()
+                    .gap_3()
+                    .child(
+                        toggle(
+                            "set-smart",
+                            "智能解压",
+                            "压缩包里有多个散文件时,自动放进以压缩包命名的文件夹",
+                            s.smart_extract,
+                        )
+                        .id("row-smart")
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.change_settings(|s| s.smart_extract = !s.smart_extract, cx);
+                        })),
+                    )
+                    .child(
+                        toggle(
+                            "set-updates",
+                            "自动检查更新",
+                            "启动时在后台检查新版本;更新包会验证签名",
+                            s.check_updates,
+                        )
+                        .id("row-updates")
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.change_settings(|s| s.check_updates = !s.check_updates, cx);
+                        })),
+                    )
+                    .child(
+                        toggle(
+                            "set-stats",
+                            "匿名安装统计",
+                            "只上报随机编号、版本、系统和语言,不含文件名或使用行为",
+                            s.send_install_stats,
+                        )
+                        .id("row-stats")
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.change_settings(
+                                |s| s.send_install_stats = !s.send_install_stats,
+                                cx,
+                            );
+                        })),
+                    ),
+            )
+            .child(
+                h_flex().justify_end().child(
+                    Button::new("settings-close")
+                        .primary()
+                        .label("完成")
+                        .on_click(cx.listener(|this, _, _, cx| this.close_overlay(cx))),
+                ),
+            )
+    }
+
+    fn privacy_card(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let p = palette(cx);
+        v_flex()
+            .gap_3()
+            .child(div().text_size(px(16.)).child("关于匿名统计"))
+            .child(div().text_color(p.fg2).child(
+                "RustZIP 是免费开源软件。为了了解有多少人在用,首次启动时会上报一次匿名信息:\
+                 随机编号、软件版本、系统及版本、CPU 架构、界面语言。",
+            ))
+            .child(div().text_color(p.fg2).child(
+                "不会收集文件名、路径、文件内容或任何使用行为。发送失败时直接丢弃,不影响启动。\
+                 你随时可以在设置里关闭。",
+            ))
+            .child(
+                h_flex()
+                    .justify_end()
+                    .gap_2()
+                    .child(
+                        Button::new("privacy-off")
+                            .outline()
+                            .label("不参与")
+                            .on_click(cx.listener(|this, _, _, cx| this.answer_privacy(false, cx))),
+                    )
+                    .child(
+                        Button::new("privacy-on")
+                            .primary()
+                            .label("好的")
+                            .on_click(cx.listener(|this, _, _, cx| this.answer_privacy(true, cx))),
+                    ),
             )
     }
 

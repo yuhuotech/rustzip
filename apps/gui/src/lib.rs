@@ -21,7 +21,8 @@ actions!(
         NewArchiveDialog,
         FocusSearch,
         CloseTab,
-        ExtractAll
+        ExtractAll,
+        OpenSettings
     ]
 );
 
@@ -35,11 +36,16 @@ pub fn install_app_actions(cx: &mut App) {
         KeyBinding::new("secondary-f", FocusSearch, None),
         KeyBinding::new("secondary-w", CloseTab, None),
         KeyBinding::new("secondary-e", ExtractAll, None),
+        KeyBinding::new("secondary-,", OpenSettings, None),
     ]);
     cx.set_menus(vec![
         Menu {
             name: "RustZIP".into(),
-            items: vec![MenuItem::action("退出 RustZIP", Quit)],
+            items: vec![
+                MenuItem::action("设置…", OpenSettings),
+                MenuItem::separator(),
+                MenuItem::action("退出 RustZIP", Quit),
+            ],
             disabled: false,
         },
         Menu {
@@ -100,6 +106,11 @@ pub fn open_main_window(initial: Vec<PathBuf>, cx: &mut App) {
         let path = settings_path();
         let settings = path.as_deref().map(Settings::load).unwrap_or_default();
         let main = cx.new(|cx| MainView::new(settings, path, window, cx));
+        main.update(cx, |m, cx| {
+            let pick = m.settings.theme;
+            brand::choose(pick, window, cx);
+            m.show_first_run_notice(cx);
+        });
         for p in initial {
             main.update(cx, |m, cx| m.open_path(p, None, window, cx));
         }

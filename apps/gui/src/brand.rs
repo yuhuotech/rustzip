@@ -3,7 +3,7 @@
 //! Colours are only ever read through the theme, never written into a view, so the
 //! light and dark palettes stay in one place.
 
-use gpui_kit::component::Theme;
+use gpui_kit::component::{Theme, ThemeMode};
 use gpui_kit::{App, Hsla, px, rgb};
 
 /// The semantic tokens of the design: light on the left, dark on the right.
@@ -137,10 +137,32 @@ pub fn follow_system(window: &mut gpui_kit::Window, cx: &mut App) {
     apply(cx);
     window
         .observe_window_appearance(|window, cx| {
-            Theme::sync_system_appearance(Some(window), cx);
-            apply(cx);
+            // A fixed light or dark choice must survive the system switching.
+            if cx
+                .try_global::<Choice>()
+                .is_none_or(|c| c.0 == Pick::System)
+            {
+                Theme::sync_system_appearance(Some(window), cx);
+                apply(cx);
+            }
         })
         .detach();
+}
+
+pub use rz_app::settings::Theme as Pick;
+
+struct Choice(Pick);
+impl gpui_kit::Global for Choice {}
+
+/// Applies the theme the user picked in the settings.
+pub fn choose(pick: Pick, window: &mut gpui_kit::Window, cx: &mut App) {
+    cx.set_global(Choice(pick));
+    match pick {
+        Pick::System => Theme::sync_system_appearance(Some(window), cx),
+        Pick::Light => Theme::change(ThemeMode::Light, Some(window), cx),
+        Pick::Dark => Theme::change(ThemeMode::Dark, Some(window), cx),
+    }
+    apply(cx);
 }
 
 #[cfg(test)]

@@ -596,6 +596,54 @@ fn opened_archives_are_remembered_across_launches(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn settings_changes_are_saved_and_the_theme_follows_the_choice(cx: &mut TestAppContext) {
+    use rz_app::settings::{OnConflict, Theme as Pick};
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("cfg/settings.json");
+    let (handle, view) = open_window(cx, Some(path.clone()));
+    with_view(cx, handle, &view, |v, _, cx| v.open_settings(cx));
+    cx.update(|cx| assert!(matches!(view.read(cx).overlay, Some(Overlay::Settings))));
+
+    with_view(cx, handle, &view, |v, window, cx| {
+        v.set_theme(Pick::Dark, window, cx);
+        v.change_settings(|s| s.on_conflict = OnConflict::Skip, cx);
+        v.change_settings(|s| s.smart_extract = false, cx);
+    });
+    cx.update(|cx| assert!(cx.theme().is_dark()));
+    let saved = Settings::load(&path);
+    assert_eq!(saved.theme, Pick::Dark);
+    assert_eq!(saved.on_conflict, OnConflict::Skip);
+    assert!(!saved.smart_extract);
+
+    // A fixed choice is not undone by the system; choosing "system" hands control back.
+    with_view(cx, handle, &view, |v, window, cx| {
+        v.set_theme(Pick::Light, window, cx);
+    });
+    cx.update(|cx| assert!(!cx.theme().is_dark()));
+    assert_eq!(cx.update(|cx| cx.theme().primary), Palette::light().accent);
+}
+
+#[gpui_kit::test]
+fn the_privacy_notice_shows_once_and_records_the_answer(cx: &mut TestAppContext) {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("settings.json");
+    let (handle, view) = open_window(cx, Some(path.clone()));
+    with_view(cx, handle, &view, |v, _, cx| v.show_first_run_notice(cx));
+    cx.update(|cx| assert!(matches!(view.read(cx).overlay, Some(Overlay::Privacy))));
+
+    with_view(cx, handle, &view, |v, _, cx| v.answer_privacy(false, cx));
+    cx.update(|cx| assert!(view.read(cx).overlay.is_none()));
+    let saved = Settings::load(&path);
+    assert!(saved.privacy_notice_seen);
+    assert!(!saved.send_install_stats);
+
+    // The next start does not ask again.
+    let (handle2, view2) = open_window(cx, Some(path));
+    with_view(cx, handle2, &view2, |v, _, cx| v.show_first_run_notice(cx));
+    cx.update(|cx| assert!(view2.read(cx).overlay.is_none()));
+}
+
+#[gpui_kit::test]
 fn a_task_can_be_paused_cancelled_and_cleared_from_the_window(cx: &mut TestAppContext) {
     let tmp = tempfile::tempdir().unwrap();
     let archive = make_archive(tmp.path(), "a.zip", None);

@@ -196,5 +196,17 @@ fn main() {
             );
         });
         shoot(&mut cx, handle, &out_dir, &format!("{tag}-6-password"));
+
+        // 7. Settings and the first-run notice.
+        act(&mut cx, handle, &view, |v, _, cx| {
+            v.close_overlay(cx);
+            v.open_settings(cx);
+        });
+        shoot(&mut cx, handle, &out_dir, &format!("{tag}-7-settings"));
+        act(&mut cx, handle, &view, |v, _, cx| {
+            v.close_overlay(cx);
+            v.show_first_run_notice(cx);
+        });
+        shoot(&mut cx, handle, &out_dir, &format!("{tag}-8-privacy"));
     }
 }
