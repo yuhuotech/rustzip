@@ -36,7 +36,9 @@ actions!(
         RowAddHere,
         RowRename,
         RowDelete,
-        SelectAllRows
+        SelectAllRows,
+        // Right click on the empty part of the list.
+        BlankAdd
     ]
 );
 

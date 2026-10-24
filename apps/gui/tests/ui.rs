@@ -632,6 +632,46 @@ fn the_row_menu_actions_work_on_the_whole_selection(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn a_right_click_on_the_empty_part_lets_go_of_the_selection(cx: &mut TestAppContext) {
+    let tmp = tempfile::tempdir().unwrap();
+    let archive = make_archive(tmp.path(), "a.zip", None);
+    let (handle, view) = open_window(cx, None);
+    open_sync(cx, handle, &view, &archive, None);
+    with_view(cx, handle, &view, |v, _, cx| v.navigate("proj", cx));
+    let table = cx.update(|cx| view.read(cx).table.clone());
+    cx.update_window(handle.into(), |_, _, cx| {
+        table.update(cx, |t, cx| t.set_selected_row(2, cx));
+    })
+    .unwrap();
+    draw(cx, handle);
+    cx.update(|cx| {
+        assert!(view.read(cx).selected_row().is_some());
+        assert_eq!(view.read(cx).picked_paths(cx), ["proj/readme.txt"]);
+    });
+
+    // What the list's menu does for the empty part: report that nothing is selected.
+    cx.update_window(handle.into(), |_, _, cx| {
+        table.update(cx, |_, cx| cx.emit(TableEvent::ClearSelection));
+    })
+    .unwrap();
+    draw(cx, handle);
+    cx.update(|cx| {
+        let v = view.read(cx);
+        assert!(v.selected_row().is_none());
+        assert!(v.picked_paths(cx).is_empty());
+        assert!(v.preview.is_none());
+        assert!(table.read(cx).selected_row().is_none());
+    });
+    // Picking a row afterwards still works.
+    cx.update_window(handle.into(), |_, _, cx| {
+        table.update(cx, |t, cx| t.set_selected_row(0, cx));
+    })
+    .unwrap();
+    draw(cx, handle);
+    cx.update(|cx| assert_eq!(view.read(cx).picked_paths(cx), ["proj/docs"]));
+}
+
+#[gpui_kit::test]
 fn a_finished_test_marks_the_archive_as_verified(cx: &mut TestAppContext) {
     let tmp = tempfile::tempdir().unwrap();
     let archive = make_archive(tmp.path(), "a.zip", None);

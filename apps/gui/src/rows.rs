@@ -2,8 +2,8 @@
 
 use crate::brand::palette;
 use crate::{
-    RowAddHere, RowCopyPath, RowDelete, RowExtractHere, RowExtractNamed, RowExtractTo, RowOpen,
-    RowRename,
+    BlankAdd, RowAddHere, RowCopyPath, RowDelete, RowExtractHere, RowExtractNamed, RowExtractTo,
+    RowOpen, RowRename, SelectAllRows,
 };
 use gpui_kit::component::menu::PopupMenu;
 use gpui_kit::component::table::{Column, ColumnSort, TableDelegate, TableEvent, TableState};
@@ -75,6 +75,11 @@ impl FileRows {
     pub fn set_menu_context(&mut self, editable: bool, stem: &str) {
         self.editable = editable;
         self.stem = stem.to_string();
+    }
+
+    /// Lets go of everything picked.
+    pub fn clear_marks(&mut self) {
+        self.marked.clear();
     }
 
     /// Picks every row that is listed.
@@ -217,6 +222,27 @@ impl TableDelegate for FileRows {
         _: &mut Window,
         cx: &mut Context<TableState<Self>>,
     ) -> PopupMenu {
+        // The empty part of the list (the window tells us so with an index past the last
+        // row): nothing is picked any more, and what people most likely want to do in
+        // the folder they are looking at is put something into it.
+        if row_ix >= self.rows.len() {
+            self.marked.clear();
+            cx.emit(TableEvent::ClearSelection);
+            let mut menu = menu.menu_with_icon_and_disabled(
+                "添加文件到此处…",
+                IconName::Plus,
+                Box::new(BlankAdd),
+                !self.editable,
+            );
+            if !self.rows.is_empty() {
+                menu = menu.separator().menu_with_icon(
+                    "全选",
+                    IconName::Check,
+                    Box::new(SelectAllRows),
+                );
+            }
+            return menu;
+        }
         if let Some(row) = self.rows.get(row_ix).cloned()
             && !self.marked.contains(&row.path)
         {

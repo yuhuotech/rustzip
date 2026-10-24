@@ -8,7 +8,7 @@ use crate::recent::{self, RecentList, RecentSort};
 use crate::rows::FileRows;
 use crate::services::UpdateState;
 use crate::{
-    CloseTab, ExtractAll, FocusSearch, NewArchiveDialog, OpenArchiveDialog, OpenSettings,
+    BlankAdd, CloseTab, ExtractAll, FocusSearch, NewArchiveDialog, OpenArchiveDialog, OpenSettings,
     RowAddHere, RowCopyPath, RowDelete, RowExtractHere, RowExtractNamed, RowExtractTo, RowOpen,
     RowRename, SelectAllRows,
 };
@@ -591,6 +591,8 @@ impl MainView {
     ) {
         let row_at = |ix: usize, cx: &App| table.read(cx).delegate().row(ix).cloned();
         match event {
+            // A right click on the empty part of the list: nothing stays picked.
+            TableEvent::ClearSelection => self.clear_pick(cx),
             TableEvent::SelectRow(ix) => {
                 if let Some(row) = row_at(*ix, cx) {
                     let path = row.path;
@@ -738,6 +740,24 @@ impl MainView {
     }
 
     // ----- the right-click menu of the list ------------------------------------------------
+
+    /// Nothing is picked: not in the list, not for the details panel.
+    pub fn clear_pick(&mut self, cx: &mut Context<Self>) {
+        if let Some(a) = self.current_mut() {
+            a.selected = None;
+        }
+        self.preview = None;
+        self.leave_notice();
+        self.table.update(cx, |t, cx| {
+            t.delegate_mut().clear_marks();
+            // The table keeps a row of its own highlighted; it must let go too.
+            if t.selected_row().is_some() {
+                t.clear_selection(cx);
+            }
+            cx.notify();
+        });
+        cx.notify();
+    }
 
     /// Picks every row of the folder being shown (⌘A / Ctrl+A).
     pub fn select_all_rows(&mut self, cx: &mut Context<Self>) {
@@ -1795,6 +1815,9 @@ impl Render for MainView {
             }))
             .on_action(cx.listener(|this, _: &RowDelete, _, cx| this.ask_delete(cx)))
             .on_action(cx.listener(|this, _: &SelectAllRows, _, cx| this.select_all_rows(cx)))
+            .on_action(cx.listener(|this, _: &BlankAdd, window, cx| {
+                this.pick_files_to_add(window, cx);
+            }))
             .on_action(cx.listener(|this, _: &ExtractAll, window, cx| {
                 this.extract(false, window, cx);
             }))
@@ -2125,11 +2148,29 @@ impl MainView {
                         .min_w_0()
                         .child(self.render_breadcrumbs(cx))
                         .child(
-                            div().id("files").flex_1().min_h_0().child(
-                                DataTable::new(&self.table)
-                                    .with_size(px(28.))
-                                    .bordered(false),
-                            ),
+                            div()
+                                .id("files")
+                                .flex_1()
+                                .min_h_0()
+                                // The table only knows right clicks on rows. Before it sees
+                                // one, assume the empty part (an index past the last row); a
+                                // click that does land on a row replaces that.
+                                .capture_any_mouse_down({
+                                    let table = self.table.clone();
+                                    move |ev, _, cx| {
+                                        if ev.button == MouseButton::Right {
+                                            let past = table.read(cx).delegate().rows().len();
+                                            table.update(cx, |t, cx| {
+                                                t.set_right_clicked_row(Some(past), cx)
+                                            });
+                                        }
+                                    }
+                                })
+                                .child(
+                                    DataTable::new(&self.table)
+                                        .with_size(px(28.))
+                                        .bordered(false),
+                                ),
                         ),
                 )
                 // Below this width the file list matters more than the details beside it.
