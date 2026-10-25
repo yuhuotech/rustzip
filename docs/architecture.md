@@ -96,3 +96,16 @@ trait ArchiveWriter { /* add / finish / 增量更新 */ }
 - **macOS**:Finder Sync 或 Action Extension;Quick Look 预览插件;签名和公证;拖到 Dock 图标压缩。
 - **Linux**:Nautilus 扩展、Dolphin ServiceMenu、`.desktop` MIME 关联;分发用 AppImage、Flatpak、deb / rpm。
 - 文件名编码、路径分隔符、大小写敏感性统一在 `rz-platform` 处理。
+
+## 8. 转换与恢复
+
+- `rz-app::tasks::JobSpec::Transform`：共享队列调度、暂停/取消/进度、密码重试及恢复报告，GUI 通过应用层使用。
+- `rz-engine::transform`：ZIP / tar / 7z 文件内容流式转换，保留文件名、目录及可用属性；路径、冲突名、压缩比、总量、深度和元数据预算检查。单文件流后端先测量大小再读取，测量受 `set_read_control` 的取消与大小限制约束；可选 RAR 仍沿用 unRAR 的逐条临时文件。修复逐条用匿名临时文件校验，失败条目不进入新包。输出在目标目录生成临时文件，整体校验通过后 `persist_noclobber` 发布。
+- `rz-formats::recovery`：ZIP 正常目录逐条读取及本地头扫描；7z 按独立块恢复，某一块失败不阻止尝试后续块。格式层不写解压路径，也不决定界面。
+- 收藏保存在 `Settings::favorites`；GUI 设置保存移入后台并串行执行，过期快照不覆盖较新状态。密码明文不进入设置，仍使用 `SecretStore` 与 `rz-services` 的系统钥匙串实现。
+
+## 9. 常用位置与目录双视图
+
+- `rz-platform::user_directories` 通过 `dirs` 读取平台标准目录（Windows Known Folders、Linux XDG、macOS 标准目录）。
+- `rz-app::locations` 合并系统目录、MRU 和旧收藏，规范化实际路径去重，过滤隐藏入口。`Settings` 保存 `recent_locations`（最多 20）、`hidden_locations`、`folder_view`，从旧 `recent` 回填，只有成功打开才更新历史；全部本地存储，不发送到统计服务。
+- GUI `locations` 模块在后台获取位置和元数据，以虚拟化列表或按行虚拟化网格呈现；两视图共享项目身份、排序和选择，页面重载使用代次校验，设置异步持久化。文件夹视图复用相同布局，GUI 不直接调用平台目录 API。
