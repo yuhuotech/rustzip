@@ -4,6 +4,7 @@
 mod codec;
 #[cfg(feature = "rar")]
 mod rar_fmt;
+pub mod recovery;
 mod sevenz_fmt;
 mod single;
 mod sniff;

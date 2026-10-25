@@ -2,7 +2,8 @@
 
 use crate::codec::{Compression, Sink};
 use rz_core::{
-    ArchiveReader, ArchiveWriter, Caps, CreateOptions, Entry, EntryKind, Error, NewEntry, Result,
+    ArchiveReader, ArchiveWriter, CancelToken, Caps, CreateOptions, Entry, EntryKind, Error,
+    NewEntry, Result,
 };
 use std::fs::File;
 use std::io::{Read, Write};
@@ -15,6 +16,7 @@ pub struct SingleReader {
     path: PathBuf,
     comp: Compression,
     size: Option<u64>,
+    control: Option<(CancelToken, u64)>,
 }
 
 impl SingleReader {
@@ -23,6 +25,7 @@ impl SingleReader {
             path: path.to_path_buf(),
             comp,
             size: None,
+            control: None,
         }
     }
 
@@ -49,6 +52,9 @@ impl SingleReader {
         let mut buf = vec![0u8; 256 * 1024];
         let mut total = 0u64;
         loop {
+            if let Some((cancel, _)) = &self.control {
+                cancel.check()?;
+            }
             let n = r
                 .read(&mut buf)
                 .map_err(|e| Error::Corrupt(e.to_string()))?;
@@ -56,8 +62,14 @@ impl SingleReader {
                 break;
             }
             total += n as u64;
-            if total > COUNT_LIMIT {
-                return Err(Error::LimitExceeded("stream is larger than 1 TiB".into()));
+            let limit = self
+                .control
+                .as_ref()
+                .map_or(COUNT_LIMIT, |(_, limit)| (*limit).min(COUNT_LIMIT));
+            if total > limit {
+                return Err(Error::LimitExceeded(
+                    "stream exceeds unpacked size limit".into(),
+                ));
             }
         }
         self.size = Some(total);
@@ -66,6 +78,9 @@ impl SingleReader {
 }
 
 impl ArchiveReader for SingleReader {
+    fn set_read_control(&mut self, cancel: CancelToken, max_total: u64) {
+        self.control = Some((cancel, max_total));
+    }
     fn format_name(&self) -> &'static str {
         match self.comp {
             Compression::Gzip => "gzip",

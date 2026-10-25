@@ -1,0 +1,24 @@
+[package]
+name = "rustzip-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+members = ["."]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+rz-core = { path = "../crates/rz-core" }
+rz-formats = { path = "../crates/rz-formats" }
+tempfile = "3"
+
+[[bin]]
+name = "zip_recovery"
+path = "fuzz_targets/zip_recovery.rs"
+test = false
+doc = false
+bench = false

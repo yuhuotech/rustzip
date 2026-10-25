@@ -66,6 +66,53 @@ fn a_failing_source_aborts_the_parallel_writer_without_hanging() {
 }
 
 #[test]
+fn an_early_parallel_error_closes_idle_workers_before_join() {
+    const CHILD: &str = "RZ_EARLY_ZIP_ERROR_CHILD";
+    if std::env::var_os(CHILD).is_some() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("a.zip");
+        let mut options = opts(4);
+        options.memory_budget = 1;
+        let mut writer = create(&path, OutputFormat::Zip, &options).unwrap();
+        let mut src = Source {
+            i: 0,
+            n: 2,
+            fail_at: Some(0),
+        };
+        assert!(matches!(writer.add_files(&mut src), Err(Error::Io(_))));
+        return;
+    }
+
+    let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+        .arg("--exact")
+        .arg("an_early_parallel_error_closes_idle_workers_before_join")
+        .arg("--nocapture")
+        .env(CHILD, "1")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            let output = child.wait_with_output().unwrap();
+            assert!(
+                status.success(),
+                "child failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
+        if std::time::Instant::now() >= deadline {
+            child.kill().unwrap();
+            let _ = child.wait();
+            panic!("parallel writer hung while joining idle workers after an early error");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+}
+
+#[test]
 fn an_error_from_the_iterator_itself_is_reported() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("a.zip");

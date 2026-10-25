@@ -3,8 +3,10 @@ use rz_core::{resolve_threads, ArchiveWriter, CreateOptions, Error, FileSource, 
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::{BufWriter, Cursor, Read, Write};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use zip::write::SimpleFileOptions;
 use zip::{AesMode, CompressionMethod, ZipArchive, ZipWriter};
 
@@ -92,6 +94,25 @@ struct Job<'a> {
 
 type Done = (u64, u64, Result<Vec<u8>>);
 
+fn receive_job<'a>(
+    job_rx: &Mutex<mpsc::Receiver<Job<'a>>>,
+    producer_done: &AtomicBool,
+) -> Option<Job<'a>> {
+    loop {
+        let received = match job_rx.lock() {
+            Ok(rx) => rx.recv_timeout(Duration::from_millis(10)),
+            Err(_) => return None,
+        };
+        match received {
+            Ok(job) => return Some(job),
+            Err(mpsc::RecvTimeoutError::Timeout) if !producer_done.load(Ordering::Acquire) => {
+                continue;
+            }
+            Err(_) => return None,
+        }
+    }
+}
+
 impl ArchiveWriter for ZipOut {
     fn add_dir(&mut self, e: &NewEntry) -> Result<()> {
         let opts = self.settings.options(e);
@@ -126,17 +147,17 @@ impl ArchiveWriter for ZipOut {
 
         let (job_tx, job_rx) = mpsc::sync_channel::<Job<'a>>(threads * 2);
         let job_rx = Mutex::new(job_rx);
+        let producer_done = Arc::new(AtomicBool::new(false));
         let (done_tx, done_rx) = mpsc::channel::<Done>();
 
         std::thread::scope(|scope| {
             for _ in 0..threads {
-                let (job_rx, done_tx, settings) = (&job_rx, done_tx.clone(), &settings);
+                let (job_rx, done_tx, settings, producer_done) =
+                    (&job_rx, done_tx.clone(), &settings, producer_done.clone());
                 scope.spawn(move || loop {
-                    let job = match job_rx.lock() {
-                        Ok(rx) => rx.recv(),
-                        Err(_) => return,
+                    let Some(mut job) = receive_job(job_rx, &producer_done) else {
+                        return;
                     };
-                    let Ok(mut job) = job else { return };
                     let packed = pack_one(settings, &job.entry, &mut job.src);
                     if done_tx.send((job.seq, job.cost, packed)).is_err() {
                         return;
@@ -170,11 +191,28 @@ impl ArchiveWriter for ZipOut {
                 Ok(())
             };
 
-            for (my_seq, item) in (0u64..).zip(files) {
-                let (entry, mut src) = item?;
-                if entry.size > large {
-                    // Keep archive order: everything before this file lands first.
-                    while next_write < my_seq {
+            let enqueue_result: Result<()> = (|| {
+                for (my_seq, item) in (0u64..).zip(files) {
+                    let (entry, mut src) = item?;
+                    if entry.size > large {
+                        // Keep archive order: everything before this file lands first.
+                        while next_write < my_seq {
+                            receive(
+                                self,
+                                &mut pending,
+                                &mut outstanding,
+                                &mut in_flight,
+                                &mut next_write,
+                            )?;
+                        }
+                        self.add_file(&entry, &mut src)?;
+                        next_write = my_seq + 1;
+                        continue;
+                    }
+                    let cost = entry.size.max(1);
+                    // Wait for memory, but never when nothing is in flight (a file bigger than
+                    // the whole budget must still be able to run alone).
+                    while in_flight + cost > budget && outstanding > 0 {
                         receive(
                             self,
                             &mut pending,
@@ -183,37 +221,23 @@ impl ArchiveWriter for ZipOut {
                             &mut next_write,
                         )?;
                     }
-                    self.add_file(&entry, &mut src)?;
-                    next_write = my_seq + 1;
-                    continue;
+                    in_flight += cost;
+                    outstanding += 1;
+                    job_tx
+                        .send(Job {
+                            seq: my_seq,
+                            cost,
+                            entry,
+                            src,
+                        })
+                        .map_err(|_| Error::Corrupt("compression workers stopped".into()))?;
                 }
-                let cost = entry.size.max(1);
-                // Wait for memory, but never when nothing is in flight (a file bigger than
-                // the whole budget must still be able to run alone).
-                while in_flight + cost > budget && outstanding > 0 {
-                    receive(
-                        self,
-                        &mut pending,
-                        &mut outstanding,
-                        &mut in_flight,
-                        &mut next_write,
-                    )?;
-                }
-                in_flight += cost;
-                outstanding += 1;
-                if job_tx
-                    .send(Job {
-                        seq: my_seq,
-                        cost,
-                        entry,
-                        src,
-                    })
-                    .is_err()
-                {
-                    return Err(Error::Corrupt("compression workers stopped".into()));
-                }
-            }
+                Ok(())
+            })();
+            // The explicit flag bounds shutdown even if an error path retains a sender.
+            producer_done.store(true, Ordering::Release);
             drop(job_tx);
+            enqueue_result?;
             while outstanding > 0 {
                 receive(
                     self,
@@ -232,5 +256,31 @@ impl ArchiveWriter for ZipOut {
         inner.flush()?;
         inner.get_ref().sync_all()?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
+    use super::*;
+
+    #[test]
+    fn producer_shutdown_releases_an_idle_worker_with_a_live_sender() {
+        let (job_tx, job_rx) = mpsc::sync_channel::<Job<'static>>(1);
+        let job_rx = Mutex::new(job_rx);
+        let producer_done = AtomicBool::new(true);
+        let (finished_tx, finished_rx) = mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            assert!(receive_job(&job_rx, &producer_done).is_none());
+            let _ = finished_tx.send(());
+        });
+
+        assert!(
+            finished_rx.recv_timeout(Duration::from_secs(1)).is_ok(),
+            "idle worker did not observe producer shutdown"
+        );
+        worker.join().unwrap();
+        drop(job_tx);
     }
 }

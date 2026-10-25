@@ -20,6 +20,8 @@ pub enum Error {
     Password,
     #[error("unsafe path in archive: {0}")]
     UnsafePath(String),
+    #[error("destination does not distinguish the archive names '{first}' and '{second}'; use a case-sensitive volume to preserve both files")]
+    NameConflict { first: String, second: String },
     #[error("archive exceeds safety limit: {0}")]
     LimitExceeded(String),
     #[error("operation cancelled")]
@@ -58,6 +60,9 @@ pub struct Caps {
 }
 
 pub trait ArchiveReader: Send {
+    /// Bounds work done before an entry stream can be exposed (for example, measuring
+    /// a gzip stream whose uncompressed size is not stored in its header).
+    fn set_read_control(&mut self, _cancel: CancelToken, _max_total: u64) {}
     fn format_name(&self) -> &'static str;
     fn caps(&self) -> Caps;
     fn entries(&mut self) -> Result<Vec<Entry>>;
@@ -135,7 +140,7 @@ pub trait ArchiveWriter: Send {
     fn finish(self: Box<Self>) -> Result<()>;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct CreateOptions {
     /// 0 stores without compression, 9 is the smallest output.
     pub level: u32,
@@ -144,6 +149,18 @@ pub struct CreateOptions {
     pub threads: usize,
     /// Upper bound for data held in memory by parallel workers.
     pub memory_budget: u64,
+}
+
+impl std::fmt::Debug for CreateOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Debug output goes to logs; passwords must never appear there.
+        f.debug_struct("CreateOptions")
+            .field("level", &self.level)
+            .field("password", &self.password.as_ref().map(|_| "<redacted>"))
+            .field("threads", &self.threads)
+            .field("memory_budget", &self.memory_budget)
+            .finish()
+    }
 }
 
 impl Default for CreateOptions {

@@ -20,7 +20,7 @@ const ATTR_UNIX_EXTENSION: u32 = 0x8000;
 /// Independent LZMA2 chunks are what let several threads encode one solid block.
 const MT_CHUNK: u64 = 16 << 20;
 
-fn map_err(e: sevenz_rust2::Error) -> Error {
+pub(crate) fn map_err(e: sevenz_rust2::Error) -> Error {
     use sevenz_rust2::Error as E;
     match e {
         E::PasswordRequired | E::MaybeBadPassword(_) => Error::Password,
@@ -61,7 +61,7 @@ fn unix_to_nt(t: i64) -> Option<NtTime> {
     NtTime::try_from(st).ok()
 }
 
-fn describe(index: usize, f: &ArchiveEntry) -> Entry {
+pub(crate) fn describe(index: usize, f: &ArchiveEntry) -> Entry {
     let attrs = f.has_windows_attributes.then_some(f.windows_attributes);
     let unix_mode = attrs
         .filter(|a| a & ATTR_UNIX_EXTENSION != 0)
