@@ -45,10 +45,10 @@ API 只接受 `event=activate|heartbeat` 和这 7 个字段，额外字段会拒
 
 1. 在 Vercel 导入仓库，新建独立项目，将 **Root Directory** 设为 `web`；使用默认 Next.js Install / Build 设置。
 2. 在 Vercel Marketplace 安装 Neon Postgres 并连接这个 Vercel 项目，勾选 Development、Preview、Production。建议为 Preview 部署启用独立 Neon 分支。
-3. Vercel Neon 集成自动注入 `DATABASE_URL`（连接池）和 `DATABASE_URL_UNPOOLED`（直连）。若手动连接 Neon，也使用这两个变量名，并让它们指向同一个 Neon database/branch；数据库可命名为 `rustzip`，应用不会硬编码数据库名。API 用 `DATABASE_URL`，迁移用 `DATABASE_URL_UNPOOLED`。为 Vercel Preview、Production 配置随机 `TELEMETRY_HASH_SECRET`（至少 32 个字符，Production 的值跨部署保持不变）。Development 配置 `SITE_URL=https://rustzip.dev.yuhuotech.cn`；Production 等 `rustzip.com` 完成 DNS 与 Vercel 域名验证后，再配置 `SITE_URL=https://rustzip.com`。
+3. Vercel Neon 集成自动注入 `DATABASE_URL`（连接池）和 `DATABASE_URL_UNPOOLED`（直连）。若手动连接 Neon，也使用这两个变量名，并让它们指向同一个 Neon database/branch；数据库可命名为 `rustzip`，应用不会硬编码数据库名。API 用 `DATABASE_URL`，迁移用 `DATABASE_URL_UNPOOLED`。为 Vercel Preview、Production 配置随机 `TELEMETRY_HASH_SECRET`（至少 32 个字符，Production 的值跨部署保持不变）。Development 配置 `SITE_URL=https://rustzip.dev.yuhuotech.cn`；Production 配置 `SITE_URL=https://rustzip.vercel.app`。
 4. 连接 Neon 后直接部署。Vercel 的 `npm run build` 会先检查两个数据库 URL 和哈希密钥，再自动执行 Postgres migrations，最后构建 Next.js。迁移按 Drizzle migration ledger 幂等执行；缺少必需变量或迁移失败会让部署失败，避免发布没有数据库表的 API。
 5. 部署 Preview 并验证；Preview 使用 Neon 集成创建的隔离分支，部署时会在该分支应用同一组 migrations。
-6. 部署并绑定正式域名后，将 `https://rustzip.com/api/v1/telemetry` 设置为 GitHub 仓库 Variable `RZ_STATS_URL`。该域名配置完成前不要启用此变量。重新构建/发布桌面安装包后，客户端才会开始向它发送统计。
+6. 首次部署后，将 `https://rustzip.vercel.app/api/v1/telemetry` 设置为 GitHub 仓库 Variable `RZ_STATS_URL`。以后将自定义域名切换到 `rustzip.com` 时，只需更新 `SITE_URL` 和 `RZ_STATS_URL`；接口路径、Vercel 项目和 Neon 数据库保持不变。重新构建/发布桌面安装包后，客户端才会使用新的统计地址。
 
 `DATABASE_URL` 和 `TELEMETRY_HASH_SECRET` 都是服务端变量，不要使用 `NEXT_PUBLIC_` 前缀或提交实际 `.env` 文件。根目录 `.gitignore` 已忽略 `web/.env*` 本地密钥文件，并保留 `.env.example`。
 
@@ -137,4 +137,4 @@ npm run db:migrate:postgres         # Neon Postgres
 
 - 本地 Next.js `dev` 和自托管 `start` 命令都绑定 `0.0.0.0:8035`。
 - 本地域名：`rustzip.dev.yuhuotech.cn`，由 Nginx 终止 HTTPS 并代理到 `127.0.0.1:8035`；开发环境 `SITE_URL` 设为 `https://rustzip.dev.yuhuotech.cn`。
-- 生产域名：`rustzip.com`。Vercel 托管时在 Vercel 配置自定义域名与 `SITE_URL=https://rustzip.com`，不需要 Next.js 固定端口；若生产 Node.js 进程由 Nginx 托管，也监听 `0.0.0.0:8035` 并由 Nginx 对外提供无端口 HTTPS 域名。生产域名尚未配置。
+- 当前生产域名：`rustzip.vercel.app`，由 Vercel 提供 HTTPS。完成备案后可把 `rustzip.com` 绑定到同一 Vercel 项目，并更新 Production 的 `SITE_URL` 与 GitHub Variable `RZ_STATS_URL`；API 和 Neon 数据库无需迁移。

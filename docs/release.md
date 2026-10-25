@@ -6,7 +6,7 @@
    - 把这个文件的内容(64 个十六进制字符)存成 GitHub 仓库的 **Secret `RZ_UPDATE_KEY`**。
    - **私钥不进仓库,也不要发给任何人。** 丢了只能换密钥:旧版本不认新公钥,用户要手动重装一次。
    - 备份到密码管理器。
-2. **统计服务器地址**(可选):先按 [`web/README.md`](../web/README.md) 部署官网和 Neon 数据库,然后把 `https://rustzip.com/api/v1/telemetry` 设为 GitHub 仓库 **Variable `RZ_STATS_URL`**。生产域名配置完成前不要启用该变量。没设就不会上报任何东西。
+2. **统计服务器地址**(可选):先按 [`web/README.md`](../web/README.md) 部署官网和 Neon 数据库,然后把 `https://rustzip.vercel.app/api/v1/telemetry` 设为 GitHub 仓库 **Variable `RZ_STATS_URL`**。以后切换到 `rustzip.com` 时更新该变量即可。没设就不会上报任何东西。
 3. **macOS 签名**(可选,强烈建议):没有 Apple 开发者账号时 dmg 只做临时签名,用户首次打开要在"系统设置 → 隐私与安全"里点"仍要打开"。有账号则设置 Secrets:`MACOS_CERT_P12`(base64)、`MACOS_CERT_PASSWORD`、`MACOS_SIGN_IDENTITY`,公证再加 `APPLE_ID`、`APPLE_TEAM_ID`、`APPLE_APP_PASSWORD`。
 4. **Windows 签名**:目前不签。SmartScreen 会提示"未知发布者",买代码签名证书后再接入。
 

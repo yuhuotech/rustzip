@@ -6,7 +6,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   metadataBase: new URL(
     process.env.SITE_URL ??
-      `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL ?? process.env.VERCEL_URL ?? "rustzip.com"}`,
+      `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL ?? process.env.VERCEL_URL ?? "rustzip.vercel.app"}`,
   ),
   title: {
     default: "RustZIP — 快速、安全、开源的压缩管理工具",
