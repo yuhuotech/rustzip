@@ -7,10 +7,11 @@
 
 ## 结论
 
-- **全 workspace 回归**：default 为 320 通过 / 3 忽略 / 0 失败；`--all-features` 为 326 通过 / 3 忽略 / 0 失败。覆盖运行包含 GUI 与 CLI，排除仅作探针的 `gpui-probe`。被忽略的两项权限测试随后在当前非 root 账号下单独运行并通过；系统钥匙串测试仍忽略。
-- **覆盖率基线**：`cargo llvm-cov` 分别采集 default 与 `--all-features`。全 workspace 行覆盖率分别为 **85.41%**（11,945/13,985）与 **85.50%**（12,060/14,106）；区域覆盖率 84.19% / 84.23%，函数覆盖率 76.44% / 76.56%。按 crate 的行覆盖率：`rz-app` 95.5%、`rz-core` 93.8%、`rz-engine` 92.3%、`rz-formats` 91.5–91.9%、`rz-platform` 90.1%、`rz-services` 55.3%、GUI 79.6–79.7%。当前采集不含分支计数，不能把行覆盖率解释为分支覆盖率。
+- **全 workspace 回归**：default 为 321 通过 / 3 忽略 / 0 失败；`--all-features` 为 327 通过 / 3 忽略 / 0 失败。覆盖运行包含 GUI 与 CLI，排除仅作探针的 `gpui-probe`。被忽略的两项权限测试随后在当前非 root 账号下单独运行并通过；系统钥匙串测试仍忽略。
+- **覆盖率基线**：`cargo llvm-cov` 分别采集 default 与 `--all-features`。全 workspace 行覆盖率分别为 **85.38%**（11,990/14,043）与 **85.41%**（12,097/14,164）；区域覆盖率 84.14% / 84.14%，函数覆盖率 76.23% / 76.35%。按 crate 的行覆盖率：`rz-app` 94.8%、`rz-core` 93.8%、`rz-engine` 92.4%、`rz-formats` 91.7–92.0%、`rz-platform` 90.1%、`rz-services` 55.3–55.6%、GUI 79.7%。当前采集不含分支计数，不能把行覆盖率解释为分支覆盖率。
 - **规范检查**：`cargo fmt --check`、`cargo clippy --workspace --all-targets --all-features -- -D warnings` 通过。
 - **性能**：改动前后（HEAD `fa98dc4` worktree 对比）`RZ_BENCH_MB=32` 基准全部格式吞吐差在 ±11% 运行噪声内，无系统性回归。
+- **本轮性能复核**：有界 worker 退出改动后重新跑了 `RZ_BENCH_MB=32 cargo bench -p rz-engine --bench throughput`；压缩、解压、转换和修复各项内容校验均通过，ZIP 单线程/15线程压缩为 82/666 MiB/s，转换为 ZIP/7z/tar.zst 为 76/4/309 MiB/s。该次是本机单次测量，没有与相同新建构建的旧 worker 代码做 A/B 对照。
 - **发现并修复的实现缺陷**（均为测试先行，修复后通过；详见 [D11](decisions.md)）：
   1. compress 会用固定名 `.rz-part` 并在结束时无条件 rename 覆盖已有目标（FS-03/06）。
   2. compress 发布失败会遗留临时文件（FS-01）。
@@ -20,7 +21,7 @@
   6. 设置保存用固定 `.tmp` 名，并发保存交错可产生损坏文件（LOC-07）。
   7. `CreateOptions`/`ExtractOptions` 的派生 Debug 会打印明文密码（SVC-09）。
   8. 基准错误只打印不退出、吞吐不做内容校验（PERF-01）。
-  9. 并行 ZIP writer 在排队中途收到错误时，会在线程作用域 join 之后才关闭任务通道，空闲 worker 因此永远等不到退出；取消/暂停风暴可让 `TaskManager::drop` 卡住（TASK-03）。修复为错误传播前关闭发送端，并新增有超时的子进程回归用例。
+  9. 并行 ZIP writer 的错误与取消时序可让 `TaskManager::drop` 等待 worker 永久卡住（TASK-03）。修复在 producer 完成时设置原子关闭标记、关闭发送端；idle worker 每 10ms 检查标记并在队列耗尽后退出。回归包含有超时的子进程错误用例、保留 sender 的 idle-worker 单测和任务取消风暴。
 
 ## 逐用例记录
 
@@ -34,7 +35,7 @@
 | FS-07 | 通过 | Replace + 损坏条目 / 取消保全旧文件；注入 mtime 失败时旧文件仍在提交点前保全；只读 mode 与时间戳组合在写入顺序正确时可恢复。Skip 竞态按跳过处理。 |
 | FS-10 | 通过 | `edit_failures.rs` 子进程 SIGKILL：解包/打包中击杀 → 原包字节不变；发布后击杀 → 新版本完整可读、可解压；转换中击杀 → 无输出、源不变。残留仅可识别的 `.rz-` 前缀，且不阻塞重试。 |
 | TASK-02 | 通过（部分） | `tasks.rs::a_cancel_and_pause_storm...`：10 任务 × 双线程风暴，恰一终态、事件序合法、终态后操作拒绝。参数化"各阶段暂停/恢复"矩阵未展开（P1 余项）。 |
-| TASK-03 | 通过 | `dropping_the_manager_mid_cancel_storm_never_hangs` 与 `a_cancel_and_pause_storm_ends_with_one_terminal_state_per_task` 通过；取消风暴曾复现 ZIP worker join 卡死。新增 `zip_parallel::an_early_parallel_error_closes_idle_workers_before_join`，子进程 10s 监督验证早期错误会关闭任务通道、worker 全部退出。 |
+| TASK-03 | 通过（本机） | `dropping_the_manager_mid_cancel_storm_never_hangs`、`a_cancel_and_pause_storm_ends_with_one_terminal_state_per_task` 和最终 default/all-features workspace 覆盖运行均通过。早期错误有子进程 10s 回归；另有 `zip_out::tests::producer_shutdown_releases_an_idle_worker_with_a_live_sender` 验证 sender 仍存活时 worker 也会有界退出。一次并行 workspace 回归曾卡在取消风暴；取样确认 worker 在 ZIP 队列接收处等待，修复后重跑通过。 |
 | TASK-04 | 通过（本机进程模型） | 同进程并发编辑与编辑 × 转换；新增两个真实子进程同时编辑同包，两次删除均保留且包可读。按归档路径使用 OS advisory lock 串行化，等待锁期间取消可退出。网络文件系统及不同 OS 锁语义未覆盖。 |
 | TASK-06 | 通过（部分） | `transform_failures.rs::a_cancellation_at_any_phase_never_publishes`（10/50/90% 进度取消 → 无发布、无临时）+ `io_failures.rs` 压缩取消清理 + `roundtrip.rs` 既有取消用例。恰在 finish/verify/rename 指令级边界的取消需要引擎检查点接口，未实施。 |
 | LOC-07 | 通过（应用层） | 目标被目录占用、并发与 50 次连发保存，以及短写、sync、publish 故障注入：最后有效设置可读、临时文件清理。GUI 快速切换后立即退出的调度变体仍属 S2。 |
@@ -47,6 +48,8 @@
 ## 未复现的单次失败
 
 第一次 all-features 覆盖运行中，`roundtrip::overwrite_policies` 在一次 default-Rename 解压时返回 `AlreadyExists`。没有改动解压策略；随后该用例单独重复 20 次、roundtrip 全组执行一次、default 覆盖运行和 all-features 覆盖重跑均通过。记录为**未复现的瞬时失败**；若再次出现需保留新日志并继续定位，不能把它当成已修复缺陷。
+
+另一次未插桩 workspace 运行在取消风暴处超过 3 分钟未结束，按栈确认卡在 ZIP worker 的阻塞接收并终止该运行；该现象促成 producer-done 的有界退出标记。之后完整 default workspace 和 default/all-features 覆盖运行都通过。
 
 ## S2 定向异步竞态
 

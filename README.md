@@ -1,91 +1,220 @@
+<div align="center">
+
 # RustZIP
 
-用 Rust 开发的跨平台压缩管理软件(Windows / macOS / Linux),追求极致性能和简洁美观的体验。
+**用 Rust 写的跨平台压缩管理软件：快、安全、好看，格式全。**
 
-项目文档见 [`docs/`](docs/):产品需求、技术架构、技术规范、UI 规范、决策记录。AI 协作规则见 [`AGENTS.md`](AGENTS.md)。
+[![CI](https://github.com/yuhuotech/rustzip/actions/workflows/ci.yml/badge.svg)](https://github.com/yuhuotech/rustzip/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#开源许可证)
+[![Rust](https://img.shields.io/badge/rust-1.93%2B-orange.svg?logo=rust)](https://www.rust-lang.org)
+![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey.svg)
+![Status](https://img.shields.io/badge/status-早期开发-yellow.svg)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#参与贡献)
 
-## 当前进度
+[特色功能](#特色功能) · [截图](#截图) · [快速开始](#快速开始) · [使用说明](#使用说明) · [开发进度](#开发进度) · [参与贡献](#参与贡献)
 
-| 能力 | 状态 |
-|---|---|
-| zip 读写(含 AES-256 加密) | 已完成 |
-| 7z 读写(固实块、LZMA2 多线程、AES-256 加密、文件名加密) | 已完成 |
-| tar 及 tar.gz / tar.xz / tar.zst / tar.bz2 读写 | 已完成 |
-| 单文件格式 .gz / .xz / .zst / .bz2 读写 | 已完成 |
-| rar 只读(可选 feature `rar`,默认关闭) | 已完成,见下方说明 |
-| 安全解压(路径穿越、压缩炸弹、符号链接、setuid) | 已完成 |
-| 取消、进度回调、原子写入(失败不留半成品) | 已完成 |
-| 权限与修改时间保留 | 已完成 |
-| zip 多线程压缩(保持条目顺序、内存预算) | 已完成 |
-| zip 多线程解压 | 已完成 |
-| xz / zstd / 7z(LZMA2)内部多线程压缩 | 已完成 |
-| 命令行 `rz a / l / x / t`(含 `-e` 指定文件名编码) | 已完成 |
-| zip 中日韩文件名编码自动识别(GBK / Shift-JIS / EUC-KR 等)与手动指定 | 已完成 |
-| 任务队列:并发上限、暂停 / 继续 / 取消、速度与剩余时间、事件订阅、密码失败后重试 | 已完成(`rz-app`) |
-| 设置:原子保存、损坏自动隔离、范围校验、各系统配置目录 | 已完成(`rz-app`) |
-| 智能解压(多个顶层项时自动建同名文件夹,不混入已有文件夹) | 已完成(`rz-app`) |
-| 更新校验:Ed25519 签名绑定版本 / 平台 / 哈希,防降级与换包 | 已完成,界面已接入(状态栏提示新版本、下载、验签、交给系统安装);更新源为 GitHub Release |
-| 匿名安装统计:激活 + 每日心跳,可关闭,失败不重试风暴 | 已完成,HTTP 已接入;**需要自建接收服务并设置 `RZ_STATS_URL`**,见 `docs/release.md` |
-| 密码本 | 已完成，侧栏支持新增、编辑、删除；系统钥匙串存储，设置里"记住密码"默认关闭，开启后自动使用同名压缩包的保存密码；核心另提供候选密码查找 |
-| 常用位置 | 系统默认目录 + 自动记录已打开压缩包所在目录；单击选中、双击进入、右键移除记录；列表/小图标切换，进入文件夹后沿用，重启保留 |
-| 发布工具:生成签名密钥、给安装包签名、生成 `update.json` | 已完成(`rz-release`) |
-| 应用图标、macOS 打包(.app / .dmg)、Windows 安装程序脚本、Linux 压缩包 | 图标和 macOS 打包已在本机跑通;Windows / Linux 打包和发布工作流**未实际运行过** |
-| 文件关联与右键菜单 | macOS 仅"打开方式";Windows 注册表和 Linux(Dolphin / Nemo)菜单已写好,未实机验证;Finder 右键与 Quick Look 未做 |
-| 7z 分块并行解压、bzip2 多线程、大文件分块 deflate | 未开始 |
-| 压缩包内添加 / 删除(zip、7z、tar 系列;解包到旁边、改完重新打包、校验后整体替换,失败原包不动) | 已完成(`rz-app::modify`) |
-| 预览(图片在详情栏直接显示;其他文件解到临时目录用系统程序打开,程序和脚本不打开) | 已完成,重命名和原地增量修改未做 |
-| 格式转换 | 已完成，流式转换为 ZIP / 7z / tar 系七种目标格式，独立源/目标密码，校验后另存，不覆盖源包；符号链接暂不支持 |
-| ZIP / 7z 修复 | 已完成，尽力抢救可读条目并报告跳过项；ZIP 支持丢失中央目录恢复，7z 继续尝试后续独立块；严重损坏不保证恢复 |
-| 分卷 | 未开始 |
-| 选择性解压(按文件或文件夹,各格式含固实块与并行路径) | 已完成 |
-| 压缩包浏览模型(目录树、自然排序、搜索、面包屑、体积统计) | 已完成(`rz-app`) |
-| 桌面应用 `rustzip`(GPUI Kit):标签页、工具栏、文件表格、详情栏、任务面板、状态栏、新建压缩面板、密码提示、拖拽、快捷键、菜单、深浅色跟随系统 | macOS 无头界面测试与真实 Metal 离屏渲染验证，Windows / Linux 未验证；侧栏工具的范围和记录见 `docs/sidebar-implementation.md` |
+<img src="docs/screenshots/browse-light.png" alt="RustZIP 主界面" width="860">
 
-### 关于 RAR
+</div>
 
-RAR 只读,不实现压缩。解压依赖 unRAR 源码(`unrar` crate),它的许可证禁止用来重建 RAR 压缩算法,因此放在默认关闭的 feature 里:
+## 项目介绍
 
+RustZIP 是一个用 Rust 开发的压缩管理软件，支持 Windows、macOS 和 Linux。目标是**极致性能、友好体验、简洁美观、功能全面**，基础功能对标 7-Zip，界面则按现代桌面应用的标准来做。
+
+它由两部分组成：
+
+- **桌面应用 `rustzip`**：标签页浏览压缩包、拖拽压缩与解压、任务队列、深浅色主题。
+- **命令行 `rz`**：`rz a / l / x / t`，适合脚本和服务器。
+
+两者共用同一套核心库，行为一致。
+
+> 项目仍在早期开发，格式支持与核心安全能力已经落地，但还没有发布正式安装包，见[开发进度](#开发进度)。
+
+## 特色功能
+
+**格式**
+
+- 读写 `zip`（含 AES-256 加密）、`7z`（固实块、LZMA2、AES-256、文件名加密）、`tar` 及 `tar.gz / xz / zst / bz2`，以及单文件 `.gz / .xz / .zst / .bz2`。
+- 读取按文件头识别，不看扩展名。
+- `rar` 只读，不实现压缩，通过默认关闭的可选 feature 提供（见[关于 RAR](#关于-rar)）。
+
+**性能**
+
+- 流式处理，不把整个文件读进内存。
+- ZIP 多线程压缩与解压，xz / zstd / 7z 内部多线程，并行度与内存受统一预算约束。
+- ZIP 并行压缩时保持条目顺序。
+
+**安全**
+
+- 压缩包里的一切都视为不可信输入：拒绝 `..`、绝对路径、盘符和逃逸的符号链接，不跟随目标里已有的链接。
+- 压缩炸弹防护（压缩比、总大小）。
+- 原子写入：失败或取消不留下半成品。
+- 密码用 `zeroize` 清理，日志不出现密码和完整用户路径。
+- 更新包用 Ed25519 验签，绑定版本、平台和哈希，防降级与换包。
+
+**好用**
+
+- **同名从不失败**：解压遇到同名文件或文件夹，已有的不动，新的自动叫 `名称 (1)`、`名称 (2)`；压缩、转换的输出名被占用时同样处理。
+- **智能解压**：压缩包有多个顶层项时自动建同名文件夹，不把文件散落到当前目录。
+- **完成后定位结果**：解压完成后在文件管理器中打开并选中刚解出的内容。
+- **中日韩文件名**：ZIP 自动识别 GBK / Shift-JIS / EUC-KR 等编码，也可手动指定。
+- **压缩包内操作**：添加、删除、重命名、选择性解压、预览；改动先在旁边重新打包并校验，通过后才替换，失败原包不动。
+- **格式转换与修复**：流式转换为 ZIP / 7z / tar 系七种格式；ZIP / 7z 尽力抢救可读条目并报告跳过项。
+- **任务队列与任务记录**：并发、暂停 / 继续 / 取消、速度与剩余时间；结束的任务进入「任务记录」并保存在本地，菜单上有进行中、失败、完成的角标。
+- **密码本**：用系统钥匙串保存，只在需要时读取，默认关闭「记住密码」。
+- **常用位置**：系统目录加上打开过压缩包的目录，列表与图标两种视图。
+- **深浅色主题**跟随系统，主要操作都有快捷键。
+
+**隐私**
+
+- 联网只有两件事，都能在设置里关：检查更新、匿名安装统计。统计只上报匿名 ID、版本、系统、架构和语言，首次启动会告知，设置里可关闭，不收集文件名、路径、内容或使用行为。
+
+## 截图
+
+| 浏览（深色） | 新建压缩 |
+|:---:|:---:|
+| <img src="docs/screenshots/browse-dark.png" alt="深色主题浏览压缩包"> | <img src="docs/screenshots/compress.png" alt="新建压缩"> |
+| **任务面板** | **转换格式** |
+| <img src="docs/screenshots/tasks-dark.png" alt="任务面板"> | <img src="docs/screenshots/convert.png" alt="转换格式"> |
+
+<p align="center"><img src="docs/screenshots/locations.png" alt="常用位置" width="640"></p>
+
+> 截图由 `apps/gui/examples/screenshots.rs` 用真实渲染器离屏生成，内容是演示数据，生成方法见[使用说明](#使用说明)。
+
+## 快速开始
+
+目前还没有发布安装包，请从源码构建。需要 Rust 1.93 或更新（仓库里的 `rust-toolchain.toml` 会自动选择）。
+
+```bash
+git clone https://github.com/yuhuotech/rustzip.git
+cd rustzip
+
+# 桌面应用
+cargo run --release -p rustzip-gui
+# 直接打开一个压缩包
+cargo run --release -p rustzip-gui -- 某个压缩包.zip
+
+# 命令行
+cargo run --release -p rz -- l 某个压缩包.zip
 ```
-cargo build --release --features rar
-```
 
-unRAR 是 C++ 代码,处理的是不可信输入;重要场景下建议在受限环境中使用。
+macOS 的 `.app / .dmg`、Windows 安装脚本和 Linux 压缩包的打包文件在 [`packaging/`](packaging/)，发布流程见 [`docs/release.md`](docs/release.md)。
 
-## 命令行
+## 使用说明
 
-```
+### 命令行
+
+```text
 rz a <archive> <path>... [-l 0-9] [-p password] [-t threads]   创建
 rz l <archive> [-p password]                                   列出内容
-rz x <archive> [-o dir] [-p password] [-t threads] [-y|-n]     解压(默认同名保留两者并加序号,-y 覆盖,-n 跳过已有)
+rz x <archive> [-o dir] [-p password] [-t threads] [-y|-n]     解压
 rz t <archive> [-p password]                                   校验完整性
 ```
 
-创建格式由扩展名决定:`.zip .7z .tar .tar.gz .tar.xz .tar.zst .tar.bz2`(及 `.tgz .txz .tzst .tbz2`),
-单文件 `.gz .xz .zst .bz2`。读取时按文件头识别,不看扩展名。
+- 创建的格式由扩展名决定：`.zip .7z .tar .tar.gz .tar.xz .tar.zst .tar.bz2`（及 `.tgz .txz .tzst .tbz2`），单文件 `.gz .xz .zst .bz2`。
+- 解压遇到同名默认保留两者并加序号；`-y` 覆盖，`-n` 跳过已有。
+- `-e` 指定文件名编码。
 
-## 桌面应用
+### 桌面应用
 
+| 操作 | 快捷键（Windows / Linux 为 Ctrl） |
+|---|---|
+| 打开压缩包 | `⌘O` |
+| 新建压缩 | `⌘N` |
+| 搜索 | `⌘F` |
+| 解压全部 | `⌘E` |
+| 关闭标签页 | `⌘W` |
+| 常用位置 / 密码本 / 转换格式 / 修复压缩包 | `⌘⇧B` / `⌘⇧P` / `⌘⇧C` / `⌘⇧R` |
+
+也可以把压缩包拖进窗口打开，把普通文件拖进窗口压缩。设置、密码本之外的数据（`settings.json`、`history.json`）保存在系统配置目录，升级覆盖安装不会丢。
+
+### 关于 RAR
+
+RAR 只读，不实现压缩。解压依赖 unRAR 源码（`unrar` crate），它的许可证禁止用来重建 RAR 压缩算法，因此放在默认关闭的 feature 里：
+
+```bash
+cargo build --release --features rar
 ```
-cargo run --release -p rustzip-gui            # 或:cargo run --release -p rustzip-gui -- 某个压缩包.zip
-```
 
-快捷键:`⌘O` 打开、`⌘N` 新建压缩、`⌘F` 搜索、`⌘E` 解压全部、`⌘W` 关闭标签页(Windows / Linux 为 Ctrl)。
-侧栏工具：`⌘⇧B` 常用位置、`⌘⇧P` 密码本、`⌘⇧C` 转换格式、`⌘⇧R` 修复压缩包；也可从“工具”菜单进入。
-也可以把压缩包拖进窗口打开,把普通文件拖进窗口压缩。设置保存在系统配置目录的 `settings.json`。
+unRAR 是 C++ 代码，处理的是不可信输入；重要场景下建议在受限环境中使用。
 
-不打开窗口也能看到界面长什么样:用真实的 Metal 渲染器离屏截图(浅色和深色各 6 个状态):
+### 生成截图
 
-```
+```bash
 RZ_SHOT_DIR=/某个文件夹 cargo run --release -p rustzip-gui --example screenshots
 ```
 
-## 开发
+### 文档
 
-```
+| 文件 | 内容 |
+|---|---|
+| [`docs/product.md`](docs/product.md) | 功能需求、格式分档、路线图 |
+| [`docs/architecture.md`](docs/architecture.md) | 分层、crate 结构、性能与安全设计 |
+| [`docs/tech-spec.md`](docs/tech-spec.md) | 代码、性能、安全、测试、提交规范 |
+| [`docs/ui-spec.md`](docs/ui-spec.md) | UI 风格、布局、组件、交互 |
+| [`docs/decisions.md`](docs/decisions.md) | 已做的决策与理由 |
+| [`docs/release.md`](docs/release.md) | 签名、更新源、统计服务、发布 |
+
+## 开发进度
+
+下表是逐项的实现状态，方便接着迭代。
+
+| 能力 | 状态 |
+|---|---|
+| zip 读写（含 AES-256 加密） | 已完成 |
+| 7z 读写（固实块、LZMA2 多线程、AES-256、文件名加密） | 已完成 |
+| tar 及 tar.gz / tar.xz / tar.zst / tar.bz2 读写 | 已完成 |
+| 单文件格式 .gz / .xz / .zst / .bz2 读写 | 已完成 |
+| rar 只读（可选 feature `rar`，默认关闭） | 已完成 |
+| 安全解压（路径穿越、压缩炸弹、符号链接、setuid） | 已完成 |
+| 取消、进度回调、原子写入（失败不留半成品） | 已完成 |
+| 权限与修改时间保留 | 已完成 |
+| zip 多线程压缩 / 解压；xz / zstd / 7z（LZMA2）内部多线程压缩 | 已完成 |
+| 命令行 `rz a / l / x / t`（含 `-e` 指定文件名编码） | 已完成 |
+| zip 中日韩文件名编码自动识别与手动指定 | 已完成 |
+| 同名不失败：保留两者并加序号（解压、压缩、转换、修复输出） | 已完成 |
+| 任务队列：并发上限、暂停 / 继续 / 取消、速度与剩余时间、密码失败后重试 | 已完成（`rz-app`） |
+| 任务记录：本地保存、菜单角标（进行中 / 失败 / 完成） | 已完成 |
+| 全局提示（Toast）与面向用户的打开失败说明 | 已完成 |
+| 设置：原子保存、损坏自动隔离、范围校验、各系统配置目录 | 已完成（`rz-app`） |
+| 智能解压 | 已完成（`rz-app`） |
+| 选择性解压（按文件或文件夹，各格式含固实块与并行路径） | 已完成 |
+| 压缩包内添加 / 删除（zip、7z、tar 系列，校验后整体替换） | 已完成（`rz-app::modify`） |
+| 预览（图片在详情栏显示；其他文件解到临时目录用系统程序打开，程序和脚本不打开） | 已完成，原地增量修改未做 |
+| 格式转换（ZIP / 7z / tar 系七种目标，独立源 / 目标密码，校验后另存） | 已完成，符号链接暂不支持 |
+| ZIP / 7z 修复（尽力抢救可读条目并报告跳过项） | 已完成，严重损坏不保证恢复 |
+| 密码本（系统钥匙串；「记住密码」默认关闭） | 已完成 |
+| 常用位置（系统目录 + 自动记录；列表 / 小图标视图） | 已完成 |
+| 压缩包浏览模型（目录树、自然排序、搜索、面包屑、体积统计） | 已完成（`rz-app`） |
+| 更新校验（Ed25519，绑定版本 / 平台 / 哈希） | 已完成，界面已接入，更新源为 GitHub Release |
+| 匿名安装统计（激活 + 每日心跳，可关闭） | 已完成；**需自建接收服务并设置 `RZ_STATS_URL`**，见 `docs/release.md` |
+| 发布工具（生成签名密钥、给安装包签名、生成 `update.json`） | 已完成（`rz-release`） |
+| 桌面应用 `rustzip`（GPUI Kit） | macOS 无头界面测试与真实 Metal 离屏渲染验证；Windows / Linux 未验证。侧栏工具的范围见 `docs/sidebar-implementation.md` |
+| 应用图标、macOS 打包、Windows 安装脚本、Linux 压缩包 | 图标和 macOS 打包已在本机跑通；Windows / Linux 打包和发布工作流**未实际运行过** |
+| 文件关联与右键菜单 | macOS 仅「打开方式」；Windows 注册表和 Linux（Dolphin / Nemo）菜单已写好，未实机验证；Finder 右键与 Quick Look 未做 |
+| 7z 分块并行解压、bzip2 多线程、大文件分块 deflate | 未开始 |
+| 分卷 | 未开始 |
+
+## 参与贡献
+
+欢迎提 Issue 和 PR。动手前请先读：
+
+- [`AGENTS.md`](AGENTS.md)：核心规则（范围、许可证、架构、代码质量、性能、安全、测试、UI、隐私）。
+- [`docs/tech-spec.md`](docs/tech-spec.md) 与 [`docs/decisions.md`](docs/decisions.md)：规范与已定决策，不要在没有新增决策的情况下改动。
+
+提交前请确认：
+
+```bash
 cargo fmt --all --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
-cargo bench -p rz-engine
+cargo bench -p rz-engine      # 改动压缩 / 解压路径后
 ```
 
-许可证:`MIT OR Apache-2.0`(启用 `rar` feature 的构建还需遵守 unRAR 的许可条款)。
+引入新依赖前请确认许可证：禁止 GPL / AGPL / LGPL 的静态链接依赖。
+
+## 开源许可证
+
+本项目采用 **MIT OR Apache-2.0** 双重许可，你可以任选其一。
+
+启用 `rar` feature 的构建还需遵守 unRAR 的许可条款。第三方图标来自 Lucide（ISC 许可证），详见 [`docs/decisions.md`](docs/decisions.md)。
