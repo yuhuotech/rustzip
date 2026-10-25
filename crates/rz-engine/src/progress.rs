@@ -57,6 +57,18 @@ impl<'a> Tracker<'a> {
         self.report(true);
     }
 
+    /// Finishes work whose totals were not known until its input stream ended.
+    pub fn finish_with_totals(&self, files: u64, bytes: u64) {
+        if let Ok(mut sink) = self.sink.lock() {
+            sink.update(Progress {
+                files_done: files,
+                files_total: files,
+                bytes_done: bytes,
+                bytes_total: bytes,
+            });
+        }
+    }
+
     fn snapshot(&self) -> Progress {
         Progress {
             files_done: self

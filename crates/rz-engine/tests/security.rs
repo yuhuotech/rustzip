@@ -327,3 +327,250 @@ fn mutated_archives_never_panic() {
         }
     }
 }
+
+// ------------------------------------------------- FS-04 / FS-05: links ----
+
+#[cfg(unix)]
+mod link_defense {
+    use super::*;
+    use rz_core::{ArchiveReader, Caps, Entry, EntryKind, Result};
+    use std::io::Read;
+    use std::path::PathBuf;
+
+    fn stored() -> SimpleFileOptions {
+        SimpleFileOptions::default().compression_method(CompressionMethod::Stored)
+    }
+
+    /// (FS-04) A symlink in the destination that points outside must not be
+    /// followed, in any overwrite mode.
+    #[test]
+    fn a_symlinked_folder_in_the_destination_is_never_followed() {
+        for overwrite in [rz_engine::Overwrite::Error, rz_engine::Overwrite::Replace] {
+            let tmp = tempfile::tempdir().unwrap();
+            let outside = tmp.path().join("outside");
+            fs::create_dir_all(&outside).unwrap();
+            fs::write(outside.join("sentinel"), b"precious").unwrap();
+
+            let archive = tmp.path().join("e.zip");
+            zip_with(&archive, &[("sub/sentinel", b"evil")], stored());
+            let out = tmp.path().join("out");
+            fs::create_dir_all(&out).unwrap();
+            std::os::unix::fs::symlink(&outside, out.join("sub")).unwrap();
+
+            let opts = ExtractOptions {
+                overwrite,
+                ..ExtractOptions::default()
+            };
+            let res = common::unpack(&archive, &out, &opts);
+            match overwrite {
+                // The preflight sees the file through the link and refuses safely.
+                rz_engine::Overwrite::Error => assert!(
+                    matches!(res, Err(Error::Io(ref e))
+                        if e.kind() == std::io::ErrorKind::AlreadyExists),
+                    "{res:?}"
+                ),
+                // Without the exists-check the link defense itself must catch it.
+                _ => assert!(matches!(res, Err(Error::UnsafePath(_))), "{res:?}"),
+            }
+            assert_eq!(
+                fs::read(outside.join("sentinel")).unwrap(),
+                b"precious",
+                "extraction wrote through the link"
+            );
+        }
+    }
+
+    /// (FS-04) The target file itself must not be written through a link either.
+    #[test]
+    fn a_symlinked_target_file_is_never_written_through() {
+        let tmp = tempfile::tempdir().unwrap();
+        let outside = tmp.path().join("outside");
+        fs::create_dir_all(&outside).unwrap();
+        fs::write(outside.join("old.txt"), b"precious").unwrap();
+
+        let archive = tmp.path().join("e.zip");
+        zip_with(&archive, &[("a.txt", b"evil")], stored());
+        let out = tmp.path().join("out");
+        fs::create_dir_all(&out).unwrap();
+        std::os::unix::fs::symlink(outside.join("old.txt"), out.join("a.txt")).unwrap();
+
+        let opts = ExtractOptions {
+            overwrite: rz_engine::Overwrite::Replace,
+            ..ExtractOptions::default()
+        };
+        let res = common::unpack(&archive, &out, &opts);
+        assert!(matches!(res, Err(Error::UnsafePath(_))), "{res:?}");
+        assert_eq!(fs::read(outside.join("old.txt")).unwrap(), b"precious");
+    }
+
+    /// (FS-04) An archive folder entry landing on a pre-existing link refuses.
+    #[test]
+    fn a_directory_entry_landing_on_a_link_refuses() {
+        let tmp = tempfile::tempdir().unwrap();
+        let outside = tmp.path().join("outside");
+        fs::create_dir_all(&outside).unwrap();
+        fs::write(outside.join("sentinel"), b"precious").unwrap();
+
+        let archive = tmp.path().join("e.zip");
+        let mut w = zip::ZipWriter::new(fs::File::create(&archive).unwrap());
+        w.add_directory("sub", stored()).unwrap();
+        w.finish().unwrap();
+        let out = tmp.path().join("out");
+        fs::create_dir_all(&out).unwrap();
+        std::os::unix::fs::symlink(&outside, out.join("sub")).unwrap();
+
+        // Merging into an existing folder is where a link could be followed.
+        let merge = ExtractOptions {
+            overwrite: rz_engine::Overwrite::Error,
+            ..ExtractOptions::default()
+        };
+        let res = common::unpack(&archive, &out, &merge);
+        assert!(matches!(res, Err(Error::UnsafePath(_))), "{res:?}");
+        assert_eq!(fs::read(outside.join("sentinel")).unwrap(), b"precious");
+
+        // The default keeps both instead: the link is left alone and never followed.
+        common::unpack(&archive, &out, &ExtractOptions::default()).unwrap();
+        assert!(out.join("sub (1)").is_dir() && !out.join("sub (1)").is_symlink());
+        assert_eq!(fs::read(outside.join("sentinel")).unwrap(), b"precious");
+        assert_eq!(fs::read_dir(&outside).unwrap().count(), 1);
+    }
+
+    /// (FS-05) The preflight passed; before the file is created the folder is
+    /// swapped for a link. The write must refuse, not follow.
+    struct SwapReader {
+        dest: PathBuf,
+        outside: PathBuf,
+    }
+
+    impl ArchiveReader for SwapReader {
+        fn format_name(&self) -> &'static str {
+            "zip"
+        }
+        fn caps(&self) -> Caps {
+            Caps {
+                random_access: false,
+                solid: true,
+                writable: false,
+            }
+        }
+        fn entries(&mut self) -> Result<Vec<Entry>> {
+            Ok(vec![
+                Entry {
+                    index: 0,
+                    path: "d".into(),
+                    kind: EntryKind::Dir,
+                    size: 0,
+                    packed_size: Some(0),
+                    modified: None,
+                    encrypted: false,
+                    unix_mode: None,
+                },
+                Entry {
+                    index: 1,
+                    path: "d/sentinel".into(),
+                    kind: EntryKind::File,
+                    size: 4,
+                    packed_size: Some(4),
+                    modified: None,
+                    encrypted: false,
+                    unix_mode: None,
+                },
+            ])
+        }
+        fn open<'a>(&'a mut self, _entry: &Entry) -> Result<Box<dyn Read + 'a>> {
+            Ok(Box::new(std::io::Cursor::new(b"evil".to_vec())))
+        }
+        fn for_each(
+            &mut self,
+            visit: &mut dyn FnMut(&Entry, &mut dyn Read) -> Result<()>,
+        ) -> Result<()> {
+            let entries = self.entries()?;
+            for (i, entry) in entries.iter().enumerate() {
+                if i == 1 {
+                    // The attack: replace the freshly created folder with a link.
+                    fs::remove_dir(self.dest.join("d")).unwrap();
+                    std::os::unix::fs::symlink(&self.outside, self.dest.join("d")).unwrap();
+                }
+                let mut empty = std::io::empty();
+                let mut data = std::io::Cursor::new(b"evil".to_vec());
+                match entry.kind {
+                    EntryKind::Dir => visit(entry, &mut empty),
+                    _ => visit(entry, &mut data),
+                }?;
+            }
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn a_folder_swapped_for_a_link_after_the_preflight_is_refused() {
+        let tmp = tempfile::tempdir().unwrap();
+        let outside = tmp.path().join("outside");
+        fs::create_dir_all(&outside).unwrap();
+        fs::write(outside.join("sentinel"), b"precious").unwrap();
+        let out = tmp.path().join("out");
+
+        let mut reader = SwapReader {
+            dest: out.clone(),
+            outside,
+        };
+        let res = extract(
+            &mut reader,
+            &out,
+            &ExtractOptions::default(),
+            &CancelToken::new(),
+            &mut NoProgress,
+        );
+        assert!(
+            matches!(res, Err(Error::UnsafePath(_))),
+            "the swap was followed: {res:?}"
+        );
+        assert_eq!(
+            fs::read(out.join("../outside/sentinel")).unwrap(),
+            b"precious",
+            "the write escaped the destination"
+        );
+        // `out/d` is now the attacker's link; the outside folder must still hold
+        // exactly the one untouched file.
+        let outside_entries: Vec<String> = fs::read_dir(tmp.path().join("outside"))
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(outside_entries, vec!["sentinel".to_string()]);
+    }
+
+    /// After a link refusal the destination stays usable: earlier entries are
+    /// intact, a retry in a clean folder works.
+    #[test]
+    fn extract_reports_and_leaves_the_destination_usable_after_a_link_failure() {
+        let tmp = tempfile::tempdir().unwrap();
+        let archive = tmp.path().join("e.zip");
+        zip_with(
+            &archive,
+            &[("ok.txt", b"fine"), ("sub/deep/x.txt", b"also fine")],
+            stored(),
+        );
+        let out = tmp.path().join("out");
+        fs::create_dir_all(out.join("sub")).unwrap();
+        std::os::unix::fs::symlink(tmp.path().join("elsewhere"), out.join("sub/deep")).unwrap();
+
+        // One thread: the entry order in the archive then decides what exists.
+        let opts = ExtractOptions {
+            threads: 1,
+            overwrite: rz_engine::Overwrite::Error,
+            ..ExtractOptions::default()
+        };
+        let res = common::unpack(&archive, &out, &opts);
+        assert!(matches!(res, Err(Error::UnsafePath(_))), "{res:?}");
+        // Entries before the failure may exist and be correct.
+        assert_eq!(fs::read_to_string(out.join("ok.txt")).unwrap(), "fine");
+        // After the error a retry in a clean folder works.
+        let retry = tmp.path().join("retry");
+        common::unpack(&archive, &retry, &opts).unwrap();
+        assert_eq!(
+            fs::read_to_string(retry.join("sub/deep/x.txt")).unwrap(),
+            "also fine"
+        );
+    }
+}

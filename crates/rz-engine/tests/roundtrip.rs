@@ -292,10 +292,7 @@ fn failed_compress_leaves_no_output() {
         );
         assert!(res.is_err(), "{ext}");
         assert!(!out.exists(), "{ext}");
-        assert!(
-            !tmp.path().join(format!("a.{ext}.rz-part")).exists(),
-            "{ext}"
-        );
+        assert!(temp_leftovers(tmp.path(), &out).is_empty(), "{ext}");
     }
 }
 
@@ -319,10 +316,7 @@ fn cancelling_compress_cleans_up() {
         );
         assert!(matches!(res, Err(Error::Cancelled)), "{ext}: {res:?}");
         assert!(!out.exists(), "{ext}");
-        assert!(
-            !tmp.path().join(format!("a.{ext}.rz-part")).exists(),
-            "{ext}"
-        );
+        assert!(temp_leftovers(tmp.path(), &out).is_empty(), "{ext}");
     }
 }
 
@@ -383,7 +377,8 @@ fn archive_inside_its_own_source_is_not_added_to_itself() {
         let tmp = tempfile::tempdir().unwrap();
         let src = make_tree(tmp.path());
         let archive = src.join(format!("self.{ext}"));
-        fs::write(&archive, b"old").unwrap();
+        // A leftover temporary from a crashed run is recognizable and never packed.
+        fs::write(src.join(format!(".self.{ext}.rz-abandoned.part")), b"old").unwrap();
         pack(&src, &archive, &opts(3)).unwrap();
         let mut r = rz_formats::open(&archive).unwrap();
         assert!(
@@ -453,9 +448,27 @@ fn overwrite_policies() {
         let target = out.join("proj/readme.txt");
         fs::write(&target, "edited").unwrap();
 
-        let err = unpack(&archive, &out, &ExtractOptions::default());
+        let refuse = ExtractOptions {
+            overwrite: Overwrite::Error,
+            ..ExtractOptions::default()
+        };
+        let err = unpack(&archive, &out, &refuse);
         assert!(matches!(err, Err(Error::Io(_))), "{ext}: {err:?}");
         assert_eq!(fs::read_to_string(&target).unwrap(), "edited", "{ext}");
+
+        // The default keeps both: the edited folder stays, the new one is numbered.
+        let kept = unpack(&archive, &out, &ExtractOptions::default())
+            .unwrap_or_else(|e| panic!("{ext}: failed to keep both versions: {e}"));
+        // The report names what was written, so a UI can show the new folder.
+        assert_eq!(kept.roots, vec![out.join("proj (1)")], "{ext}");
+        assert_eq!(fs::read_to_string(&target).unwrap(), "edited", "{ext}");
+        assert_eq!(
+            fs::read_to_string(out.join("proj (1)/readme.txt")).unwrap(),
+            "hello rustzip",
+            "{ext}"
+        );
+        unpack(&archive, &out, &ExtractOptions::default()).unwrap();
+        assert!(out.join("proj (2)/readme.txt").exists(), "{ext}");
 
         let skip = ExtractOptions {
             overwrite: Overwrite::Skip,
@@ -645,4 +658,42 @@ fn duplicate_names_fall_back_to_sequential_extraction() {
     };
     // Must not race: both names map to one file on case-insensitive filesystems.
     assert!(unpack(&archive, &tmp.path().join("out"), &replace).is_ok());
+}
+
+#[test]
+fn case_colliding_apk_resources_fail_before_extracting_on_an_insensitive_volume() {
+    use std::io::Write;
+    let tmp = tempfile::tempdir().unwrap();
+    let probe = tmp.path().join("case-probe");
+    fs::write(&probe, b"probe").unwrap();
+    let sensitive = !tmp.path().join("CASE-PROBE").exists();
+    fs::remove_file(probe).unwrap();
+    let archive = tmp.path().join("resources.apk");
+    let mut zip = zip::ZipWriter::new(fs::File::create(&archive).unwrap());
+    for (name, bytes) in [
+        ("before.txt", "before"),
+        ("res/9N.9.png", "first"),
+        ("res/9n.9.png", "second"),
+    ] {
+        zip.start_file(name, zip::write::SimpleFileOptions::default())
+            .unwrap();
+        zip.write_all(bytes.as_bytes()).unwrap();
+    }
+    zip.finish().unwrap();
+    let out = tmp.path().join("out");
+    let result = unpack(&archive, &out, &ExtractOptions::default());
+    if sensitive {
+        assert!(result.is_ok(), "{result:?}");
+        assert_eq!(fs::read(out.join("res/9N.9.png")).unwrap(), b"first");
+        assert_eq!(fs::read(out.join("res/9n.9.png")).unwrap(), b"second");
+    } else {
+        assert!(
+            matches!(result, Err(Error::NameConflict { ref first, ref second }) if first == "res/9N.9.png" && second == "res/9n.9.png"),
+            "{result:?}"
+        );
+        assert!(
+            !out.exists(),
+            "a name conflict must be detected before any files are extracted"
+        );
+    }
 }

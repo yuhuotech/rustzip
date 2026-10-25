@@ -108,3 +108,20 @@ pub fn assert_same_tree(expected: &Path, actual: &Path, label: &str) {
         assert!(actual.join("empty-dir").is_dir(), "{label}: empty dir lost");
     }
 }
+
+/// Names of RustZIP temporary files for `output` left in `dir`; a clean run
+/// leaves none, whatever naming scheme the engine currently uses.
+pub fn temp_leftovers(dir: &Path, output: &Path) -> Vec<String> {
+    let base = output
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let dotted = format!(".{base}.rz-");
+    let plain = format!("{base}.rz-");
+    fs::read_dir(dir)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|n| n.starts_with(&dotted) || n.starts_with(&plain))
+        .collect()
+}
