@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="packaging/icons/hicolor/256.png" alt="RustZIP logo" width="120">
+
 # RustZIP
 
 **用 Rust 写的跨平台压缩管理软件：快、安全、好看，格式全。**
