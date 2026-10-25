@@ -171,10 +171,13 @@ impl MainView {
             .rev()
             .map(|t| {
                 self.history_row(
+                    "◌",
                     p.accent,
+                    p.accent_soft,
                     t.kind,
                     &t.title,
                     self.tool_text("history_running"),
+                    "",
                     String::new(),
                     false,
                     None,
@@ -188,17 +191,19 @@ impl MainView {
             .records
             .iter()
             .map(|r| {
-                let (dot, label) = match r.outcome {
-                    Outcome::Success => (p.fg3, self.tool_text("history_succeeded")),
-                    Outcome::Failed => (p.danger, self.tool_text("history_failed")),
-                    Outcome::Cancelled => (p.line, self.tool_text("history_cancelled")),
+                let (mark, status_fg, status_bg, label) = match r.outcome {
+                    Outcome::Success => (
+                        "✓",
+                        p.accent,
+                        p.accent_soft,
+                        self.tool_text("history_succeeded"),
+                    ),
+                    Outcome::Failed => ("!", p.win, p.danger, self.tool_text("history_failed")),
+                    Outcome::Cancelled => {
+                        ("—", p.fg2, p.hover, self.tool_text("history_cancelled"))
+                    }
                 };
                 let kind = kind_from_key(&r.kind);
-                let detail = if r.detail.is_empty() {
-                    label.to_string()
-                } else {
-                    format!("{label} · {}", r.detail)
-                };
                 // A repair report is only available while its task is still in this session.
                 let report = r.task.filter(|id| {
                     self.task_view.iter().any(|t| {
@@ -206,10 +211,13 @@ impl MainView {
                     })
                 });
                 self.history_row(
-                    dot,
+                    mark,
+                    status_fg,
+                    status_bg,
                     kind,
                     &r.title,
-                    &detail,
+                    label,
+                    &r.detail,
                     crate::local_time(r.at),
                     !r.seen,
                     report,
@@ -242,9 +250,12 @@ impl MainView {
     #[allow(clippy::too_many_arguments)]
     fn history_row(
         &self,
-        dot: Hsla,
+        mark: &'static str,
+        status_fg: Hsla,
+        status_bg: Hsla,
         kind: JobKind,
         title: &str,
+        status: &'static str,
         detail: &str,
         when: String,
         fresh: bool,
@@ -254,35 +265,52 @@ impl MainView {
     ) -> AnyElement {
         let p = palette(cx);
         h_flex()
-            .gap_3()
+            .h(px(38.))
+            .gap_2()
             .px_2()
-            .py_2()
             .rounded(px(8.))
             .when(fresh, |d| d.bg(p.accent_soft))
-            .child(div().size_2().flex_none().rounded_full().bg(dot))
             .child(
-                v_flex()
+                h_flex()
+                    .h(px(22.))
+                    .gap_1()
+                    .px_2()
+                    .flex_none()
+                    .rounded(px(6.))
+                    .bg(status_bg)
+                    .text_color(status_fg)
+                    .text_size(px(11.))
+                    .child(mark)
+                    .child(status),
+            )
+            .child(
+                div()
+                    .flex_none()
+                    .text_size(px(11.))
+                    .text_color(p.fg3)
+                    .child(crate::view::kind_label(kind)),
+            )
+            .child(
+                div()
                     .flex_1()
                     .min_w_0()
-                    .child(
-                        h_flex()
-                            .gap_2()
-                            .child(div().text_color(p.fg2).child(crate::view::kind_label(kind)))
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .overflow_hidden()
-                                    .text_ellipsis()
-                                    .child(title.to_string()),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(12.))
-                            .text_color(p.fg3)
-                            .child(detail.to_string()),
-                    ),
+                    .overflow_hidden()
+                    .text_ellipsis()
+                    .text_color(p.fg2)
+                    .child(title.to_string()),
             )
+            .when(!detail.is_empty(), |d| {
+                d.child(
+                    div()
+                        .max_w(px(240.))
+                        .min_w_0()
+                        .overflow_hidden()
+                        .text_ellipsis()
+                        .text_size(px(11.))
+                        .text_color(p.fg3)
+                        .child(detail.to_string()),
+                )
+            })
             .when_some(report, |d, id| {
                 d.child(
                     Button::new(("history-report", id as usize))
@@ -295,13 +323,16 @@ impl MainView {
                         })),
                 )
             })
-            .child(
-                div()
-                    .text_size(px(12.))
-                    .text_color(p.fg3)
-                    .font_family(mono.clone())
-                    .child(when),
-            )
+            .when(!when.is_empty(), |d| {
+                d.child(
+                    div()
+                        .flex_none()
+                        .text_size(px(11.))
+                        .text_color(p.fg3)
+                        .font_family(mono.clone())
+                        .child(when),
+                )
+            })
             .into_any_element()
     }
 }
