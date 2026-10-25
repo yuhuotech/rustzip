@@ -109,3 +109,12 @@ trait ArchiveWriter { /* add / finish / 增量更新 */ }
 - `rz-platform::user_directories` 通过 `dirs` 读取平台标准目录（Windows Known Folders、Linux XDG、macOS 标准目录）。
 - `rz-app::locations` 合并系统目录、MRU 和旧收藏，规范化实际路径去重，过滤隐藏入口。`Settings` 保存 `recent_locations`（最多 20）、`hidden_locations`、`folder_view`，从旧 `recent` 回填，只有成功打开才更新历史；全部本地存储，不发送到统计服务。
 - GUI `locations` 模块在后台获取位置和元数据，以虚拟化列表或按行虚拟化网格呈现；两视图共享项目身份、排序和选择，页面重载使用代次校验，设置异步持久化。文件夹视图复用相同布局，GUI 不直接调用平台目录 API。
+
+## 10. 官网与统计服务
+
+- 独立目录 `web/` 使用 Next.js / TypeScript,部署在 Vercel;它不进入 Cargo workspace,也不被 Rust 核心依赖。
+- `POST /api/v1/telemetry` 接收 `rz-app::stats::Report` 的固定 7 个字段,仅允许 `activate` 和 `heartbeat`;严格拒绝未知字段。
+- 服务端用 HMAC-SHA-256 转换安装 UUID 后保存。Postgres 只保留摘要、首次 / 最近上报时间、最近环境信息和按日去重的活跃记录;不存原始 UUID、文件数据或请求 IP。
+- `GET /api/health` 检查服务和数据库连通性。自动更新继续使用 GitHub Release 的签名 `update.json`,不复制到 Vercel。
+- 本地 `next dev` 默认使用被 Git 忽略的 SQLite 文件;Vercel Preview / Production 使用 Neon Postgres。运行环境选择放在 `web/src/lib/db/`,SQLite 与 Postgres 分别维护 Drizzle schema 和迁移,细节见 `web/README.md`。
+- Vercel build 先校验 `DATABASE_URL`、`DATABASE_URL_UNPOOLED`、`TELEMETRY_HASH_SECRET`,再幂等执行 Postgres migrations;失败时终止部署,避免线上 API 缺表。

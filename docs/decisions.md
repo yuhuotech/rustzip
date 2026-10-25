@@ -117,3 +117,18 @@
 
 - 同一窗口中最后发起的压缩包打开请求拥有焦点；较早请求即使更晚完成，也可以加入标签，但不得切走当前标签或弹出过期错误。重复打开仍在加载的同一路径复用该请求。
 - 用户改点其他标签、菜单页或常用位置目录后，迟到的打开回调不再抢焦点。常用位置扫描只允许最新一代结果更新列表；旧扫描不能恢复已移除的位置或旧选择。
+
+## D15 官网、统计接口与托管数据库
+
+- 官网和统计接收服务放在仓库 `web/`,技术栈采用 Next.js / TypeScript,在 Vercel 部署;保持与 Rust workspace 隔离。
+- 本决策更新 D8 中“统计服务自建”的部署方式:统计 API 随官网运行在 Vercel,数据库由 Neon 提供。
+- 使用 Neon Postgres 的 Vercel 集成和数据库分支,兼顾 Vercel Serverless Function 的远程连接、本地开发与 Preview 隔离;Drizzle ORM 管理 schema 和迁移。
+- 统计接口只兼容现有安装统计协议,不新增文件或操作行为采集。写库前用稳定服务端密钥 HMAC 安装 UUID,数据库不保存原始 UUID 和 IP。
+- 自动更新仍以 GitHub Releases 的已签名清单为准,不迁入官网服务,避免改变既有更新信任链。
+
+## D16 本地 SQLite 与 Vercel Neon 分环境
+
+- 更新 D15 的本地数据库方案:本机 `next dev` 默认使用 SQLite 文件库,启动时自动应用 SQLite 迁移;不要求安装 PostgreSQL 或连接 Vercel 数据库。
+- Vercel Preview / Production 继续使用 Neon Postgres,Preview 使用隔离分支;正式域名和服务变量按部署文档配置。
+- 上报协议与去重规则由同一服务层实现,两种数据库各自保留 Drizzle schema 和迁移;本地 SQLite 数据不上传、不与线上同步。
+- Vercel build 在 Next.js build 前校验 Neon URL 与统计 HMAC 密钥并幂等应用 Postgres migrations;缺少配置或迁移失败时阻止部署。

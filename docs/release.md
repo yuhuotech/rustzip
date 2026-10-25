@@ -6,7 +6,7 @@
    - 把这个文件的内容(64 个十六进制字符)存成 GitHub 仓库的 **Secret `RZ_UPDATE_KEY`**。
    - **私钥不进仓库,也不要发给任何人。** 丢了只能换密钥:旧版本不认新公钥,用户要手动重装一次。
    - 备份到密码管理器。
-2. **统计服务器地址**(可选):GitHub 本身不能接收上报,需要一个能收 POST 的 https 地址。把它设成仓库 **Variable `RZ_STATS_URL`**。没设就不会上报任何东西(见下文)。
+2. **统计服务器地址**(可选):先按 [`web/README.md`](../web/README.md) 部署官网和 Neon 数据库,然后把 `https://rustzip.com/api/v1/telemetry` 设为 GitHub 仓库 **Variable `RZ_STATS_URL`**。生产域名配置完成前不要启用该变量。没设就不会上报任何东西。
 3. **macOS 签名**(可选,强烈建议):没有 Apple 开发者账号时 dmg 只做临时签名,用户首次打开要在"系统设置 → 隐私与安全"里点"仍要打开"。有账号则设置 Secrets:`MACOS_CERT_P12`(base64)、`MACOS_CERT_PASSWORD`、`MACOS_SIGN_IDENTITY`,公证再加 `APPLE_ID`、`APPLE_TEAM_ID`、`APPLE_APP_PASSWORD`。
 4. **Windows 签名**:目前不签。SmartScreen 会提示"未知发布者",买代码签名证书后再接入。
 
@@ -37,7 +37,9 @@
 - `activate` 只发一次;之后每天最多一次 `heartbeat`。失败直接丢弃,下次启动再试,不阻塞启动。
 - 设置里可随时关闭。
 
-**服务端**需要自己搭。最小要求:接收 POST JSON、按 `install_id` 去重计数,不记录 IP。例如 Cloudflare Workers + KV 十几行就够,用 `activate` 数新增安装,用每日 `heartbeat` 数活跃。没有服务器时保持 `RZ_STATS_URL` 为空即可,软件其余功能不受影响。
+服务端由仓库 `web/` 提供:`POST /api/v1/telemetry` 只接受上述 7 个字段,按安装 ID 和日期幂等去重。原始 UUID 在写入数据库前用 HMAC-SHA-256 转换;不保存文件信息或请求 IP。健康检查为 `GET /api/health`。数据库查询和本地验证方法见 [`web/README.md`](../web/README.md)。
+
+Vercel build 会在部署期间自动应用 Neon Postgres migrations;检查部署日志确认迁移成功,并确认 `/api/health` 返回 200。域名配置完成后,再将完整统计地址写入 GitHub Repository Settings → Secrets and variables → Actions → Variables → `RZ_STATS_URL`。应用更新仍使用 GitHub Release 内的签名 `update.json`,不依赖 Vercel。
 
 ## 本地打包(不发布)
 

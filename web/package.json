@@ -1,0 +1,43 @@
+{
+  "name": "rustzip-web",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "scripts": {
+    "predev": "npm run db:migrate",
+    "dev": "next dev --hostname 0.0.0.0 --port 8035",
+    "build": "npm run typecheck && npm run test && npm run db:migrate:vercel && next build",
+    "start": "next start --hostname 0.0.0.0 --port 8035",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts",
+    "check": "npm run build",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio",
+    "db:generate:postgres": "drizzle-kit generate --config=drizzle.postgres.config.ts",
+    "db:migrate:postgres": "drizzle-kit migrate --config=drizzle.postgres.config.ts",
+    "db:studio:postgres": "drizzle-kit studio --config=drizzle.postgres.config.ts",
+    "db:migrate:vercel": "node scripts/migrate-vercel.mjs"
+  },
+  "dependencies": {
+    "@libsql/client": "0.18.0",
+    "@neondatabase/serverless": "1.2.0",
+    "drizzle-orm": "0.45.4",
+    "dotenv": "17.2.3",
+    "next": "16.4.3",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "drizzle-kit": "0.31.11",
+    "pg": "8.23.1",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3"
+  }
+}

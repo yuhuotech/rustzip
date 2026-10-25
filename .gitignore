@@ -4,3 +4,12 @@
 /fuzz/target
 /fuzz/artifacts
 /fuzz/corpus
+/web/node_modules/
+/web/.next/
+/web/.vercel/
+/web/.env
+/web/.env.local
+/web/.env.*.local
+/web/tsconfig.tsbuildinfo
+/web/*.db*
+/web/*.sqlite*
