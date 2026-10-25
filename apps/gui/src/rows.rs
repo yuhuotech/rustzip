@@ -318,7 +318,11 @@ impl TableDelegate for FileRows {
         };
         menu = menu
             .separator()
-            .menu_with_icon("解压到…", IconName::ArrowDown, Box::new(RowExtractTo))
+            .menu_with_icon(
+                "解压到…",
+                gpui_kit::assets::IconName::ArrowDownToLine,
+                Box::new(RowExtractTo),
+            )
             .menu_with_icon(
                 "解压到当前文件夹",
                 IconName::Folder,

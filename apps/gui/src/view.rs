@@ -5,6 +5,7 @@
 
 use crate::brand::{self, palette};
 use crate::dialog::{Dialog, Tone};
+use crate::open_requests::OpenRequests;
 use crate::recent::{self, RecentList, RecentSort};
 use crate::rows::FileRows;
 use crate::services::UpdateState;
@@ -13,6 +14,7 @@ use crate::{
     RowAddHere, RowCopyPath, RowDelete, RowExtractHere, RowExtractNamed, RowExtractTo, RowOpen,
     RowRename, SelectAllRows,
 };
+use gpui_kit::base::TestSupportExt as _;
 use gpui_kit::component::FocusableExt as _;
 use gpui_kit::component::button::*;
 use gpui_kit::component::input::{Input, InputEvent, InputState};
@@ -37,6 +39,7 @@ use std::time::Duration;
 
 /// Whether the tabs share the title bar row with the window buttons (macOS only).
 pub const TABS_IN_TITLEBAR: bool = cfg!(target_os = "macos");
+const TITLEBAR_HEIGHT: f32 = 38.;
 
 /// One archive shown in a tab.
 pub struct OpenArchive {
@@ -79,6 +82,10 @@ pub enum Page {
     Recent,
     /// A folder on disk, browsed like in a file manager.
     Folder,
+    Favorites,
+    Passwords,
+    /// What finished lately, kept across restarts.
+    History,
 }
 
 /// How a row of the left menu behaves.
@@ -88,8 +95,6 @@ enum Nav {
     Current,
     /// Works.
     Live,
-    /// Designed but not built yet.
-    Soon,
 }
 
 /// The picture shown in the details panel for the selected file.
@@ -178,6 +183,10 @@ pub struct CompressForm {
 }
 
 pub enum Overlay {
+    Transform(crate::tools::TransformForm),
+    PasswordEdit(crate::tools::PasswordForm),
+    PasswordDelete(String),
+    RecoveryReport(TaskId),
     Password(PasswordPrompt),
     Compress(CompressForm),
     Settings,
@@ -206,6 +215,9 @@ pub struct RenamePrompt {
 }
 
 pub struct MainView {
+    pub locations: crate::locations::LocationsState,
+    pub(crate) directory_focus: FocusHandle,
+    pub tools: crate::tools::ToolState,
     pub archives: Vec<OpenArchive>,
     pub active: usize,
     pub table: Entity<TableState<FileRows>>,
@@ -214,6 +226,8 @@ pub struct MainView {
     pub task_view: Vec<TaskInfo>,
     pub settings: Settings,
     pub(crate) settings_path: Option<PathBuf>,
+    pub history: rz_app::history::History,
+    pub history_path: Option<PathBuf>,
     /// Where remembered passwords live; the system keychain in the real application.
     pub vault: Arc<dyn SecretStore>,
     pub update: Option<crate::services::UpdateState>,
@@ -221,6 +235,7 @@ pub struct MainView {
     notice_gen: u64,
     pub overlay: Option<Overlay>,
     pub loading: Option<PathBuf>,
+    pub(crate) open_requests: OpenRequests,
     pub preview: Option<Preview>,
     /// The statistics notice was opened from the settings, so it goes back there.
     pub privacy_from_settings: bool,
@@ -281,12 +296,14 @@ fn format_eta(secs: u64) -> String {
     }
 }
 
-fn kind_label(kind: JobKind) -> &'static str {
+pub(crate) fn kind_label(kind: JobKind) -> &'static str {
     match kind {
         JobKind::Compress => "压缩",
         JobKind::Extract => "解压",
         JobKind::Test => "测试",
         JobKind::Edit => "修改",
+        JobKind::Convert => crate::text::tr("auto", "convert"),
+        JobKind::Repair => crate::text::tr("auto", "repair"),
     }
 }
 
@@ -297,6 +314,9 @@ fn explain(e: &Error) -> String {
         Error::Unsupported(m) => format!("暂不支持:{m}"),
         Error::Corrupt(m) => format!("文件已损坏:{m}"),
         Error::UnsafePath(p) => format!("压缩包里有不安全的路径,已拒绝:{p}"),
+        Error::NameConflict { .. } => {
+            crate::text::task_error("auto", &rz_app::tasks::TaskError::from(e))
+        }
         Error::LimitExceeded(m) => format!("超出安全限制,已停止:{m}"),
         Error::Io(e) => format!("读写出错:{e}"),
         Error::Cancelled => "已取消".into(),
@@ -310,6 +330,7 @@ impl MainView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
+        let settings = settings.sanitized();
         let table = cx.new(|cx| {
             // Modified clicks build a multi-selection in `FileRows`, not a new single row.
             TableState::new(FileRows::default(), window, cx).select_on_modifier_click(false)
@@ -324,6 +345,9 @@ impl MainView {
         })
         .detach();
         Self {
+            locations: crate::locations::LocationsState::default(),
+            directory_focus: cx.focus_handle(),
+            tools: crate::tools::ToolState::default(),
             archives: Vec::new(),
             active: 0,
             table,
@@ -337,7 +361,10 @@ impl MainView {
             notice: None,
             notice_gen: 0,
             overlay: None,
+            history: rz_app::history::History::default(),
+            history_path: None,
             loading: None,
+            open_requests: OpenRequests::default(),
             preview: None,
             privacy_from_settings: false,
             page: Page::Archive,
@@ -373,19 +400,44 @@ impl MainView {
         self.search.read(cx).value().to_string()
     }
 
-    fn save_settings(&self) {
-        if let Some(path) = &self.settings_path {
-            let _ = self.settings.save(path);
-        }
+    pub(crate) fn save_settings(&self, cx: &mut Context<Self>) {
+        let Some(path) = self.settings_path.clone() else {
+            return;
+        };
+        let settings = self.settings.clone();
+        let revision = self.tools.settings_revision.clone();
+        let current = revision.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+        cx.spawn(async move |this, cx| {
+            let result = cx
+                .background_executor()
+                .spawn(async move {
+                    // Several setting changes can arrive before a previous disk write finishes.
+                    static SAVE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+                    let _guard = SAVE
+                        .lock()
+                        .map_err(|_| Error::Io(std::io::Error::other("settings busy")))?;
+                    if revision.load(std::sync::atomic::Ordering::SeqCst) != current {
+                        return Ok(());
+                    }
+                    settings.save(&path)
+                })
+                .await;
+            if result.is_err() {
+                let _ = this.update(cx, |this, cx| {
+                    this.say(Notice::Error(this.tool_text("settings_error").into()), cx)
+                });
+            }
+        })
+        .detach();
     }
 
-    /// Shows a message in the status bar for a few seconds. Errors stay a little longer.
+    /// Shows a toast for a few seconds. Errors stay a little longer.
     pub(crate) fn say(&mut self, notice: Notice, cx: &mut Context<Self>) {
         self.notice_gen += 1;
         let gen_now = self.notice_gen;
         let secs = match notice {
-            Notice::Info(_) => 6,
-            Notice::Error(_) => 12,
+            Notice::Info(_) => 4,
+            Notice::Error(_) => 5,
         };
         self.notice = Some(notice);
         cx.spawn(async move |this, cx| {
@@ -434,6 +486,11 @@ impl MainView {
 
     // ----- opening ---------------------------------------------------------------------
 
+    fn supersede_active_open(&mut self) {
+        self.open_requests.supersede_active();
+        self.loading = None;
+    }
+
     /// Opens an archive without blocking the window.
     pub fn open_path(
         &mut self,
@@ -443,12 +500,19 @@ impl MainView {
         cx: &mut Context<Self>,
     ) {
         if let Some(ix) = self.archives.iter().position(|a| a.path == path) {
+            self.supersede_active_open();
+            self.settings.remember(&path);
+            self.save_settings(cx);
             self.active = ix;
             self.page = Page::Archive;
             self.apply_view(cx);
             return;
         }
-        self.loading = Some(path.clone());
+        let (request_id, should_start) = self.begin_open_request(&path);
+        if !should_start {
+            cx.notify();
+            return;
+        }
         self.notice = None;
         cx.notify();
         let (p, pw) = (path.clone(), password.clone());
@@ -458,55 +522,129 @@ impl MainView {
                 .spawn(async move { load_archive(&p, pw.as_deref()) })
                 .await;
             let _ = this.update_in(cx, |this, window, cx| {
-                this.finish_open(path, password, result, window, cx);
+                this.finish_open(request_id, path, password, result, window, cx);
             });
         })
         .detach();
     }
 
+    /// Reserves an open request so results from older, slower requests can be handled in the
+    /// background without taking focus away from the archive the user opened most recently.
+    pub fn begin_open_request(&mut self, path: &Path) -> (u64, bool) {
+        let request = self.open_requests.begin(path);
+        self.loading = Some(path.to_path_buf());
+        self.notice = None;
+        request
+    }
+
     pub fn finish_open(
         &mut self,
+        request_id: u64,
         path: PathBuf,
         password: Option<String>,
         result: Result<(ArchiveTree, String), Error>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.loading = None;
+        let Some(is_active) = self.open_requests.complete(&path, request_id) else {
+            return;
+        };
         match result {
             Ok((tree, format)) => {
                 self.settings.remember(&path);
-                self.save_settings();
+                self.save_settings(cx);
                 if self.settings.remember_passwords
                     && let Some(pw) = &password
                 {
                     self.remember_password(&path, pw, cx);
                 }
-                self.archives.push(OpenArchive {
-                    path,
-                    tree: Arc::new(tree),
-                    format,
-                    password,
-                    cwd: String::new(),
-                    selected: None,
-                    verified: None,
-                });
-                self.active = self.archives.len() - 1;
-                self.page = Page::Archive;
-                self.overlay = None;
-                self.apply_view(cx);
+                let index = if let Some(ix) = self.archives.iter().position(|a| a.path == path) {
+                    ix
+                } else {
+                    self.archives.push(OpenArchive {
+                        path,
+                        tree: Arc::new(tree),
+                        format,
+                        password,
+                        cwd: String::new(),
+                        selected: None,
+                        verified: None,
+                    });
+                    self.archives.len() - 1
+                };
+                if is_active {
+                    self.open_requests.finish_active(request_id);
+                    self.loading = None;
+                    self.active = index;
+                    self.page = Page::Archive;
+                    self.overlay = None;
+                    self.apply_view(cx);
+                } else {
+                    cx.notify();
+                }
             }
             Err(Error::Password) => {
-                // A password saved earlier gets one try before the user is asked.
-                if password.is_none() && self.settings.remember_passwords {
-                    self.open_with_saved_password(path, window, cx);
+                if !is_active {
                     return;
                 }
+                // A password saved earlier gets one try before the user is asked.
+                if password.is_none() && self.settings.remember_passwords {
+                    self.open_with_saved_password(path, request_id, window, cx);
+                    return;
+                }
+                self.open_requests.finish_active(request_id);
+                self.loading = None;
                 let wrong = password.is_some();
                 self.ask_password(PasswordTarget::Open(path), wrong, window, cx);
             }
-            Err(e) => self.say(Notice::Error(explain(&e)), cx),
+            Err(e) => {
+                if !is_active {
+                    return;
+                }
+                self.open_requests.finish_active(request_id);
+                self.loading = None;
+                let msg = crate::text::open_error(&self.settings.language, &path, &e);
+                self.say(Notice::Error(msg.into()), cx);
+            }
         }
+    }
+
+    fn render_toast(&self, cx: &mut Context<Self>) -> Option<impl IntoElement + use<>> {
+        let (message, dot) = match self.notice.as_ref()? {
+            Notice::Info(m) => (m.clone(), palette(cx).accent),
+            Notice::Error(m) => (m.clone(), palette(cx).danger),
+        };
+        let p = palette(cx);
+        Some(
+            div()
+                .absolute()
+                .top(px(TITLEBAR_HEIGHT + 12.))
+                .left_0()
+                .right_0()
+                .flex()
+                .justify_center()
+                .child(
+                    h_flex()
+                        .id("toast")
+                        .max_w(px(420.))
+                        .gap_2()
+                        .px_3()
+                        .py_2()
+                        .rounded(px(12.))
+                        .bg(p.panel)
+                        .border_1()
+                        .border_color(p.line)
+                        .shadow_md()
+                        .cursor_pointer()
+                        .text_color(p.fg)
+                        .child(div().size_2().flex_none().rounded_full().bg(dot))
+                        .child(message)
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.leave_notice();
+                            cx.notify();
+                        })),
+                ),
+        )
     }
 
     pub fn close_tab(&mut self, ix: usize, cx: &mut Context<Self>) {
@@ -514,7 +652,6 @@ impl MainView {
             self.archives.remove(ix);
             self.active = self.active.min(self.archives.len().saturating_sub(1));
             if self.archives.is_empty() {
-                // The welcome page has no pages to switch between.
                 self.page = Page::Archive;
             }
             self.leave_notice();
@@ -524,6 +661,7 @@ impl MainView {
 
     pub fn activate_tab(&mut self, ix: usize, cx: &mut Context<Self>) {
         if ix < self.archives.len() {
+            self.supersede_active_open();
             self.active = ix;
             self.page = Page::Archive;
             self.leave_notice();
@@ -533,11 +671,22 @@ impl MainView {
 
     pub fn show_page(&mut self, page: Page, cx: &mut Context<Self>) {
         if self.page != page {
+            self.supersede_active_open();
             self.leave_notice();
+            // What was on screen has been seen, so the menu badges clear on the way out.
+            if self.page == Page::History && self.history.mark_all_seen() {
+                self.save_history(cx);
+            }
         }
         self.page = page;
         if page == Page::Recent {
             self.refresh_recent(cx);
+        }
+        if page == Page::Passwords {
+            self.refresh_password_book(cx);
+        }
+        if page == Page::Favorites {
+            self.refresh_locations(cx);
         }
         cx.notify();
     }
@@ -649,10 +798,13 @@ impl MainView {
     /// Shows the files of a folder on disk, like a file manager, so the archive manager
     /// can be used to move around and open the next archive from.
     pub fn show_folder(&mut self, dir: PathBuf, cx: &mut Context<Self>) {
+        self.supersede_active_open();
         self.leave_notice();
         self.page = Page::Folder;
+        self.reset_directory_scroll();
         self.folder = Some(dir.clone());
         self.files.selected = None;
+        self.files.items.clear();
         self.reload_folder(cx);
         cx.notify();
     }
@@ -701,6 +853,7 @@ impl MainView {
     /// The list of the page that is showing one (recent archives or a folder).
     fn listed(&self) -> &RecentList {
         match self.page {
+            Page::Favorites => &self.locations.list,
             Page::Folder => &self.files,
             _ => &self.recent,
         }
@@ -708,6 +861,7 @@ impl MainView {
 
     fn listed_mut(&mut self) -> &mut RecentList {
         match self.page {
+            Page::Favorites => &mut self.locations.list,
             Page::Folder => &mut self.files,
             _ => &mut self.recent,
         }
@@ -718,7 +872,9 @@ impl MainView {
         match self.page {
             Page::Folder => self.reload_folder(cx),
             Page::Recent => self.refresh_recent(cx),
-            Page::Archive => {}
+            Page::Passwords => self.refresh_password_book(cx),
+            Page::Favorites => self.refresh_locations(cx),
+            Page::Archive | Page::History => {}
         }
     }
 
@@ -1304,7 +1460,7 @@ impl MainView {
                             a.path = to.clone();
                         }
                     }
-                    this.save_settings();
+                    this.save_settings(cx);
                     this.listed_mut().selected = Some(to);
                     this.refresh_listed(cx);
                     this.say(Notice::Info("已重命名".into()), cx);
@@ -1351,7 +1507,7 @@ impl MainView {
     /// Takes a file off the list; the file itself stays where it is.
     pub fn forget_recent(&mut self, path: &Path, cx: &mut Context<Self>) {
         self.settings.recent.retain(|p| p != path);
-        self.save_settings();
+        self.save_settings(cx);
         self.recent.items.retain(|i| i.path != path);
         self.recent.selected = None;
         cx.notify();
@@ -1359,7 +1515,7 @@ impl MainView {
 
     pub fn clear_recent(&mut self, cx: &mut Context<Self>) {
         self.settings.recent.clear();
-        self.save_settings();
+        self.save_settings(cx);
         self.recent.set_items(Vec::new());
         self.recent.selected = None;
         cx.notify();
@@ -1740,32 +1896,42 @@ impl MainView {
                 (TaskState::Done, _, Some(s)) => {
                     let what = kind_label(t.kind);
                     let msg = match t.kind {
+                        JobKind::Convert => self.tool_text("converted").into(),
+                        JobKind::Repair => self.tool_text("recovered").into(),
                         JobKind::Test => format!("{what}通过:{} 个条目没有发现问题", s.files),
                         JobKind::Edit => format!("{what}完成:压缩包现在有 {} 项", s.files),
                         _ => format!("{what}完成:{} 个文件,{}", s.files, format_size(s.bytes)),
                     };
+                    self.record_task(&t, &msg, cx);
                     self.say(Notice::Info(msg), cx);
                     if self.settings.open_folder_when_done && t.kind == JobKind::Extract {
-                        cx.reveal_path(&s.output);
+                        cx.reveal_path(&s.reveal);
                     }
                 }
+                // Retried as a new task once the password is in, so there is nothing to record.
                 (TaskState::Failed, Some(err), _) if err.code == ErrorCode::Password => {
                     self.say(Notice::Error(format!("{}需要密码", t.title)), cx);
                 }
                 (TaskState::Failed, Some(err), _) => {
-                    self.say(
-                        Notice::Error(format!("{}失败:{}", t.title, err.message)),
-                        cx,
-                    );
+                    let why = crate::text::task_error(&self.settings.language, err);
+                    self.record_task(&t, &why, cx);
+                    self.say(Notice::Error(format!("{}失败:{why}", t.title)), cx);
                 }
+                (TaskState::Cancelled, _, _) => self.record_task(&t, "", cx),
                 _ => {}
             }
         }
         cx.notify();
     }
 
+    fn record_task(&mut self, t: &TaskInfo, detail: &str, cx: &mut Context<Self>) {
+        let record = self.history_record(t, detail);
+        self.history.push(record);
+        self.save_history(cx);
+    }
+
     /// Checks the queue ten times a second while anything is still running.
-    fn ensure_polling(&mut self, cx: &mut Context<Self>) {
+    pub(crate) fn ensure_polling(&mut self, cx: &mut Context<Self>) {
         if self.polling {
             return;
         }
@@ -1949,14 +2115,8 @@ impl MainView {
             .parent()
             .map(Path::to_path_buf)
             .unwrap_or_else(|| PathBuf::from("."));
-        let output = dir.join(format!("{name}.{}", f.format.extension()));
-        if output.exists() {
-            self.say(
-                Notice::Error(format!("已存在同名文件:{}", output.display())),
-                cx,
-            );
-            return;
-        }
+        // A name that is taken gets a number instead of failing.
+        let output = rz_engine::unused_path(&dir.join(format!("{name}.{}", f.format.extension())));
         let Some(format) = OutputFormat::from_path(&output) else {
             self.say(Notice::Error("无法确定压缩格式".into()), cx);
             return;
@@ -1978,6 +2138,9 @@ impl MainView {
     }
 
     pub fn close_overlay(&mut self, cx: &mut Context<Self>) {
+        if self.tools.busy {
+            return;
+        }
         self.overlay = None;
         cx.notify();
     }
@@ -1998,7 +2161,7 @@ impl MainView {
     /// Changes one setting, stores it, and redraws.
     pub fn change_settings(&mut self, f: impl FnOnce(&mut Settings), cx: &mut Context<Self>) {
         f(&mut self.settings);
-        self.save_settings();
+        self.save_settings(cx);
         cx.notify();
     }
 
@@ -2076,6 +2239,18 @@ impl Render for MainView {
                 this.close_tab(this.active, cx);
             }))
             .on_action(cx.listener(|this, _: &OpenSettings, _, cx| this.open_settings(cx)))
+            .on_action(cx.listener(|this, _: &crate::OpenFavorites, _, cx| {
+                this.show_page(Page::Favorites, cx)
+            }))
+            .on_action(cx.listener(|this, _: &crate::OpenPasswordBook, _, cx| {
+                this.show_page(Page::Passwords, cx)
+            }))
+            .on_action(cx.listener(|this, _: &crate::ConvertArchive, window, cx| {
+                this.open_transform(false, window, cx)
+            }))
+            .on_action(cx.listener(|this, _: &crate::RepairArchive, window, cx| {
+                this.open_transform(true, window, cx)
+            }))
             // The right-click menu of the file list.
             .on_action(cx.listener(|this, _: &RowOpen, window, cx| this.open_picked(window, cx)))
             .on_action(cx.listener(|this, _: &RowExtractTo, window, cx| {
@@ -2105,33 +2280,64 @@ impl Render for MainView {
             .on_drop(cx.listener(|this, paths: &ExternalPaths, window, cx| {
                 this.handle_drop(paths.paths().to_vec(), window, cx);
             }))
-            // With nothing open the welcome screen has its own buttons; a toolbar of
-            // disabled buttons would only be noise.
-            .when(has_archive, |d| {
-                d.child(self.render_tab_strip(cx))
-                    .child(self.render_toolbar(cx))
+            .when(has_archive, |d| d.child(self.render_tab_strip(cx)))
+            .when(!has_archive && TABS_IN_TITLEBAR, |d| {
+                d.child(self.render_empty_titlebar(cx))
             })
-            .child(if has_archive {
+            // The native controls occupy the transparent title bar even without tabs.
+            .when(has_archive || self.page != Page::Archive, |d| {
+                d.child(self.render_toolbar(cx))
+            })
+            .child(if has_archive || self.page != Page::Archive {
                 self.render_browser(window.viewport_size().width, cx)
                     .into_any_element()
             } else {
-                self.render_empty(cx).into_any_element()
+                h_flex()
+                    .flex_1()
+                    .min_h_0()
+                    .items_stretch()
+                    .when(window.viewport_size().width >= px(560.), |d| {
+                        d.child(self.render_sidebar(cx))
+                    })
+                    .child(self.render_empty(cx))
+                    .into_any_element()
             })
-            .when(!self.task_view.is_empty(), |d| {
+            .when(self.task_view.iter().any(crate::history::is_live), |d| {
                 d.child(self.render_tasks(cx))
             })
             .child(self.render_status(cx))
             .when_some(self.render_overlay(window, cx), |d, o| d.child(o))
+            .when_some(self.render_toast(cx), |d, t| d.child(t))
     }
 }
 
 impl MainView {
+    fn render_empty_titlebar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let p = palette(cx);
+        h_flex()
+            .id("empty-titlebar")
+            .h(px(TITLEBAR_HEIGHT))
+            .flex_none()
+            .pl(px(84.))
+            .pr_2()
+            .bg(p.panel)
+            .border_b_1()
+            .border_color(p.line)
+            .child(
+                div()
+                    .h_full()
+                    .flex_1()
+                    .window_control_area(WindowControlArea::Drag),
+            )
+            .child(self.settings_button(cx))
+    }
+
     /// One tab per open archive, with a "+" to open another.
     fn render_tab_strip(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let p = palette(cx);
         h_flex()
             .id("tabs")
-            .h(px(38.))
+            .h(px(TITLEBAR_HEIGHT))
             .px_2()
             // Leave room for the traffic lights that sit in the same row.
             .when(TABS_IN_TITLEBAR, |d| d.pl(px(84.)))
@@ -2213,9 +2419,19 @@ impl MainView {
     /// recent archives.
     fn render_toolbar(&self, cx: &mut Context<Self>) -> AnyElement {
         match self.page {
+            Page::Favorites => self.render_locations_toolbar(cx),
+            Page::Passwords => self.render_tools_toolbar(cx),
+            Page::History => self.render_history_toolbar(cx),
             Page::Archive => self.render_archive_toolbar(cx).into_any_element(),
             Page::Recent => self.render_recent_toolbar(cx).into_any_element(),
-            Page::Folder => self.render_folder_toolbar(cx).into_any_element(),
+            Page::Folder => h_flex()
+                .h(px(46.))
+                .flex_none()
+                .border_b_1()
+                .border_color(palette(cx).line)
+                .child(self.render_folder_toolbar(cx))
+                .child(self.render_folder_view_switch(cx))
+                .into_any_element(),
         }
     }
 
@@ -2249,7 +2465,7 @@ impl MainView {
             .child(
                 Button::new("extract-all")
                     .primary()
-                    .icon(IconName::ArrowDown)
+                    .icon(gpui_kit::assets::IconName::ArrowDownToLine)
                     .label("解压到…")
                     .disabled(!has)
                     .on_click(cx.listener(|this, _, window, cx| this.extract_to(window, cx))),
@@ -2324,13 +2540,15 @@ impl MainView {
             .id("empty")
             .relative()
             .flex_1()
-            .child(
-                div()
-                    .absolute()
-                    .top_2()
-                    .right_2()
-                    .child(self.settings_button(cx)),
-            )
+            .when(!TABS_IN_TITLEBAR, |d| {
+                d.child(
+                    div()
+                        .absolute()
+                        .top_2()
+                        .right_2()
+                        .child(self.settings_button(cx)),
+                )
+            })
             .items_center()
             .justify_center()
             .gap_3()
@@ -2433,8 +2651,14 @@ impl MainView {
             .when(self.page == Page::Recent, |d| {
                 d.child(self.render_file_list(false, cx))
             })
-            .when(self.page == Page::Folder, |d| {
-                d.child(self.render_file_list(true, cx))
+            .when(matches!(self.page, Page::Folder | Page::Favorites), |d| {
+                d.child(self.render_locations_browser(width, cx))
+            })
+            .when(self.page == Page::Passwords, |d| {
+                d.child(self.render_tools_page(cx))
+            })
+            .when(self.page == Page::History, |d| {
+                d.child(self.render_history_page(cx))
             })
             .when(self.page == Page::Archive, |d| {
                 d.child(
@@ -2809,7 +3033,7 @@ impl MainView {
             .child(
                 Button::new("recent-extract-here")
                     .ghost()
-                    .icon(IconName::ArrowDown)
+                    .icon(gpui_kit::assets::IconName::ArrowDownToLine)
                     .label("解压到当前文件夹")
                     .on_click(cx.listener(|this, _, _, cx| this.extract_recent(false, cx))),
             )
@@ -2865,12 +3089,13 @@ impl MainView {
         let p = palette(cx);
         let bar = h_flex()
             .id("toolbar")
+            .flex_1()
+            .min_w_0()
+            .overflow_x_scroll()
             .h(px(46.))
             .px_3()
             .gap_1()
             .items_center()
-            .flex_none()
-            .border_b_1()
             .border_color(p.line);
         let divider = || div().w(px(1.)).h(px(16.)).mx_1p5().bg(p.line);
         let Some(item) = self.files.selected_item() else {
@@ -2910,7 +3135,7 @@ impl MainView {
             d.child(
                 Button::new("folder-extract-here")
                     .ghost()
-                    .icon(IconName::ArrowDown)
+                    .icon(gpui_kit::assets::IconName::ArrowDownToLine)
                     .label("解压到当前文件夹")
                     .on_click(cx.listener(|this, _, _, cx| this.extract_recent(false, cx))),
             )
@@ -3052,6 +3277,12 @@ impl MainView {
 
     fn render_sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let p = palette(cx);
+        let has_archive = self.current().is_some();
+        let primary_label = self.tool_text(if has_archive {
+            "current_archive"
+        } else {
+            "home"
+        });
         let heading = |text: &'static str| {
             div()
                 .px_2()
@@ -3068,7 +3299,6 @@ impl MainView {
             let (fg, icon_fg) = match state {
                 Nav::Current => (p.accent, p.accent),
                 Nav::Live => (p.fg, p.fg2),
-                Nav::Soon => (p.fg3, p.fg3),
             };
             h_flex()
                 .gap_2p5()
@@ -3088,9 +3318,6 @@ impl MainView {
                             .child(n),
                     )
                 })
-                .when(state == Nav::Soon, |d| {
-                    d.child(div().text_size(px(11.)).child("即将推出"))
-                })
         };
         v_flex()
             .id("sidebar")
@@ -3104,8 +3331,12 @@ impl MainView {
             .child(heading("位置"))
             .child(
                 nav(
-                    Icon::new(IconName::Inbox),
-                    "当前压缩包",
+                    if has_archive {
+                        Icon::new(IconName::Inbox)
+                    } else {
+                        Icon::new(gpui_kit::assets::IconName::House)
+                    },
+                    primary_label,
                     None,
                     if self.page == Page::Archive {
                         Nav::Current
@@ -3114,8 +3345,10 @@ impl MainView {
                     },
                 )
                 .id("nav-current")
+                .aria_label(primary_label)
                 .cursor_pointer()
-                .on_click(cx.listener(|this, _, _, cx| this.show_page(Page::Archive, cx))),
+                .on_click(cx.listener(|this, _, _, cx| this.show_page(Page::Archive, cx)))
+                .test_support(),
             )
             // A page of its own on the right, not a list squeezed into the menu.
             .child(
@@ -3129,27 +3362,77 @@ impl MainView {
                 .cursor_pointer()
                 .on_click(cx.listener(|this, _, _, cx| this.show_page(Page::Recent, cx))),
             )
-            .child(nav(Icon::new(IconName::Star), "常用位置", None, Nav::Soon))
+            .child(
+                nav(
+                    Icon::new(IconName::Star),
+                    self.tool_text("favorites"),
+                    None,
+                    if self.page == Page::Favorites {
+                        Nav::Current
+                    } else {
+                        Nav::Live
+                    },
+                )
+                .id("nav-favorites")
+                .cursor_pointer()
+                .on_click(cx.listener(|this, _, _, cx| this.show_page(Page::Favorites, cx))),
+            )
             .child(heading("快速操作"))
-            // These three are not built yet; they stay in the layout, dimmed and labelled.
-            .child(nav(
-                Icon::new(gpui_kit::assets::IconName::ArrowLeftRight),
-                "转换格式",
-                None,
-                Nav::Soon,
-            ))
-            .child(nav(
-                Icon::new(gpui_kit::assets::IconName::Wrench),
-                "修复压缩包",
-                None,
-                Nav::Soon,
-            ))
-            .child(nav(
-                Icon::new(gpui_kit::assets::IconName::KeyRound),
-                "密码本",
-                None,
-                Nav::Soon,
-            ))
+            .child(
+                nav(
+                    Icon::new(gpui_kit::assets::IconName::ArrowLeftRight),
+                    self.tool_text("convert"),
+                    None,
+                    Nav::Live,
+                )
+                .id("nav-convert")
+                .cursor_pointer()
+                .on_click(
+                    cx.listener(|this, _, window, cx| this.open_transform(false, window, cx)),
+                ),
+            )
+            .child(
+                nav(
+                    Icon::new(gpui_kit::assets::IconName::Wrench),
+                    self.tool_text("repair"),
+                    None,
+                    Nav::Live,
+                )
+                .id("nav-repair")
+                .cursor_pointer()
+                .on_click(cx.listener(|this, _, window, cx| this.open_transform(true, window, cx))),
+            )
+            .child(
+                nav(
+                    Icon::new(gpui_kit::assets::IconName::KeyRound),
+                    self.tool_text("passwords"),
+                    None,
+                    if self.page == Page::Passwords {
+                        Nav::Current
+                    } else {
+                        Nav::Live
+                    },
+                )
+                .id("nav-passwords")
+                .cursor_pointer()
+                .on_click(cx.listener(|this, _, _, cx| this.show_page(Page::Passwords, cx))),
+            )
+            .child(
+                nav(
+                    Icon::new(gpui_kit::assets::IconName::ListChecks),
+                    self.tool_text("history"),
+                    None,
+                    if self.page == Page::History {
+                        Nav::Current
+                    } else {
+                        Nav::Live
+                    },
+                )
+                .child(self.history_badges_view(cx))
+                .id("nav-history")
+                .cursor_pointer()
+                .on_click(cx.listener(|this, _, _, cx| this.show_page(Page::History, cx))),
+            )
     }
 
     fn render_breadcrumbs(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -3325,7 +3608,7 @@ impl MainView {
                             .primary()
                             .w_full()
                             .h(px(36.))
-                            .icon(IconName::ArrowDown)
+                            .icon(gpui_kit::assets::IconName::ArrowDownToLine)
                             .label("解压此项")
                             .on_click(
                                 cx.listener(|this, _, window, cx| this.extract(true, window, cx)),
@@ -3387,7 +3670,7 @@ impl MainView {
                         .primary()
                         .w_full()
                         .h(px(36.))
-                        .icon(IconName::ArrowDown)
+                        .icon(gpui_kit::assets::IconName::ArrowDownToLine)
                         .label("解压全部")
                         .on_click(
                             cx.listener(|this, _, window, cx| this.extract(false, window, cx)),
@@ -3406,7 +3689,6 @@ impl MainView {
 
     fn render_tasks(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let p = palette(cx);
-        let any_finished = self.task_view.iter().any(|t| t.state.is_finished());
         v_flex()
             .id("tasks")
             .flex_none()
@@ -3416,24 +3698,12 @@ impl MainView {
             .border_t_1()
             .border_color(p.line)
             .bg(p.panel)
-            .child(
-                h_flex()
-                    .justify_between()
-                    .child(div().text_color(p.fg3).text_size(px(11.)).child("任务"))
-                    .when(any_finished, |d| {
-                        d.child(
-                            Button::new("clear-tasks")
-                                .ghost()
-                                .xsmall()
-                                .label("清除已完成")
-                                .on_click(cx.listener(|this, _, _, cx| this.clear_finished(cx))),
-                        )
-                    }),
-            )
+            .child(div().text_color(p.fg3).text_size(px(11.)).child("任务"))
             .children(
                 self.task_view
                     .iter()
                     .rev()
+                    .filter(|t| crate::history::is_live(t))
                     .take(4)
                     .map(|t| self.render_task(t, cx)),
             )
@@ -3453,11 +3723,16 @@ impl MainView {
             TaskState::Queued => "等待中".to_string(),
             TaskState::Paused => "已暂停".to_string(),
             TaskState::Running => {
-                let mut s = format!(
-                    "{} / {}",
-                    format_size(t.progress.bytes_done),
-                    format_size(t.progress.bytes_total)
-                );
+                let mut s = if t.progress.bytes_total == 0 {
+                    self.tool_text("processed")
+                        .replace("{bytes}", &format_size(t.progress.bytes_done))
+                } else {
+                    format!(
+                        "{} / {}",
+                        format_size(t.progress.bytes_done),
+                        format_size(t.progress.bytes_total)
+                    )
+                };
                 if t.speed_bps > 0 {
                     s.push_str(&format!(" · {}", format_speed(t.speed_bps)));
                 }
@@ -3468,10 +3743,10 @@ impl MainView {
             }
             TaskState::Done => "完成".to_string(),
             TaskState::Cancelled => "已取消".to_string(),
-            TaskState::Failed => t
-                .error
-                .as_ref()
-                .map_or_else(|| "失败".to_string(), |e| e.message.clone()),
+            TaskState::Failed => t.error.as_ref().map_or_else(
+                || "失败".to_string(),
+                |e| crate::text::task_error(&self.settings.language, e),
+            ),
         };
         let needs_password = t
             .error
@@ -3504,6 +3779,21 @@ impl MainView {
                                 })),
                         )
                     })
+                    .when(
+                        t.summary.as_ref().is_some_and(|s| s.recovery.is_some()),
+                        |d| {
+                            d.child(
+                                Button::new(("recovery-report", id as usize))
+                                    .outline()
+                                    .xsmall()
+                                    .label(self.tool_text("report_button"))
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        this.overlay = Some(Overlay::RecoveryReport(id));
+                                        cx.notify();
+                                    })),
+                            )
+                        },
+                    )
                     .when(!t.state.is_finished(), |d| {
                         d.child(
                             Button::new(("task-pause", id as usize))
@@ -3548,17 +3838,30 @@ impl MainView {
 
     fn render_status(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let p = palette(cx);
-        let left = match (&self.notice, &self.loading, self.current()) {
-            (Some(Notice::Error(m)), _, _) => div().text_color(p.danger).child(m.clone()),
-            (Some(Notice::Info(m)), _, _) => div().text_color(p.accent).child(m.clone()),
-            (None, Some(path), _) => div().text_color(p.fg2).child(format!(
+        let left = match (&self.loading, self.current()) {
+            (Some(path), _) => div().text_color(p.fg2).child(format!(
                 "正在打开 {}…",
                 path.file_name()
                     .map(|n| n.to_string_lossy().into_owned())
                     .unwrap_or_default()
             )),
             // The list of recent archives has its own description, not the open archive's.
-            (None, None, Some(_)) if self.page == Page::Recent => {
+            (None, _) if matches!(self.page, Page::Favorites | Page::Passwords) => {
+                let n = if self.page == Page::Favorites {
+                    self.locations.list.items.len()
+                } else {
+                    self.tools.labels.len()
+                };
+                div().text_color(p.fg2).child(format!(
+                    "{} · {n}",
+                    self.tool_text(if self.page == Page::Favorites {
+                        "favorites"
+                    } else {
+                        "passwords"
+                    })
+                ))
+            }
+            (None, _) if self.page == Page::Recent => {
                 let total = self.recent.items.len();
                 let missing = self.recent.items.iter().filter(|i| !i.exists).count();
                 div().text_color(p.fg2).child(if missing > 0 {
@@ -3567,7 +3870,7 @@ impl MainView {
                     format!("{total} 个最近的压缩包")
                 })
             }
-            (None, None, Some(_)) if self.page == Page::Folder => {
+            (None, _) if self.page == Page::Folder => {
                 let n = self.files.items.len();
                 let name = self
                     .folder
@@ -3576,7 +3879,7 @@ impl MainView {
                     .unwrap_or_else(|| "/".into());
                 div().text_color(p.fg2).child(format!("{name} · {n} 项"))
             }
-            (None, None, Some(a)) => {
+            (None, Some(a)) => {
                 let t = &a.tree;
                 let mono = cx.theme().mono_font_family.clone();
                 // Packed size as a share of the original: 34% means it shrank to a third.
@@ -3640,7 +3943,7 @@ impl MainView {
                         )
                     })
             }
-            (None, None, None) => div().text_color(p.fg3).child("就绪"),
+            (None, None) => div().text_color(p.fg3).child("就绪"),
         };
         h_flex()
             .id("status")
@@ -3694,6 +3997,10 @@ impl MainView {
         let p = palette(cx);
         // Every dialog is built with `dialog::Dialog`: heading, content, button strip.
         let card = match self.overlay.as_ref()? {
+            Overlay::Transform(f) => self.transform_card(f, cx),
+            Overlay::PasswordEdit(f) => self.password_edit_card(f, cx),
+            Overlay::PasswordDelete(label) => self.password_delete_card(label, cx),
+            Overlay::RecoveryReport(id) => self.recovery_card(*id, cx),
             Overlay::Password(prompt) => self.password_card(prompt, cx),
             Overlay::Compress(form) => self.compress_card(form, cx),
             Overlay::Settings => self.settings_card(cx),
@@ -3919,7 +4226,7 @@ impl MainView {
                         .gap_1()
                         .children(
                             [
-                                ("conflict-ask", "询问", OnConflict::Ask),
+                                ("conflict-rename", "保留两者", OnConflict::Rename),
                                 ("conflict-skip", "跳过", OnConflict::Skip),
                                 ("conflict-replace", "覆盖", OnConflict::Replace),
                             ]

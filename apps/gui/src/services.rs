@@ -287,6 +287,7 @@ impl MainView {
     pub(crate) fn open_with_saved_password(
         &mut self,
         path: PathBuf,
+        request_id: u64,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -297,8 +298,15 @@ impl MainView {
                 .spawn(async move { vault.get(&label) })
                 .await;
             let _ = this.update_in(cx, |this, window, cx| match saved {
-                Some(pw) => this.open_path(path, Some(pw), window, cx),
-                None => this.ask_password(PasswordTarget::Open(path), false, window, cx),
+                Some(pw) if this.open_requests.is_active(request_id) => {
+                    this.open_path(path, Some(pw), window, cx);
+                }
+                None if this.open_requests.is_active(request_id) => {
+                    this.open_requests.finish_active(request_id);
+                    this.loading = None;
+                    this.ask_password(PasswordTarget::Open(path), false, window, cx);
+                }
+                _ => {}
             });
         })
         .detach();

@@ -112,10 +112,11 @@ fn open_sync(
     path: &Path,
     password: Option<&str>,
 ) {
-    let result = load_archive(path, password);
     let (path, password) = (path.to_path_buf(), password.map(str::to_string));
+    let (request_id, _) = with_view(cx, handle, view, |v, _, _| v.begin_open_request(&path));
+    let result = load_archive(&path, password.as_deref());
     with_view(cx, handle, view, |v, window, cx| {
-        v.finish_open(path, password, result, window, cx);
+        v.finish_open(request_id, path, password, result, window, cx);
     });
 }
 
@@ -951,7 +952,21 @@ fn extracting_runs_a_task_and_reports_the_result(cx: &mut TestAppContext) {
             panic!("expected a success message, got {:?}", v.notice);
         };
         assert!(msg.contains("解压完成") && msg.contains('4'), "{msg}");
+        // A finished task leaves the bottom panel and goes to the history.
+        assert!(!v.task_view.iter().any(rustzip_gui::history::is_live));
+        assert_eq!(v.history.records.len(), 1);
+        assert_eq!(
+            v.history.records[0].outcome,
+            rz_app::history::Outcome::Success
+        );
+        assert_eq!(v.history_badges(), (0, 0, 1));
     });
+    // Looking at the history and leaving it clears the badges.
+    with_view(cx, handle, &view, |v, _, cx| {
+        v.show_page(rustzip_gui::view::Page::History, cx);
+        v.show_page(rustzip_gui::view::Page::Archive, cx);
+    });
+    cx.update(|cx| assert_eq!(view.read(cx).history_badges(), (0, 0, 0)));
     assert_eq!(
         fs::read_to_string(out.join("proj/readme.txt")).unwrap(),
         "hello rustzip"
@@ -1120,7 +1135,14 @@ fn a_file_that_is_not_an_archive_shows_an_error_and_no_tab(cx: &mut TestAppConte
     cx.update(|cx| {
         let v = view.read(cx);
         assert!(v.archives.is_empty());
-        assert!(matches!(&v.notice, Some(Notice::Error(m)) if m.contains("无法识别")));
+        assert!(matches!(&v.notice, Some(Notice::Error(m)) if m.contains("不是一个压缩包")));
+    });
+    // A folder gets the same plain explanation, not the raw OS error.
+    open_sync(cx, handle, &view, tmp.path(), None);
+    cx.update(|cx| {
+        let v = view.read(cx);
+        assert!(v.archives.is_empty());
+        assert!(matches!(&v.notice, Some(Notice::Error(m)) if m.contains("不是一个压缩包")));
     });
 }
 
@@ -1153,6 +1175,42 @@ fn several_archives_keep_their_own_folder_and_tabs_close_cleanly(cx: &mut TestAp
     with_view(cx, handle, &view, |v, _, cx| v.close_tab(0, cx));
     assert!(row_names(cx, &view).is_empty());
     with_view(cx, handle, &view, |v, _, cx| v.close_tab(5, cx)); // out of range: ignored
+}
+
+#[gpui_kit::test]
+fn out_of_order_archive_open_completions_keep_the_latest_request_active(cx: &mut TestAppContext) {
+    let dir = tempfile::tempdir().unwrap();
+    let a = make_archive(dir.path(), "slow-a.zip", None);
+    let b = make_archive(dir.path(), "fast-b.zip", None);
+    let (handle, view) = open_window(cx, None);
+
+    let (request_a, start_a) = with_view(cx, handle, &view, |v, _, _| v.begin_open_request(&a));
+    let (request_b, start_b) = with_view(cx, handle, &view, |v, _, _| v.begin_open_request(&b));
+    assert!(start_a && start_b);
+
+    let result_b = load_archive(&b, None);
+    with_view(cx, handle, &view, |v, window, cx| {
+        v.finish_open(request_b, b.clone(), None, result_b, window, cx);
+    });
+    let result_a = load_archive(&a, None);
+    with_view(cx, handle, &view, |v, window, cx| {
+        v.finish_open(request_a, a.clone(), None, result_a, window, cx);
+    });
+
+    cx.update(|cx| {
+        let v = view.read(cx);
+        assert_eq!(v.archives.len(), 2);
+        assert_eq!(v.current().unwrap().path, b);
+        assert_eq!(v.loading, None);
+    });
+
+    let (same_request, should_start) =
+        with_view(cx, handle, &view, |v, _, _| v.begin_open_request(&a));
+    let (same_request_again, should_start_again) =
+        with_view(cx, handle, &view, |v, _, _| v.begin_open_request(&a));
+    assert_eq!(same_request, same_request_again);
+    assert!(should_start);
+    assert!(!should_start_again);
 }
 
 #[gpui_kit::test]
@@ -1195,7 +1253,7 @@ fn the_compress_form_builds_the_right_job(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
-fn the_compress_form_refuses_bad_names_and_existing_files(cx: &mut TestAppContext) {
+fn the_compress_form_refuses_bad_names_and_numbers_taken_ones(cx: &mut TestAppContext) {
     let tmp = tempfile::tempdir().unwrap();
     let src = tmp.path().join("data");
     fs::create_dir_all(&src).unwrap();
@@ -1205,22 +1263,6 @@ fn the_compress_form_refuses_bad_names_and_existing_files(cx: &mut TestAppContex
     with_view(cx, handle, &view, |v, window, cx| {
         v.open_compress(vec![src.clone()], window, cx);
     });
-
-    // "data.zip" exists next to the source.
-    with_view(cx, handle, &view, |v, _, cx| v.submit_compress(cx));
-    cx.update(|cx| {
-        let v = view.read(cx);
-        assert!(matches!(&v.notice, Some(Notice::Error(m)) if m.contains("已存在")));
-        assert!(
-            matches!(v.overlay, Some(Overlay::Compress(_))),
-            "form stays open"
-        );
-        assert!(v.tasks.snapshot().is_empty());
-    });
-    assert_eq!(
-        fs::read_to_string(tmp.path().join("data.zip")).unwrap(),
-        "already here"
-    );
 
     for bad in ["", "a/b", "..", "x:y", ".hidden"] {
         let name = cx.update(|cx| match &view.read(cx).overlay {
@@ -1238,6 +1280,23 @@ fn the_compress_form_refuses_bad_names_and_existing_files(cx: &mut TestAppContex
             assert!(v.tasks.snapshot().is_empty(), "{bad:?}");
         });
     }
+
+    // "data.zip" exists next to the source: the new archive is numbered, nothing is lost.
+    cx.update_window(handle.into(), |_, window, cx| {
+        let name = match &view.read(cx).overlay {
+            Some(Overlay::Compress(f)) => f.name.clone(),
+            _ => panic!("no form"),
+        };
+        name.update(cx, |s, cx| s.set_value("data", window, cx));
+    })
+    .unwrap();
+    with_view(cx, handle, &view, |v, _, cx| v.submit_compress(cx));
+    wait_for_tasks(cx, handle, &view);
+    assert_eq!(
+        fs::read_to_string(tmp.path().join("data.zip")).unwrap(),
+        "already here"
+    );
+    assert!(load_archive(&tmp.path().join("data (1).zip"), None).is_ok());
 }
 
 #[gpui_kit::test]
@@ -1297,11 +1356,642 @@ fn opened_archives_are_remembered_across_launches(cx: &mut TestAppContext) {
     let settings = tmp.path().join("cfg/settings.json");
     let (handle, view) = open_window(cx, Some(settings.clone()));
     open_sync(cx, handle, &view, &archive, None);
+    cx.run_until_parked();
     assert_eq!(Settings::load(&settings).recent, vec![archive.clone()]);
 
     // A second window starts with the saved list.
     let (_handle2, view2) = open_window(cx, Some(settings));
     cx.update(|cx| assert_eq!(view2.read(cx).settings.recent, vec![archive]));
+}
+
+#[gpui_kit::test]
+fn favorites_work_without_an_open_archive_and_survive_restart(cx: &mut TestAppContext) {
+    use rustzip_gui::view::Page;
+    let tmp = tempfile::tempdir().unwrap();
+    let folder = fs::canonicalize(tmp.path()).unwrap();
+    let path = tmp.path().join("cfg/settings.json");
+    let (handle, view) = open_window(cx, Some(path.clone()));
+    with_view(cx, handle, &view, |v, _, cx| {
+        v.show_page(Page::Favorites, cx);
+        v.pick_favorite(cx);
+    });
+    cx.simulate_path_prompt_response(|_| Some(vec![folder.clone(), folder.clone()]));
+    cx.run_until_parked();
+    assert_eq!(Settings::load(&path).favorites, vec![folder.clone()]);
+    with_view(cx, handle, &view, |v, _, cx| {
+        v.open_favorite(folder.clone(), cx)
+    });
+    cx.run_until_parked();
+    cx.update(|cx| {
+        assert_eq!(view.read(cx).page, Page::Folder);
+        assert_eq!(view.read(cx).folder, Some(folder.clone()));
+    });
+    let (_, restarted) = open_window(cx, Some(path.clone()));
+    cx.update(|cx| assert_eq!(restarted.read(cx).settings.favorites, vec![folder.clone()]));
+    with_view(cx, handle, &view, |v, _, cx| v.remove_favorite(&folder, cx));
+    cx.run_until_parked();
+    assert!(Settings::load(&path).favorites.is_empty());
+    assert!(folder.is_dir());
+}
+
+#[gpui_kit::test]
+fn opened_archive_parents_appear_automatically_and_can_be_hidden_until_reopened(
+    cx: &mut TestAppContext,
+) {
+    use rustzip_gui::view::Page;
+    let tmp = tempfile::tempdir().unwrap();
+    let archive = make_archive(tmp.path(), "common.zip", None);
+    let settings_path = tmp.path().join("settings.json");
+    let (handle, view) = open_window(cx, Some(settings_path.clone()));
+    open_sync(cx, handle, &view, &archive, None);
+    with_view(cx, handle, &view, |v, _, cx| {
+        v.show_page(Page::Favorites, cx)
+    });
+    cx.run_until_parked();
+    cx.update(|cx| {
+        assert_eq!(
+            view.read(cx)
+                .locations
+                .list
+                .items
+                .iter()
+                .filter(|i| i.path == tmp.path())
+                .count(),
+            1
+        )
+    });
+    draw(cx, handle);
+    let index = cx.update(|cx| {
+        view.read(cx)
+            .locations
+            .list
+            .items
+            .iter()
+            .position(|i| i.path == tmp.path())
+            .unwrap()
+    });
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.right_click(("directory-row", index), cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    draw(cx, handle);
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.within("popup-menu").click(4usize, cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update(|cx| {
+        assert!(
+            !view
+                .read(cx)
+                .locations
+                .list
+                .items
+                .iter()
+                .any(|i| i.path == tmp.path())
+        )
+    });
+    assert!(archive.exists());
+    let restored = Settings::load(&settings_path);
+    assert!(
+        !rustzip_gui::locations::scan(&restored)
+            .iter()
+            .any(|i| i.path == tmp.path())
+    );
+    with_view(cx, handle, &view, |v, window, cx| {
+        v.open_path(archive.clone(), None, window, cx)
+    });
+    with_view(cx, handle, &view, |v, _, cx| {
+        v.show_page(Page::Favorites, cx)
+    });
+    cx.run_until_parked();
+    cx.update(|cx| {
+        assert!(
+            view.read(cx)
+                .locations
+                .list
+                .items
+                .iter()
+                .any(|i| i.path == tmp.path())
+        )
+    });
+}
+
+#[gpui_kit::test]
+fn location_list_and_icons_share_selection_navigation_and_persist_the_view(
+    cx: &mut TestAppContext,
+) {
+    use rustzip_gui::view::Page;
+    use rz_app::settings::FolderView;
+    let tmp = tempfile::tempdir().unwrap();
+    let folder = tmp.path().join("project");
+    fs::create_dir_all(folder.join("subfolder")).unwrap();
+    let archive = make_archive(&folder, "nested.zip", None);
+    let path = tmp.path().join("settings.json");
+    Settings {
+        favorites: vec![folder.clone()],
+        ..Settings::default()
+    }
+    .save(&path)
+    .unwrap();
+    let (handle, view) = open_window(cx, Some(path.clone()));
+    with_view(cx, handle, &view, |v, _, cx| {
+        v.show_page(Page::Favorites, cx)
+    });
+    cx.run_until_parked();
+    draw(cx, handle);
+    let index = cx.update(|cx| {
+        view.read(cx)
+            .locations
+            .list
+            .items
+            .iter()
+            .position(|i| i.path == folder)
+            .unwrap()
+    });
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.click(("directory-row", index), cx);
+        window.click("view-icons", cx);
+        assert!(window.find(("directory-icon", index)).visible());
+        assert!(window.find("view-icons").bounds().origin.x > gpui_kit::px(900.));
+    })
+    .unwrap();
+    cx.update(|cx| {
+        assert_eq!(view.read(cx).locations.list.selected, Some(folder.clone()));
+        assert_eq!(view.read(cx).page, Page::Favorites);
+    });
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.double_click(("directory-icon", index), cx)
+    })
+    .unwrap();
+    cx.run_until_parked();
+    draw(cx, handle);
+    cx.update(|cx| {
+        assert_eq!(view.read(cx).page, Page::Folder);
+        assert_eq!(view.read(cx).folder, Some(folder.clone()));
+        assert_eq!(view.read(cx).settings.folder_view, FolderView::Icons);
+    });
+    cx.update_window(handle.into(), |_, window, _| {
+        assert!(window.find("view-icons").bounds().origin.x > gpui_kit::px(900.))
+    })
+    .unwrap();
+    let sub = cx.update(|cx| {
+        view.read(cx)
+            .files
+            .items
+            .iter()
+            .position(|i| i.name == "subfolder")
+            .unwrap()
+    });
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.double_click(("directory-icon", sub), cx)
+    })
+    .unwrap();
+    cx.run_until_parked();
+    draw(cx, handle);
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.double_click("folder-up", cx)
+    })
+    .unwrap();
+    cx.run_until_parked();
+    draw(cx, handle);
+    cx.update(|cx| assert_eq!(view.read(cx).folder, Some(folder.clone())));
+    let file = cx.update(|cx| {
+        view.read(cx)
+            .files
+            .items
+            .iter()
+            .position(|i| i.path == archive)
+            .unwrap()
+    });
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.double_click(("directory-icon", file), cx)
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update(|cx| assert_eq!(view.read(cx).page, Page::Archive));
+    cx.run_until_parked();
+    assert_eq!(Settings::load(&path).folder_view, FolderView::Icons);
+    let (_, restarted) = open_window(cx, Some(path));
+    cx.update(|cx| assert_eq!(restarted.read(cx).settings.folder_view, FolderView::Icons));
+}
+
+#[gpui_kit::test]
+fn directory_icons_are_virtualized_and_respond_to_narrow_windows(cx: &mut TestAppContext) {
+    use rustzip_gui::view::Page;
+    use rz_app::settings::FolderView;
+    let tmp = tempfile::tempdir().unwrap();
+    let (handle, view) = open_window(cx, None);
+    with_view(cx, handle, &view, |v, _, cx| {
+        v.show_page(Page::Favorites, cx)
+    });
+    cx.run_until_parked();
+    with_view(cx, handle, &view, |v, _, cx| {
+        v.locations.list.items = (0..10000)
+            .map(|ix| rustzip_gui::recent::RecentItem {
+                path: tmp.path().join(format!("folder-{ix}")),
+                name: format!("folder-{ix}"),
+                folder: String::new(),
+                created: None,
+                modified: None,
+                size: None,
+                exists: true,
+                is_dir: true,
+            })
+            .collect();
+        v.set_folder_view(FolderView::Icons, cx);
+    });
+    cx.update_window(handle.into(), |_, window, _| {
+        assert!(window.find(("directory-icon", 0usize)).visible());
+        assert!(window.try_find(("directory-icon", 9999usize)).is_none());
+        assert!(
+            window.find(("directory-icon", 1usize)).bounds().origin.x
+                > window.find(("directory-icon", 0usize)).bounds().origin.x
+        );
+    })
+    .unwrap();
+    cx.simulate_window_resize(
+        handle.into(),
+        gpui_kit::size(gpui_kit::px(640.), gpui_kit::px(420.)),
+    );
+    draw(cx, handle);
+    cx.update_window(handle.into(), |_, window, _| {
+        let first = window.find(("directory-icon", 0usize)).bounds();
+        let next_row = window.find(("directory-icon", 4usize)).bounds();
+        assert!(next_row.origin.y > first.origin.y);
+        assert!(window.find("view-icons").bounds().right() <= gpui_kit::px(640.));
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn directory_sorting_and_keyboard_opening_work_in_both_views(cx: &mut TestAppContext) {
+    use rustzip_gui::view::Page;
+    use rz_app::settings::FolderView;
+    let tmp = tempfile::tempdir().unwrap();
+    for name in ["b", "a"] {
+        fs::create_dir(tmp.path().join(name)).unwrap();
+    }
+    let (handle, view) = open_window(cx, None);
+    with_view(cx, handle, &view, |v, _, cx| {
+        v.show_folder(tmp.path().to_path_buf(), cx)
+    });
+    cx.run_until_parked();
+    draw(cx, handle);
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.click(("directory-row", 0usize), cx);
+        window.press("down", cx);
+    })
+    .unwrap();
+    cx.update(|cx| assert_eq!(view.read(cx).files.selected, Some(tmp.path().join("b"))));
+    cx.update_window(handle.into(), |_, window, cx| window.press("enter", cx))
+        .unwrap();
+    cx.run_until_parked();
+    cx.update(|cx| assert_eq!(view.read(cx).folder, Some(tmp.path().join("b"))));
+    with_view(cx, handle, &view, |v, _, cx| {
+        v.settings.favorites = vec![tmp.path().join("b"), tmp.path().join("a")];
+        v.show_page(Page::Favorites, cx);
+    });
+    cx.run_until_parked();
+    with_view(cx, handle, &view, |v, _, cx| {
+        v.sort_directory(rustzip_gui::recent::RecentSort::Name, cx)
+    });
+    cx.update(|cx| assert!(view.read(cx).locations.list.ascending));
+    with_view(cx, handle, &view, |v, _, cx| {
+        v.set_folder_view(FolderView::Icons, cx)
+    });
+    let index = cx.update(|cx| {
+        view.read(cx)
+            .locations
+            .list
+            .items
+            .iter()
+            .position(|i| i.path == tmp.path().join("a"))
+            .unwrap()
+    });
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.click(("directory-icon", index), cx);
+        window.press("enter", cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update(|cx| assert_eq!(view.read(cx).folder, Some(tmp.path().join("a"))));
+}
+
+#[gpui_kit::test]
+fn startup_navigation_keeps_actions_below_the_window_controls(cx: &mut TestAppContext) {
+    use rustzip_gui::view::{Page, TABS_IN_TITLEBAR};
+    let (handle, view) = open_window(cx, None);
+    draw(cx, handle);
+    cx.update_window(handle.into(), |_, window, _| {
+        assert_eq!(window.find("nav-current").label(), Some("启动页"));
+        if TABS_IN_TITLEBAR {
+            assert!(window.find("nav-current").bounds().origin.y >= gpui_kit::px(38.));
+        }
+    })
+    .unwrap();
+    for (page, action) in [
+        (Page::Recent, "recent-open-other"),
+        (Page::Favorites, "tool-add"),
+        (Page::Passwords, "tool-add"),
+    ] {
+        with_view(cx, handle, &view, |v, _, cx| v.show_page(page, cx));
+        cx.update_window(handle.into(), |_, window, _| {
+            let bounds = window.find(action).bounds();
+            if TABS_IN_TITLEBAR {
+                assert!(
+                    bounds.origin.y >= gpui_kit::px(38.),
+                    "{page:?} action overlaps native controls: {bounds:?}"
+                );
+            }
+        })
+        .unwrap();
+    }
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.click("nav-current", cx);
+        assert!(window.find("empty-open").visible());
+    })
+    .unwrap();
+    cx.update(|cx| assert_eq!(view.read(cx).page, Page::Archive));
+    let tmp = tempfile::tempdir().unwrap();
+    with_view(cx, handle, &view, |v, _, cx| {
+        v.show_folder(tmp.path().to_path_buf(), cx)
+    });
+    cx.update_window(handle.into(), |_, window, _| {
+        if TABS_IN_TITLEBAR {
+            assert!(window.find("folder-open-other").bounds().origin.y >= gpui_kit::px(38.));
+        }
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn closing_the_last_archive_keeps_sidebar_navigation_and_titlebar_space(cx: &mut TestAppContext) {
+    use rustzip_gui::view::{Page, TABS_IN_TITLEBAR};
+    let tmp = tempfile::tempdir().unwrap();
+    let archive = make_archive(tmp.path(), "navigation.zip", None);
+    let (handle, view) = open_window(cx, None);
+    let pages = [
+        (Page::Recent, "recent-open-other"),
+        (Page::Favorites, "tool-add"),
+        (Page::Passwords, "tool-add"),
+    ];
+    let mut empty_positions = Vec::new();
+    for &(page, action) in &pages {
+        with_view(cx, handle, &view, |v, _, cx| v.show_page(page, cx));
+        empty_positions.push(
+            cx.update_window(handle.into(), |_, window, _| {
+                window.find(action).bounds().origin.y
+            })
+            .unwrap(),
+        );
+    }
+    open_sync(cx, handle, &view, &archive, None);
+    cx.update_window(handle.into(), |_, window, _| {
+        assert_eq!(window.find("nav-current").label(), Some("当前压缩包"))
+    })
+    .unwrap();
+    for (ix, &(page, action)) in pages.iter().enumerate() {
+        with_view(cx, handle, &view, |v, _, cx| v.show_page(page, cx));
+        cx.update_window(handle.into(), |_, window, _| {
+            let actual = window.find(action).bounds().origin.y;
+            let expected =
+                empty_positions[ix] + gpui_kit::px(if TABS_IN_TITLEBAR { 0. } else { 38. });
+            assert_eq!(
+                actual, expected,
+                "{page:?} toolbar moved when an archive was opened"
+            );
+        })
+        .unwrap();
+    }
+    with_view(cx, handle, &view, |v, _, cx| v.close_tab(0, cx));
+    cx.update_window(handle.into(), |_, window, _| {
+        assert_eq!(window.find("nav-current").label(), Some("启动页"))
+    })
+    .unwrap();
+    with_view(cx, handle, &view, |v, _, cx| v.show_page(Page::Recent, cx));
+    cx.update_window(handle.into(), |_, window, _| {
+        assert_eq!(
+            window.find("recent-open-other").bounds().origin.y,
+            empty_positions[0]
+        )
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn password_book_creates_edits_and_deletes_with_confirmation(cx: &mut TestAppContext) {
+    use rustzip_gui::view::Page;
+    let (handle, view) = open_window(cx, None);
+    with_view(cx, handle, &view, |v, window, cx| {
+        v.show_page(Page::Passwords, cx);
+        v.edit_password(None, window, cx);
+        if let Some(Overlay::PasswordEdit(f)) = &v.overlay {
+            f.label
+                .update(cx, |s, cx| s.set_value("work.zip", window, cx));
+            f.secret
+                .update(cx, |s, cx| s.set_value("first-secret", window, cx));
+        }
+        v.save_password(cx);
+    });
+    cx.run_until_parked();
+    cx.update(|cx| {
+        let v = view.read(cx);
+        assert_eq!(v.tools.labels, ["work.zip"]);
+        assert!(v.overlay.is_none());
+        assert_eq!(v.vault.get("work.zip").as_deref(), Some("first-secret"));
+    });
+    with_view(cx, handle, &view, |v, window, cx| {
+        v.edit_password(Some("work.zip".into()), window, cx)
+    });
+    cx.run_until_parked();
+    with_view(cx, handle, &view, |v, window, cx| {
+        let Some(Overlay::PasswordEdit(f)) = &v.overlay else {
+            panic!("missing password editor");
+        };
+        assert_eq!(f.secret.read(cx).value().as_str(), "first-secret");
+        f.secret
+            .update(cx, |s, cx| s.set_value("changed-secret", window, cx));
+        v.save_password(cx);
+    });
+    cx.run_until_parked();
+    cx.update(|cx| {
+        assert_eq!(
+            view.read(cx).vault.get("work.zip").as_deref(),
+            Some("changed-secret")
+        )
+    });
+    with_view(cx, handle, &view, |v, _, cx| {
+        v.overlay = Some(Overlay::PasswordDelete("work.zip".into()));
+        v.close_overlay(cx);
+    });
+    cx.update(|cx| assert!(view.read(cx).vault.get("work.zip").is_some()));
+    with_view(cx, handle, &view, |v, _, cx| {
+        v.overlay = Some(Overlay::PasswordDelete("work.zip".into()));
+        v.delete_saved_password(cx);
+    });
+    cx.run_until_parked();
+    cx.update(|cx| {
+        assert!(view.read(cx).tools.labels.is_empty());
+        assert!(view.read(cx).vault.get("work.zip").is_none());
+    });
+}
+
+struct LockedStore;
+impl rz_app::passwords::SecretStore for LockedStore {
+    fn get(&self, _: &str) -> Option<String> {
+        None
+    }
+    fn labels(&self) -> Vec<String> {
+        Vec::new()
+    }
+    fn set(&self, _: &str, _: &str) -> rz_core::Result<()> {
+        Err(std::io::Error::other("locked").into())
+    }
+    fn delete(&self, _: &str) -> rz_core::Result<()> {
+        Err(std::io::Error::other("locked").into())
+    }
+    fn try_labels(&self) -> rz_core::Result<Vec<String>> {
+        Err(std::io::Error::other("locked").into())
+    }
+}
+
+#[gpui_kit::test]
+fn locked_keychain_is_an_error_and_failed_save_keeps_the_form(cx: &mut TestAppContext) {
+    use rustzip_gui::view::Page;
+    let (handle, view) = open_window(cx, None);
+    with_view(cx, handle, &view, |v, window, cx| {
+        v.vault = std::sync::Arc::new(LockedStore);
+        v.show_page(Page::Passwords, cx);
+        v.edit_password(None, window, cx);
+        if let Some(Overlay::PasswordEdit(f)) = &v.overlay {
+            f.label
+                .update(cx, |s, cx| s.set_value("work.zip", window, cx));
+            f.secret
+                .update(cx, |s, cx| s.set_value("secret", window, cx));
+        }
+        v.save_password(cx);
+    });
+    cx.run_until_parked();
+    cx.update(|cx| {
+        let v = view.read(cx);
+        assert!(v.tools.error.is_some());
+        assert!(!v.tools.busy);
+        assert!(matches!(&v.overlay, Some(Overlay::PasswordEdit(f)) if f.error.is_some()));
+    });
+}
+
+#[gpui_kit::test]
+fn conversion_form_runs_a_real_job_and_cancelled_save_keeps_the_form(cx: &mut TestAppContext) {
+    let tmp = tempfile::tempdir().unwrap();
+    let source = make_archive(tmp.path(), "source.zip", None);
+    let output = tmp.path().join("converted.7z");
+    let (handle, view) = open_window(cx, None);
+    with_view(cx, handle, &view, |v, window, cx| {
+        v.open_transform(false, window, cx);
+        if let Some(Overlay::Transform(f)) = &mut v.overlay {
+            f.source = Some(source.clone());
+            f.format = "7z";
+        }
+        v.submit_transform(cx);
+    });
+    cx.simulate_new_path_selection(|_| None);
+    cx.run_until_parked();
+    cx.update(|cx| assert!(matches!(view.read(cx).overlay, Some(Overlay::Transform(_)))));
+    with_view(cx, handle, &view, |v, _, cx| v.submit_transform(cx));
+    cx.simulate_new_path_selection(|_| Some(output.clone()));
+    cx.run_until_parked();
+    let id = cx.update(|cx| view.read(cx).tasks.snapshot()[0].id);
+    let done = cx.update(|cx| view.read(cx).tasks.wait_for(id, WAIT).unwrap());
+    assert_eq!(done.state, TaskState::Done, "{:?}", done.error);
+    assert_eq!(
+        load_archive(&output, None).unwrap().0.entries().len(),
+        load_archive(&source, None).unwrap().0.entries().len()
+    );
+}
+
+#[gpui_kit::test]
+fn repair_form_recovers_a_broken_archive_and_its_report_draws(cx: &mut TestAppContext) {
+    let tmp = tempfile::tempdir().unwrap();
+    let source = make_archive(tmp.path(), "broken.zip", None);
+    let mut bytes = fs::read(&source).unwrap();
+    let end = bytes.windows(4).position(|s| s == b"PK\x01\x02").unwrap();
+    bytes.truncate(end);
+    fs::write(&source, bytes).unwrap();
+    let output = tmp.path().join("recovered.zip");
+    let (handle, view) = open_window(cx, None);
+    with_view(cx, handle, &view, |v, window, cx| {
+        v.open_transform(true, window, cx);
+        if let Some(Overlay::Transform(f)) = &mut v.overlay {
+            f.source = Some(source.clone());
+        }
+        v.submit_transform(cx);
+    });
+    cx.simulate_new_path_selection(|_| Some(output.clone()));
+    cx.run_until_parked();
+    let id = cx.update(|cx| view.read(cx).tasks.snapshot()[0].id);
+    let done = cx.update(|cx| view.read(cx).tasks.wait_for(id, WAIT).unwrap());
+    assert_eq!(done.state, TaskState::Done, "{:?}", done.error);
+    let report = done.summary.unwrap().recovery.unwrap();
+    assert!(report.files > 0);
+    assert!(!report.issues.is_empty());
+    with_view(cx, handle, &view, |v, _, cx| {
+        v.refresh_tasks(cx);
+        v.overlay = Some(Overlay::RecoveryReport(id));
+    });
+    assert!(load_archive(&output, None).is_ok());
+}
+
+#[gpui_kit::test]
+fn apk_case_conflicts_explain_the_volume_problem_before_writing(cx: &mut TestAppContext) {
+    let tmp = tempfile::tempdir().unwrap();
+    fs::write(tmp.path().join("case-probe"), b"probe").unwrap();
+    if !tmp.path().join("CASE-PROBE").exists() {
+        return;
+    }
+    let archive = tmp.path().join("resources.apk");
+    let mut writer =
+        rz_formats::create(&archive, OutputFormat::Zip, &CreateOptions::default()).unwrap();
+    for name in ["res/9N.9.png", "res/9n.9.png"] {
+        writer
+            .add_file(
+                &rz_core::NewEntry {
+                    name: name.into(),
+                    size: 3,
+                    unix_mode: None,
+                    modified: None,
+                },
+                &mut std::io::Cursor::new(b"png"),
+            )
+            .unwrap();
+    }
+    writer.finish().unwrap();
+    let output = tmp.path().join("unpacked");
+    let (handle, view) = open_window(cx, None);
+    let id = cx.update(|cx| {
+        view.read(cx).tasks.submit(JobSpec::Extract {
+            archive,
+            dest: output.clone(),
+            opts: ExtractOptions::default(),
+            smart: false,
+            encoding: None,
+        })
+    });
+    let done = cx.update(|cx| view.read(cx).tasks.wait_for(id, WAIT).unwrap());
+    let error = done.error.unwrap();
+    assert_eq!(error.code, ErrorCode::NameConflict);
+    assert!(!output.exists());
+    with_view(cx, handle, &view, |v, _, cx| v.refresh_tasks(cx));
+    cx.update(|cx| {
+        let Some(Notice::Error(message)) = &view.read(cx).notice else {
+            panic!("expected error notice");
+        };
+        assert!(message.contains("不区分大小写"));
+        assert!(message.contains("res/9N.9.png") && message.contains("res/9n.9.png"));
+        assert!(!message.contains(tmp.path().to_string_lossy().as_ref()));
+    });
+    assert!(rustzip_gui::text::task_error("en", &error).contains("case-sensitive volume"));
 }
 
 #[gpui_kit::test]
@@ -1348,6 +2038,7 @@ fn settings_changes_are_saved_and_the_theme_follows_the_choice(cx: &mut TestAppC
         v.change_settings(|s| s.smart_extract = false, cx);
     });
     cx.update(|cx| assert!(cx.theme().is_dark()));
+    cx.run_until_parked();
     let saved = Settings::load(&path);
     assert_eq!(saved.theme, Pick::Dark);
     assert_eq!(saved.on_conflict, OnConflict::Skip);
@@ -1374,6 +2065,7 @@ fn the_accent_colour_is_saved_and_repaints_the_theme(cx: &mut TestAppContext) {
     with_view(cx, handle, &view, |v, _, cx| v.set_accent("rose", cx));
     let after = cx.update(|cx| cx.theme().primary);
     assert_ne!(before, after);
+    cx.run_until_parked();
     assert_eq!(Settings::load(&path).accent, "rose");
 
     // A hand-written colour works too, and a bad one falls back to the default.
@@ -1395,6 +2087,7 @@ fn the_privacy_notice_shows_once_and_records_the_answer(cx: &mut TestAppContext)
 
     with_view(cx, handle, &view, |v, _, cx| v.answer_privacy(false, cx));
     cx.update(|cx| assert!(view.read(cx).overlay.is_none()));
+    cx.run_until_parked();
     let saved = Settings::load(&path);
     assert!(saved.privacy_notice_seen);
     assert!(!saved.send_install_stats);
@@ -1413,6 +2106,7 @@ fn the_privacy_notice_can_be_read_again_from_the_settings_and_answered_anew(
     let path = tmp.path().join("settings.json");
     let (handle, view) = open_window(cx, Some(path.clone()));
     with_view(cx, handle, &view, |v, _, cx| v.answer_privacy(false, cx));
+    cx.run_until_parked();
     assert!(!Settings::load(&path).send_install_stats);
 
     // From the settings: the notice opens, and going back changes nothing.
@@ -1428,6 +2122,7 @@ fn the_privacy_notice_can_be_read_again_from_the_settings_and_answered_anew(
     // Answering again changes the choice and returns to the settings.
     with_view(cx, handle, &view, |v, _, cx| v.show_privacy_notice(cx));
     with_view(cx, handle, &view, |v, _, cx| v.answer_privacy(true, cx));
+    cx.run_until_parked();
     assert!(Settings::load(&path).send_install_stats);
     cx.update(|cx| assert!(matches!(view.read(cx).overlay, Some(Overlay::Settings))));
 
@@ -1505,15 +2200,11 @@ fn a_huge_archive_lists_and_scrolls_without_trouble(cx: &mut TestAppContext) {
         .collect();
     let tree = rz_app::browse::ArchiveTree::build(entries);
     let (handle, view) = open_window(cx, None);
+    let path = PathBuf::from("/big.zip");
+    let (request_id, _) = with_view(cx, handle, &view, |v, _, _| v.begin_open_request(&path));
     let started = std::time::Instant::now();
     with_view(cx, handle, &view, |v, window, cx| {
-        v.finish_open(
-            "/big.zip".into(),
-            None,
-            Ok((tree, "zip".into())),
-            window,
-            cx,
-        );
+        v.finish_open(request_id, path, None, Ok((tree, "zip".into())), window, cx);
         v.navigate("dir7", cx);
     });
     let rows = cx.update(|cx| view.read(cx).table.read(cx).delegate().rows().len());

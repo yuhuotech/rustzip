@@ -1,0 +1,97 @@
+favorites	常用位置	Favorite locations
+home	启动页	Home
+current_archive	当前压缩包	Current archive
+view_list	列表	List
+view_icons	小图标	Small icons
+add_location	添加位置…	Add location…
+remove_location	移除记录	Remove location
+locations_empty	打开压缩包后，其所在目录会自动显示在这里。	Folders of archives you open will appear here automatically.
+directory_empty	这个文件夹里没有可显示的内容。	This folder has no visible items.
+location_missing	已移走	Unavailable
+col_name	名称	Name
+col_size	大小	Size
+col_path	位置	Location
+col_modified	修改时间	Modified
+dir_desktop	桌面	Desktop
+dir_downloads	下载	Downloads
+dir_documents	文稿	Documents
+dir_pictures	图片	Pictures
+dir_music	音乐	Music
+dir_videos	视频	Videos
+tools	工具	Tools
+processed	已处理 {bytes}	Processed {bytes}
+case_conflict	目标磁盘不区分大小写，“{first}”与“{second}”会重名。已在写入前停止；请改用区分大小写的磁盘，以完整保留两个文件。	The destination treats '{first}' and '{second}' as the same name. Extraction stopped before writing. Use a case-sensitive volume to preserve both files.
+destination_exists	目标位置已有同名文件。请选择新的保存位置或空文件夹；解压时也可在设置中调整“文件已存在时”的处理方式。	The destination already contains a file with the same name. Choose a new output path or an empty folder, or change the extraction conflict setting.
+convert	转换格式	Convert archive
+repair	修复压缩包	Repair archive
+passwords	密码本	Password book
+add_folder	添加文件夹…	Add folder…
+add_password	新增密码	Add password
+open	打开	Open
+remove	移除	Remove
+edit	修改	Edit
+delete	删除	Delete
+refresh	刷新	Refresh
+empty_favorites	收藏常用文件夹，打开后可继续浏览文件。	Save folders here for quick access.
+empty_passwords	还没有保存密码。列表只显示名称，不显示明文。	No passwords saved. This list only shows labels, never secrets.
+memory_only	系统钥匙串不可用，密码仅在本次运行中保留。	System keychain unavailable. Passwords are kept for this session only.
+password_hint	标签可用压缩包文件名；启用设置中的“记住密码”后会自动使用对应密码。	Use the archive file name as its label. Enable Remember passwords in Settings to use it automatically.
+label	名称 / 压缩包文件名	Label / archive file name
+secret	密码	Password
+cancel	取消	Cancel
+save	保存	Save
+busy	正在处理…	Working…
+password_required	请填写名称和密码；名称应为文件名或短名称，不含路径，且不能是 __labels__。	Enter a short label and password. Paths and the reserved label __labels__ are not allowed.
+duplicate_label	此名称已存在，请修改已有条目或使用其他名称。	This label exists. Edit that entry or choose another name.
+vault_error	无法访问系统钥匙串，请解锁钥匙串后重试。	Cannot access the keychain. Unlock it and try again.
+confirm_delete	删除这个已保存的密码？	Delete this saved password?
+delete_hint	此操作只删除密码本条目，不修改压缩包。请确认仍记得这个密码。	This only removes the saved password. Make sure you still know it.
+source	源压缩包	Source archive
+choose_source	选择压缩包…	Choose archive…
+source_password	源密码（未加密可留空）	Source password (optional)
+output_password	新包密码（留空表示不加密）	Output password (empty means unencrypted)
+format	目标格式	Output format
+convert_hint	流式转换并另存新包。请确认目标加密设置，源包保持不变。	Stream to a new archive. Check output encryption before continuing. The source is preserved.
+repair_hint	抢救可读文件并另存；损坏内容可能无法恢复。完成后查看恢复报告。	Recover readable files into a new archive. Damaged data may be lost. Review the recovery report afterwards.
+unencrypted	新包不加密；如需保护内容，请选 ZIP / 7z 并设置新密码。	The output is unencrypted. Choose ZIP / 7z and set a password to protect it.
+choose_output	选择新包保存位置	Save the new archive
+start_convert	另存并开始转换…	Save and convert…
+start_repair	另存并开始恢复…	Save and recover…
+report	恢复报告	Recovery report
+report_counts	已恢复 {files} 项 · 已跳过 {skipped} 项	Recovered {files} entries · skipped {skipped}
+report_warnings	警告 / 未恢复原因	Warnings / recovery issues
+report_complete	未发现需要跳过的条目。恢复结果已通过完整性校验。	No entries were skipped. The recovered archive passed integrity verification.
+report_truncated	仅显示前 1000 条详情。	Only the first 1000 details are shown.
+issue_directory	ZIP 中央目录不可读，已通过本地文件头恢复；权限和链接类型等属性可能丢失，无法识别的链接会按普通文件保存。	The ZIP directory is unreadable. Local headers were used; permissions and link types may be lost, and unidentified links become regular files.
+issue_local	中央目录缺失，无法安全恢复加密、ZIP64、数据描述符或截断条目。	Cannot safely recover encrypted, ZIP64, descriptor or truncated entries without the directory.
+issue_link	当前写入格式接口无法保留符号链接，已跳过。	Symbolic links cannot currently be preserved and were skipped.
+issue_path	条目路径不安全，已跳过；请检查源压缩包。	Unsafe entry path; skipped. Check the source archive.
+issue_checksum	数据完整性校验失败，已跳过；请尝试其他源文件副本。	Integrity verification failed; skipped. Try another copy of the source.
+issue_truncated	数据已截断，无法完整恢复，已跳过。	Data is truncated and cannot be fully recovered; skipped.
+issue_solid	所属固实块已损坏，无法解码此条目。	The solid block is damaged; this entry cannot be decoded.
+issue_conflict	文件名重复或与文件夹冲突，已跳过。	Duplicate file name or folder conflict; skipped.
+open_folder	显示结果文件	Show output file
+close	关闭	Close
+report_button	查看报告	View report
+favorite_error	无法保存常用位置，请检查设置文件夹权限后重试。	Cannot save favorites. Check permissions for the settings folder.
+settings_error	无法保存设置，请检查设置文件夹权限后重试。	Cannot save settings. Check permissions for the settings folder.
+folder_error	无法打开该位置，请确认文件夹仍存在且有访问权限。	Cannot open this location. Check that the folder exists and is accessible.
+folder_busy	正在读取…	Loading…
+converted	转换完成，新包已通过完整性校验。	Conversion complete. The new archive passed integrity verification.
+recovered	恢复完成，请查看恢复报告确认是否有跳过项。	Recovery complete. Review the report for skipped entries.
+open_not_archive	你选择的文件不是一个压缩包。	The file you chose is not an archive.
+open_unsupported	暂不支持该类型文件的压缩、解压和管理。	This file type is not supported for compressing, extracting or managing yet.
+open_corrupt	这个压缩包已损坏，无法打开。	This archive is damaged and cannot be opened.
+open_missing	找不到这个文件，它可能已被移动或删除。	The file was not found. It may have been moved or deleted.
+open_denied	没有权限读取这个文件，请检查文件权限。	You do not have permission to read this file. Check its permissions.
+open_limit	这个压缩包触发了安全限制，已停止打开。	This archive hit a safety limit, so opening was stopped.
+open_failed	无法读取这个文件，请确认它没有被占用后重试。	The file could not be read. Make sure it is not in use and try again.
+history	任务记录	Task history
+history_empty	还没有任务记录。压缩、解压、测试等任务完成后会出现在这里。	No task history yet. Finished compress, extract and test tasks show up here.
+history_clear	清空记录	Clear history
+history_hint	保留最近 200 条，只记录文件名和结果。	The latest 200 are kept, with file names and results only.
+history_running	进行中	In progress
+history_failed	失败	Failed
+history_succeeded	已完成	Finished
+history_cancelled	已取消	Cancelled
+history_new	新	New

@@ -6,10 +6,16 @@
 pub mod assets;
 pub mod brand;
 pub mod dialog;
+pub mod history;
 pub mod launch;
+pub mod location_state;
+pub mod locations;
+pub mod open_requests;
 pub mod recent;
 pub mod rows;
 pub mod services;
+pub mod text;
+pub mod tools;
 pub mod view;
 
 use gpui_kit::component::Root;
@@ -28,6 +34,10 @@ actions!(
         CloseTab,
         ExtractAll,
         OpenSettings,
+        OpenFavorites,
+        OpenPasswordBook,
+        ConvertArchive,
+        RepairArchive,
         // The right-click menu of the file list, and select-all.
         RowOpen,
         RowExtractTo,
@@ -54,6 +64,10 @@ pub fn install_app_actions(cx: &mut App) {
         KeyBinding::new("secondary-w", CloseTab, None),
         KeyBinding::new("secondary-e", ExtractAll, None),
         KeyBinding::new("secondary-,", OpenSettings, None),
+        KeyBinding::new("secondary-shift-b", OpenFavorites, None),
+        KeyBinding::new("secondary-shift-p", OpenPasswordBook, None),
+        KeyBinding::new("secondary-shift-c", ConvertArchive, None),
+        KeyBinding::new("secondary-shift-r", RepairArchive, None),
         // In the window's own context, so a text box keeps its own select-all.
         KeyBinding::new("secondary-a", SelectAllRows, Some("RustZip")),
     ]);
@@ -77,6 +91,17 @@ pub fn install_app_actions(cx: &mut App) {
                 MenuItem::action("在压缩包内搜索", FocusSearch),
                 MenuItem::separator(),
                 MenuItem::action("关闭标签页", CloseTab),
+            ],
+            disabled: false,
+        },
+        Menu {
+            name: text::tr("auto", "tools").into(),
+            items: vec![
+                MenuItem::action(text::tr("auto", "favorites"), OpenFavorites),
+                MenuItem::action(text::tr("auto", "passwords"), OpenPasswordBook),
+                MenuItem::separator(),
+                MenuItem::action(text::tr("auto", "convert"), ConvertArchive),
+                MenuItem::action(text::tr("auto", "repair"), RepairArchive),
             ],
             disabled: false,
         },
@@ -198,6 +223,12 @@ pub fn open_main_window(launch: launch::Launch, cx: &mut App) {
         let path = settings_path();
         let settings = path.as_deref().map(Settings::load).unwrap_or_default();
         let main = cx.new(|cx| MainView::new(settings, path, window, cx));
+        main.update(cx, |m, _| {
+            m.history_path = history::history_path();
+            if let Some(p) = &m.history_path {
+                m.history = rz_app::history::History::load(p);
+            }
+        });
         cx.set_global(MainRef {
             window: window.window_handle(),
             view: main.downgrade(),

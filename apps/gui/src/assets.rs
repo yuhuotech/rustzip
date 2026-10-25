@@ -17,6 +17,11 @@ icon_assets!(
         Lock,
         FileArchive,
         Image,
+        House,
+        List,
+        ArrowDownToLine,
+        ListChecks,
+        LayoutGrid,
     ]
 );
 

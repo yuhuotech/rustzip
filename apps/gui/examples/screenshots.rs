@@ -162,12 +162,60 @@ fn main() {
         ];
         let (handle, view) = window(&mut cx, mode, recent);
         shoot(&mut cx, handle, &out_dir, &format!("{tag}-1-empty"));
+        for (page, suffix) in [
+            (rustzip_gui::view::Page::Recent, "1b-startup-recent"),
+            (rustzip_gui::view::Page::Favorites, "1c-startup-favorites"),
+            (rustzip_gui::view::Page::Passwords, "1d-startup-passwords"),
+        ] {
+            act(&mut cx, handle, &view, |v, _, cx| v.show_page(page, cx));
+            shoot(&mut cx, handle, &out_dir, &format!("{tag}-{suffix}"));
+            if page == rustzip_gui::view::Page::Favorites {
+                act(&mut cx, handle, &view, |v, _, cx| {
+                    v.set_folder_view(rz_app::settings::FolderView::Icons, cx)
+                });
+                shoot(
+                    &mut cx,
+                    handle,
+                    &out_dir,
+                    &format!("{tag}-1g-location-icons"),
+                );
+                act(&mut cx, handle, &view, |v, _, cx| {
+                    v.show_folder(work.path().to_path_buf(), cx)
+                });
+                shoot(&mut cx, handle, &out_dir, &format!("{tag}-1h-folder-icons"));
+                act(&mut cx, handle, &view, |v, _, cx| {
+                    v.set_folder_view(rz_app::settings::FolderView::List, cx)
+                });
+            }
+        }
+        act(&mut cx, handle, &view, |v, w, cx| {
+            v.show_page(rustzip_gui::view::Page::Archive, cx);
+            v.open_transform(false, w, cx);
+        });
+        shoot(
+            &mut cx,
+            handle,
+            &out_dir,
+            &format!("{tag}-1e-startup-convert"),
+        );
+        act(&mut cx, handle, &view, |v, w, cx| {
+            v.close_overlay(cx);
+            v.open_transform(true, w, cx);
+        });
+        shoot(
+            &mut cx,
+            handle,
+            &out_dir,
+            &format!("{tag}-1f-startup-repair"),
+        );
+        act(&mut cx, handle, &view, |v, _, cx| v.close_overlay(cx));
 
         // 2. An archive open at its top level.
         let loaded = load_archive(&archive, None);
         let path = archive.clone();
         act(&mut cx, handle, &view, move |v, w, cx| {
-            v.finish_open(path, None, loaded, w, cx);
+            let (request_id, _) = v.begin_open_request(&path);
+            v.finish_open(request_id, path, None, loaded, w, cx);
         });
         shoot(&mut cx, handle, &out_dir, &format!("{tag}-2-browse"));
 
@@ -306,6 +354,78 @@ fn main() {
             handle,
             &out_dir,
             &format!("{tag}-8b-privacy-again"),
+        );
+        act(&mut cx, handle, &view, |v, _, cx| {
+            v.close_overlay(cx);
+            v.settings.favorites = vec![
+                work.path().to_path_buf(),
+                PathBuf::from("/Users/example/Documents"),
+            ];
+            v.show_page(rustzip_gui::view::Page::Favorites, cx);
+        });
+        shoot(&mut cx, handle, &out_dir, &format!("{tag}-9-favorites"));
+        act(&mut cx, handle, &view, |v, _, cx| {
+            v.show_page(rustzip_gui::view::Page::Passwords, cx);
+            v.vault.set("项目备份.zip", "example").unwrap();
+            v.vault.set("共享资料.7z", "example").unwrap();
+            v.tools.labels = vec!["项目备份.zip".into(), "共享资料.7z".into()];
+        });
+        shoot(
+            &mut cx,
+            handle,
+            &out_dir,
+            &format!("{tag}-10-password-book"),
+        );
+        act(&mut cx, handle, &view, |v, w, cx| {
+            v.edit_password(None, w, cx)
+        });
+        shoot(
+            &mut cx,
+            handle,
+            &out_dir,
+            &format!("{tag}-11-password-edit"),
+        );
+        act(&mut cx, handle, &view, |v, w, cx| {
+            v.close_overlay(cx);
+            v.open_transform(false, w, cx);
+        });
+        shoot(&mut cx, handle, &out_dir, &format!("{tag}-12-convert"));
+        act(&mut cx, handle, &view, |v, w, cx| {
+            v.close_overlay(cx);
+            v.open_transform(true, w, cx);
+        });
+        shoot(&mut cx, handle, &out_dir, &format!("{tag}-13-repair"));
+        let damaged = work.path().join(format!("{tag}-damaged.zip"));
+        let mut bytes = fs::read(&archive).unwrap();
+        let end = bytes.windows(4).position(|b| b == b"PK\x01\x02").unwrap();
+        bytes.truncate(end);
+        fs::write(&damaged, bytes).unwrap();
+        act(&mut cx, handle, &view, |v, _, cx| {
+            v.close_overlay(cx);
+            let id = v.tasks.submit(JobSpec::Transform {
+                archive: damaged,
+                output: work.path().join(format!("{tag}-recovered.zip")),
+                opts: rz_app::TransformOptions {
+                    format: OutputFormat::Zip,
+                    create: CreateOptions::default(),
+                    limits: ExtractOptions::default(),
+                    encoding: None,
+                },
+                recover: true,
+            });
+            let info = v
+                .tasks
+                .wait_for(id, std::time::Duration::from_secs(30))
+                .unwrap();
+            assert_eq!(info.state, rz_app::TaskState::Done);
+            v.refresh_tasks(cx);
+            v.overlay = Some(rustzip_gui::view::Overlay::RecoveryReport(id));
+        });
+        shoot(
+            &mut cx,
+            handle,
+            &out_dir,
+            &format!("{tag}-14-recovery-report"),
         );
     }
 }

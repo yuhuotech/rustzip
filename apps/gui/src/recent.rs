@@ -124,7 +124,7 @@ fn cmp_known<T: Ord>(a: Option<T>, b: Option<T>, ascending: bool) -> Ordering {
     }
 }
 
-fn unix(t: std::io::Result<SystemTime>) -> Option<i64> {
+pub(crate) fn unix(t: std::io::Result<SystemTime>) -> Option<i64> {
     let d = t.ok()?.duration_since(SystemTime::UNIX_EPOCH).ok()?;
     i64::try_from(d.as_secs()).ok()
 }
