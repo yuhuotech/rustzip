@@ -17,6 +17,12 @@ pub type TaskId = u64;
 
 #[derive(Debug, Clone)]
 pub enum JobSpec {
+    Transform {
+        archive: PathBuf,
+        output: PathBuf,
+        opts: rz_engine::TransformOptions,
+        recover: bool,
+    },
     Compress {
         sources: Vec<PathBuf>,
         output: PathBuf,
@@ -49,6 +55,8 @@ pub enum JobSpec {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JobKind {
+    Convert,
+    Repair,
     Compress,
     Extract,
     Test,
@@ -58,6 +66,13 @@ pub enum JobKind {
 impl JobSpec {
     pub fn kind(&self) -> JobKind {
         match self {
+            JobSpec::Transform { recover, .. } => {
+                if *recover {
+                    JobKind::Repair
+                } else {
+                    JobKind::Convert
+                }
+            }
             JobSpec::Compress { .. } => JobKind::Compress,
             JobSpec::Extract { .. } => JobKind::Extract,
             JobSpec::Test { .. } => JobKind::Test,
@@ -68,6 +83,7 @@ impl JobSpec {
     /// A short name for the task list: the archive's file name.
     pub fn title(&self) -> String {
         let path = match self {
+            JobSpec::Transform { archive, .. } => archive,
             JobSpec::Compress { output, .. } => output,
             JobSpec::Extract { archive, .. }
             | JobSpec::Test { archive, .. }
@@ -80,6 +96,13 @@ impl JobSpec {
 
     fn with_password(&self, password: String) -> Option<JobSpec> {
         match self {
+            JobSpec::Transform { .. } => {
+                let mut spec = self.clone();
+                if let JobSpec::Transform { opts, .. } = &mut spec {
+                    opts.limits.password = Some(password);
+                }
+                Some(spec)
+            }
             JobSpec::Extract { opts, .. } => {
                 let mut spec = self.clone();
                 if let JobSpec::Extract { opts: o, .. } = &mut spec {
@@ -131,6 +154,8 @@ impl TaskState {
 /// A stable code for the UI to branch on (for example, ask for a password).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorCode {
+    NameConflict,
+    AlreadyExists,
     Password,
     UnsafePath,
     LimitExceeded,
@@ -144,33 +169,77 @@ pub enum ErrorCode {
 pub struct TaskError {
     pub code: ErrorCode,
     pub message: String,
+    /// Archive-relative names only, for a localized conflict explanation.
+    pub conflicting_paths: Option<(String, String)>,
 }
 
 impl From<&Error> for TaskError {
     fn from(e: &Error) -> Self {
         let code = match e {
+            Error::NameConflict { .. } => ErrorCode::NameConflict,
             Error::Password => ErrorCode::Password,
             Error::UnsafePath(_) => ErrorCode::UnsafePath,
             Error::LimitExceeded(_) => ErrorCode::LimitExceeded,
             Error::Unsupported(_) => ErrorCode::Unsupported,
             Error::UnknownFormat => ErrorCode::UnknownFormat,
             Error::Corrupt(_) => ErrorCode::Corrupt,
+            Error::Io(io) if io.kind() == std::io::ErrorKind::AlreadyExists => {
+                ErrorCode::AlreadyExists
+            }
             Error::Io(_) | Error::Cancelled => ErrorCode::Io,
         };
         Self {
             code,
             message: e.to_string(),
+            conflicting_paths: match e {
+                Error::NameConflict { first, second } => Some((first.clone(), second.clone())),
+                _ => None,
+            },
         }
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Summary {
+    /// Recovery details remain inspectable after the completion toast disappears.
+    pub recovery: Option<rz_engine::TransformReport>,
     pub files: u64,
     pub bytes: u64,
     /// The archive that was created, or the folder files were extracted to.
     pub output: PathBuf,
+    /// What a file manager should highlight when the job is done: the item the
+    /// user will look for, inside the folder that gets opened.
+    pub reveal: PathBuf,
     pub elapsed: Duration,
+}
+
+/// Picks the extracted item to highlight. A wrapper folder made by smart
+/// extraction is itself the result; otherwise the first extracted item.
+fn reveal_target(
+    entries: &[rz_core::Entry],
+    only: Option<&[String]>,
+    dest: &std::path::Path,
+    target: &std::path::Path,
+) -> PathBuf {
+    if target != dest {
+        return target.to_path_buf();
+    }
+    let top = |p: &str| {
+        p.replace('\\', "/")
+            .split('/')
+            .find(|c| !c.is_empty() && *c != ".")
+            .map(str::to_string)
+    };
+    let mut names: Vec<String> = match only {
+        Some(paths) => paths.iter().filter_map(|p| top(p)).collect(),
+        None => entries.iter().filter_map(|e| top(&e.path)).collect(),
+    };
+    names.dedup();
+    names
+        .into_iter()
+        .map(|n| target.join(n))
+        .find(|p| p.symlink_metadata().is_ok())
+        .unwrap_or_else(|| target.to_path_buf())
 }
 
 #[derive(Debug, Clone)]
@@ -367,9 +436,10 @@ impl TaskManager {
                     token,
                 },
             );
+            // Publish creation before a worker can pop this task from the queue.
+            self.shared.emit(Event::Added(info));
             inner.queue.push_back(id);
         }
-        self.shared.emit(Event::Added(info));
         self.shared.work.notify_one();
         id
     }
@@ -614,6 +684,22 @@ fn run(
 ) -> Result<Summary, Error> {
     let mut sink = progress_sink(shared, id, token);
     match spec {
+        JobSpec::Transform {
+            archive,
+            output,
+            opts,
+            recover,
+        } => {
+            let rep = rz_engine::transform(archive, output, opts, *recover, token, &mut sink)?;
+            Ok(Summary {
+                files: rep.files,
+                bytes: rep.bytes,
+                output: output.clone(),
+                reveal: output.clone(),
+                elapsed: started.elapsed(),
+                recovery: (*recover).then_some(rep),
+            })
+        }
         JobSpec::Compress {
             sources,
             output,
@@ -625,7 +711,9 @@ fn run(
                 files: rep.files,
                 bytes: rep.bytes,
                 output: output.clone(),
+                reveal: output.clone(),
                 elapsed: started.elapsed(),
+                recovery: None,
             })
         }
         JobSpec::Extract {
@@ -647,12 +735,23 @@ fn run(
             } else {
                 dest.clone()
             };
+            let entries = reader.entries()?;
             let rep = extract(&mut *reader, &target, opts, token, &mut sink)?;
+            // The engine knows the names it settled on, numbered ones included.
+            let reveal = rep
+                .roots
+                .iter()
+                .find(|p| p.symlink_metadata().is_ok())
+                .filter(|_| target == *dest)
+                .cloned()
+                .unwrap_or_else(|| reveal_target(&entries, opts.only.as_deref(), dest, &target));
             Ok(Summary {
                 files: rep.files,
                 bytes: rep.bytes,
                 output: target,
+                reveal,
                 elapsed: started.elapsed(),
+                recovery: None,
             })
         }
         JobSpec::Edit {
@@ -675,7 +774,9 @@ fn run(
                 files: rep.files,
                 bytes: rep.bytes,
                 output: archive.clone(),
+                reveal: archive.clone(),
                 elapsed: started.elapsed(),
+                recovery: None,
             })
         }
         JobSpec::Test {
@@ -720,7 +821,9 @@ fn run(
                 files,
                 bytes,
                 output: archive.clone(),
+                reveal: archive.clone(),
                 elapsed: started.elapsed(),
+                recovery: None,
             })
         }
     }

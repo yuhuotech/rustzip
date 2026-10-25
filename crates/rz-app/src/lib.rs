@@ -6,6 +6,8 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
 pub mod browse;
+pub mod history;
+pub mod locations;
 pub mod modify;
 pub mod passwords;
 pub mod preview;
@@ -15,5 +17,7 @@ pub mod stats;
 pub mod tasks;
 pub mod update;
 
+pub use rz_engine::{TransformOptions, TransformReport};
+pub use rz_formats::OutputFormat;
 pub use settings::{OnConflict, Settings, Theme};
 pub use tasks::{Event, JobSpec, TaskId, TaskInfo, TaskManager, TaskState};

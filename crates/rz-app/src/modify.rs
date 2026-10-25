@@ -10,8 +10,11 @@ use rz_core::{
 };
 use rz_engine::{compress, extract, safe_join, ExtractOptions};
 use rz_formats::OutputFormat;
-use std::fs;
+use sha2::{Digest, Sha256};
+use std::fs::{self, File, OpenOptions};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 
 #[derive(Debug, Clone)]
 pub enum Edit {
@@ -88,6 +91,90 @@ impl Drop for Scratch {
     }
 }
 
+/// A bounded set of OS-level advisory locks coordinates edits across processes.
+/// Hashed, striped names keep user paths out of the lock files and bound cache growth.
+const EDIT_LOCK_STRIPES: usize = 256;
+
+fn archive_lock_path(archive: &Path, root: &Path) -> PathBuf {
+    let canonical = archive
+        .canonicalize()
+        .unwrap_or_else(|_| archive.to_path_buf());
+    let digest = Sha256::digest(canonical.as_os_str().as_encoded_bytes());
+    let stripe = usize::from(digest[0]) % EDIT_LOCK_STRIPES;
+    root.join(format!("archive-edit-{stripe:02x}.lock"))
+}
+
+fn open_archive_lock(archive: &Path, root: &Path) -> Result<File> {
+    fs::create_dir_all(root)?;
+    #[cfg(unix)]
+    rz_platform::apply_mode(root, 0o700)?;
+    let mut options = OpenOptions::new();
+    options.read(true).write(true).create(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    Ok(options.open(archive_lock_path(archive, root))?)
+}
+
+fn archive_lock(archive: &Path, cancel: &CancelToken) -> Result<File> {
+    let root = crate::settings::config_dir()
+        .ok_or_else(|| {
+            Error::Unsupported(
+                "a user settings directory is required to coordinate archive edits".into(),
+            )
+        })?
+        .join("archive-locks");
+    let target = archive
+        .canonicalize()
+        .unwrap_or_else(|_| archive.to_path_buf());
+    archive_lock_at(archive, &root, cancel, || {
+        #[cfg(test)]
+        if let (Ok(expected), Ok(marker)) = (
+            std::env::var("RZ_TEST_EDIT_LOCK_ARCHIVE"),
+            std::env::var("RZ_TEST_EDIT_LOCK_WAIT_MARKER"),
+        ) {
+            if Path::new(&expected)
+                .canonicalize()
+                .unwrap_or_else(|_| PathBuf::from(expected))
+                == target
+            {
+                let _ = fs::write(marker, b"waiting");
+            }
+        }
+        #[cfg(not(test))]
+        let _ = &target;
+    })
+}
+
+fn archive_lock_at(
+    archive: &Path,
+    root: &Path,
+    cancel: &CancelToken,
+    mut on_wait: impl FnMut(),
+) -> Result<File> {
+    let lock = open_archive_lock(archive, root)?;
+    loop {
+        cancel.check()?;
+        match lock.try_lock() {
+            Ok(()) => return Ok(lock),
+            Err(std::fs::TryLockError::WouldBlock) => {
+                on_wait();
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            Err(std::fs::TryLockError::Error(error)) => return Err(error.into()),
+        }
+    }
+}
+
+/// Distinct names per edit within this process, so concurrent edits never share
+/// a scratch folder or a new-archive file even though they share a PID.
+fn unique_seq() -> u64 {
+    static SEQ: AtomicU64 = AtomicU64::new(0);
+    SEQ.fetch_add(1, Ordering::Relaxed)
+}
+
 pub fn edit_archive(
     archive: &Path,
     edit: &Edit,
@@ -97,6 +184,8 @@ pub fn edit_archive(
     cancel: &CancelToken,
     progress: &mut dyn ProgressSink,
 ) -> Result<EditReport> {
+    // Waiting on a different RustZIP process remains cancellable.
+    let _serialization = archive_lock(archive, cancel)?;
     // What the file really is decides, not its name: a `.jar` or `.docx` is a zip.
     let mut reader = rz_formats::open(archive)?;
     let format = edit_format(reader.format_name())
@@ -111,7 +200,11 @@ pub fn edit_archive(
         .unwrap_or_default();
 
     // Same folder as the archive, so the final swap is a rename on one disk.
-    let scratch = Scratch(parent.join(format!(".{name}.rz-edit-{}", std::process::id())));
+    let scratch = Scratch(parent.join(format!(
+        ".{name}.rz-edit-{}-{}",
+        std::process::id(),
+        unique_seq()
+    )));
     let _ = fs::remove_dir_all(&scratch.0);
     let stage = scratch.0.join("files");
     fs::create_dir_all(&stage)?;
@@ -214,7 +307,13 @@ pub fn edit_archive(
         .filter_map(|e| e.ok().map(|e| e.path()))
         .collect();
     top.sort();
-    let new_file = parent.join(format!(".{name}.rz-new-{}", std::process::id()));
+    let new_file = parent.join(format!(
+        ".{name}.rz-new-{}-{}",
+        std::process::id(),
+        unique_seq()
+    ));
+    // Nothing of ours can be at that path; a leftover from a dead run is removed.
+    let _ = fs::remove_file(&new_file);
     let create = CreateOptions {
         level,
         password: opts.password.clone(),
@@ -305,6 +404,173 @@ fn copy_tree(from: &Path, to: &Path, cancel: &CancelToken) -> Result<()> {
 mod tests {
     use super::*;
     use rz_core::NoProgress;
+
+    struct EditGate {
+        dir: PathBuf,
+        role: String,
+        stopped: bool,
+    }
+
+    impl ProgressSink for EditGate {
+        fn update(&mut self, progress: Progress) {
+            if !self.stopped
+                && progress.files_total > 0
+                && progress.files_done >= progress.files_total / 2
+            {
+                self.stopped = true;
+                fs::write(self.dir.join(format!("gate-{}", self.role)), b"staged").unwrap();
+                let release = self.dir.join(format!("release-{}", self.role));
+                let deadline = std::time::Instant::now() + Duration::from_secs(20);
+                while !release.exists() {
+                    assert!(std::time::Instant::now() < deadline, "edit gate timed out");
+                    std::thread::sleep(Duration::from_millis(2));
+                }
+            }
+        }
+    }
+
+    fn wait_for_file(path: &Path, timeout: Duration) -> bool {
+        let deadline = std::time::Instant::now() + timeout;
+        while std::time::Instant::now() < deadline {
+            if path.exists() {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        path.exists()
+    }
+
+    fn kill_children_on_timeout(children: &mut [std::process::Child], phase: &str) -> ! {
+        for child in children {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        panic!("timed out waiting for cross-process edit {phase}");
+    }
+
+    #[test]
+    fn concurrent_edits_in_separate_processes_merge_instead_of_losing_one_update() {
+        if let Ok(role) = std::env::var("RZ_TEST_EDIT_ROLE") {
+            let dir = PathBuf::from(std::env::var("RZ_TEST_EDIT_DIR").unwrap());
+            let archive = dir.join("shared.zip");
+            let edit = match role.as_str() {
+                "a" => Edit::Delete(vec!["data/a.txt".into()]),
+                "b" => Edit::Delete(vec!["data/sub/b.txt".into()]),
+                _ => panic!("unknown cross-process test role"),
+            };
+            let mut progress = EditGate {
+                dir: dir.clone(),
+                role: role.clone(),
+                stopped: false,
+            };
+            edit_archive(
+                &archive,
+                &edit,
+                &opts(None),
+                6,
+                None,
+                &CancelToken::new(),
+                &mut progress,
+            )
+            .unwrap();
+            fs::write(dir.join(format!("done-{role}")), b"done").unwrap();
+            return;
+        }
+
+        let dir = tempfile::tempdir().unwrap();
+        let archive = make(dir.path(), "shared.zip", None);
+        let exe = std::env::current_exe().unwrap();
+        let spawn = |role: &str| {
+            std::process::Command::new(&exe)
+            .arg("--exact")
+            .arg("modify::tests::concurrent_edits_in_separate_processes_merge_instead_of_losing_one_update")
+            .arg("--nocapture")
+            .env("RZ_TEST_EDIT_ROLE", role)
+            .env("RZ_TEST_EDIT_DIR", dir.path())
+            .env("RZ_TEST_EDIT_LOCK_ARCHIVE", &archive)
+            .env("RZ_TEST_EDIT_LOCK_WAIT_MARKER", dir.path().join(format!("wait-{role}")))
+            .spawn().unwrap()
+        };
+        let mut children = vec![spawn("a"), spawn("b")];
+        let deadline = std::time::Instant::now() + Duration::from_secs(20);
+        let holder = loop {
+            if dir.path().join("gate-a").exists() {
+                break "a";
+            }
+            if dir.path().join("gate-b").exists() {
+                break "b";
+            }
+            if std::time::Instant::now() >= deadline {
+                kill_children_on_timeout(&mut children, "first edit staging");
+            }
+            std::thread::sleep(Duration::from_millis(2));
+        };
+        let waiter = if holder == "a" { "b" } else { "a" };
+        if !wait_for_file(
+            &dir.path().join(format!("wait-{waiter}")),
+            Duration::from_secs(20),
+        ) {
+            kill_children_on_timeout(&mut children, "second process to wait on the archive lock");
+        }
+        assert!(
+            !dir.path().join(format!("gate-{waiter}")).exists(),
+            "both processes staged the same original archive"
+        );
+        fs::write(dir.path().join(format!("release-{holder}")), b"go").unwrap();
+        if !wait_for_file(
+            &dir.path().join(format!("done-{holder}")),
+            Duration::from_secs(20),
+        ) {
+            kill_children_on_timeout(&mut children, "first edit publish");
+        }
+        if !wait_for_file(
+            &dir.path().join(format!("gate-{waiter}")),
+            Duration::from_secs(20),
+        ) {
+            kill_children_on_timeout(&mut children, "second edit staging the latest archive");
+        }
+        fs::write(dir.path().join(format!("release-{waiter}")), b"go").unwrap();
+        for index in 0..children.len() {
+            let deadline = std::time::Instant::now() + Duration::from_secs(20);
+            loop {
+                if let Some(status) = children[index].try_wait().unwrap() {
+                    assert!(status.success(), "cross-process edit failed: {status}");
+                    break;
+                }
+                if std::time::Instant::now() >= deadline {
+                    kill_children_on_timeout(&mut children, "child process exit");
+                }
+                std::thread::sleep(Duration::from_millis(2));
+            }
+        }
+        assert_eq!(names(&archive, None), ["data/sub/c.txt"]);
+        assert!(fs::read_dir(dir.path())
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .all(|e| !e.file_name().to_string_lossy().contains(".rz-")));
+    }
+
+    #[test]
+    fn waiting_for_an_archive_lock_is_cancellable() {
+        let dir = tempfile::tempdir().unwrap();
+        let archive = dir.path().join("a.zip");
+        fs::write(&archive, b"archive").unwrap();
+        let held = open_archive_lock(&archive, dir.path()).unwrap();
+        held.try_lock().unwrap();
+        let cancel = CancelToken::new();
+        let worker_cancel = cancel.clone();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let worker_archive = archive.clone();
+        let root = dir.path().to_path_buf();
+        let worker = std::thread::spawn(move || {
+            let _ = tx.send(());
+            archive_lock_at(&worker_archive, &root, &worker_cancel, || {}).map(|_| ())
+        });
+        rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        cancel.cancel();
+        assert!(matches!(worker.join().unwrap(), Err(Error::Cancelled)));
+        drop(held);
+    }
 
     fn make(dir: &Path, name: &str, password: Option<&str>) -> PathBuf {
         let src = dir.join("data");

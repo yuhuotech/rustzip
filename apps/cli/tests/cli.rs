@@ -101,7 +101,7 @@ fn encrypted_zip_needs_the_right_password() {
 }
 
 #[test]
-fn extract_refuses_to_overwrite_unless_asked() {
+fn extract_keeps_both_unless_told_otherwise() {
     let tmp = tempfile::tempdir().unwrap();
     sample(tmp.path());
     let archive = tmp.path().join("a.zip");
@@ -112,10 +112,15 @@ fn extract_refuses_to_overwrite_unless_asked() {
     assert!(rz(&["x", p(&archive), "-o", p(&out)]).status.success());
     fs::write(out.join("proj/readme.txt"), "edited").unwrap();
 
-    assert!(!rz(&["x", p(&archive), "-o", p(&out)]).status.success());
+    // By default both are kept: the edited folder stays, the new one is numbered.
+    assert!(rz(&["x", p(&archive), "-o", p(&out)]).status.success());
     assert_eq!(
         fs::read_to_string(out.join("proj/readme.txt")).unwrap(),
         "edited"
+    );
+    assert_eq!(
+        fs::read_to_string(out.join("proj (1)/readme.txt")).unwrap(),
+        "hello rustzip"
     );
 
     assert!(rz(&["x", p(&archive), "-o", p(&out), "-n"])
@@ -329,5 +334,11 @@ fn failed_add_leaves_no_partial_archive() {
     let o = rz(&["a", p(&archive), p(&tmp.path().join("does-not-exist"))]);
     assert!(!o.status.success());
     assert!(!archive.exists());
-    assert!(!tmp.path().join("never.zip.rz-part").exists());
+    let leftovers: Vec<String> = fs::read_dir(tmp.path())
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|n| n.starts_with(".never.zip.rz-") || n.starts_with("never.zip.rz-"))
+        .collect();
+    assert!(leftovers.is_empty(), "{leftovers:?}");
 }

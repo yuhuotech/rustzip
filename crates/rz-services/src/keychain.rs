@@ -24,10 +24,14 @@ impl KeychainStore {
     }
 
     fn read_index() -> Vec<String> {
-        Self::entry(INDEX)
-            .and_then(|e| e.get_password().ok())
-            .and_then(|t| serde_json::from_str(&t).ok())
-            .unwrap_or_default()
+        Self::try_read_index().unwrap_or_default()
+    }
+
+    fn try_read_index() -> Result<Vec<String>> {
+        let Some(text) = read_secret(INDEX)? else {
+            return Ok(Vec::new());
+        };
+        serde_json::from_str(&text).map_err(|_| keychain_error("invalid password index"))
     }
 
     fn write_index(labels: &[String]) -> Result<()> {
@@ -43,30 +47,73 @@ fn keychain_error(e: impl std::fmt::Display) -> Error {
     Error::Io(std::io::Error::other(format!("keychain: {e}")))
 }
 
+fn read_secret(label: &str) -> Result<Option<String>> {
+    match KeychainStore::entry(label)
+        .ok_or_else(|| keychain_error("unavailable"))?
+        .get_password()
+    {
+        Ok(value) => Ok(Some(value)),
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(e) => Err(keychain_error(e)),
+    }
+}
+
+static WRITE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 impl SecretStore for KeychainStore {
+    fn try_get(&self, label: &str) -> Result<Option<String>> {
+        read_secret(label)
+    }
+    fn try_labels(&self) -> Result<Vec<String>> {
+        Self::try_read_index()
+    }
+    fn is_persistent(&self) -> bool {
+        true
+    }
     fn get(&self, label: &str) -> Option<String> {
         Self::entry(label)?.get_password().ok()
     }
 
     fn set(&self, label: &str, secret: &str) -> Result<()> {
+        if label == INDEX {
+            return Err(keychain_error("reserved label"));
+        }
+        let _guard = WRITE_LOCK.lock().map_err(|_| keychain_error("busy"))?;
+        let mut labels = Self::try_read_index()?;
+        let previous = read_secret(label)?.map(zeroize::Zeroizing::new);
         Self::entry(label)
             .ok_or_else(|| keychain_error("unavailable"))?
             .set_password(secret)
             .map_err(keychain_error)?;
-        let mut labels = Self::read_index();
         if !labels.iter().any(|l| l == label) {
             labels.push(label.to_string());
-            Self::write_index(&labels)?;
+            if let Err(e) = Self::write_index(&labels) {
+                if let Some(entry) = Self::entry(label) {
+                    if let Some(value) = previous {
+                        let _ = entry.set_password(&value);
+                    } else {
+                        let _ = entry.delete_credential();
+                    }
+                }
+                return Err(e);
+            }
         }
         Ok(())
     }
 
     fn delete(&self, label: &str) -> Result<()> {
+        if label == INDEX {
+            return Err(keychain_error("reserved label"));
+        }
+        let _guard = WRITE_LOCK.lock().map_err(|_| keychain_error("busy"))?;
+        let mut labels = Self::try_read_index()?;
         if let Some(e) = Self::entry(label) {
             // Deleting what is not there is fine.
-            let _ = e.delete_credential();
+            match e.delete_credential() {
+                Ok(()) | Err(keyring::Error::NoEntry) => {}
+                Err(e) => return Err(keychain_error(e)),
+            }
         }
-        let mut labels = Self::read_index();
         labels.retain(|l| l != label);
         Self::write_index(&labels)
     }

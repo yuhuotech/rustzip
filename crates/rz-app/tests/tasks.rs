@@ -12,6 +12,73 @@ use std::time::{Duration, Instant};
 
 const WAIT: Duration = Duration::from_secs(30);
 
+/// True when no RustZIP temporary file for `output_name` sits in `dir`.
+fn no_temp_files(dir: &Path, output_name: &str) -> bool {
+    fs::read_dir(dir).unwrap().filter_map(|e| e.ok()).all(|e| {
+        let n = e.file_name().to_string_lossy().into_owned();
+        !n.starts_with(&format!(".{output_name}.rz-"))
+            && !n.starts_with(&format!("{output_name}.rz-"))
+    })
+}
+
+#[test]
+fn conversion_jobs_pause_retry_passwords_and_repair_retains_a_report() {
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("source.zip");
+    let manager = TaskManager::new(1);
+    let mut spec = compress_spec(vec![tree(dir.path())], source.clone());
+    if let JobSpec::Compress { opts, .. } = &mut spec {
+        opts.password = Some("secret".into());
+    }
+    let compressed = manager.submit(spec);
+    assert_eq!(
+        manager.wait_for(compressed, WAIT).unwrap().state,
+        TaskState::Done
+    );
+    let output = dir.path().join("converted.7z");
+    let opts = rz_app::TransformOptions {
+        format: OutputFormat::SevenZ,
+        create: CreateOptions {
+            threads: 1,
+            ..Default::default()
+        },
+        limits: ExtractOptions::default(),
+        encoding: None,
+    };
+    let id = manager.submit_paused(JobSpec::Transform {
+        archive: source.clone(),
+        output: output.clone(),
+        opts: opts.clone(),
+        recover: false,
+    });
+    assert_eq!(manager.get(id).unwrap().state, TaskState::Paused);
+    assert!(!output.exists());
+    manager.resume(id);
+    assert_eq!(
+        manager.wait_for(id, WAIT).unwrap().error.unwrap().code,
+        ErrorCode::Password
+    );
+    let retried = manager.retry_with_password(id, "secret").unwrap();
+    assert_eq!(
+        manager.wait_for(retried, WAIT).unwrap().state,
+        TaskState::Done
+    );
+    let mut repair_opts = opts;
+    repair_opts.limits.password = Some("secret".into());
+    let repair = manager.submit(JobSpec::Transform {
+        archive: source,
+        output: dir.path().join("recovered.7z"),
+        opts: repair_opts,
+        recover: true,
+    });
+    let done = manager.wait_for(repair, WAIT).unwrap();
+    assert_eq!(done.state, TaskState::Done, "{:?}", done.error);
+    let report = done.summary.unwrap().recovery.unwrap();
+    assert!(report.files > 0);
+    assert_eq!(report.skipped, 0);
+    assert_eq!(done.kind, JobKind::Repair);
+}
+
 fn tree(root: &Path) -> PathBuf {
     let p = root.join("proj");
     fs::create_dir_all(p.join("docs")).unwrap();
@@ -187,7 +254,7 @@ fn a_paused_running_task_can_be_cancelled_and_leaves_nothing() {
     let info = m.wait_for(id, WAIT).unwrap();
     assert_eq!(info.state, TaskState::Cancelled);
     assert!(!out.exists());
-    assert!(!tmp.path().join("c.zip.rz-part").exists());
+    assert!(no_temp_files(tmp.path(), "c.zip"));
     assert!(!m.cancel(id), "cancelling a finished task reports false");
 }
 
@@ -480,4 +547,128 @@ fn progress_reaches_the_task_info_for_extraction_too() {
     assert_eq!(p.bytes_done, p.bytes_total);
     assert_eq!(p.bytes_total, 13 + 8 + 400_000);
     assert_eq!(info.eta_secs, Some(0));
+}
+
+#[test]
+fn a_cancel_and_pause_storm_ends_with_one_terminal_state_per_task() {
+    let tmp = tempfile::tempdir().unwrap();
+    let src = tree(tmp.path());
+    fs::write(src.join("heavy.bin"), vec![7u8; 4 << 20]).unwrap();
+    let m = TaskManager::new(4);
+    let rx = m.subscribe();
+    let dir = tmp.path().to_path_buf();
+    let ids: Vec<_> = (0..10)
+        .map(|i| {
+            let out = dir.join(format!("s{i}.zip"));
+            m.submit(compress_spec(vec![src.clone()], out))
+        })
+        .collect();
+
+    // Two threads hammer every task with the same click sequence a user can
+    // produce: pause, resume, cancel, plus repeats on already-final states.
+    let manager = &m;
+    std::thread::scope(|s| {
+        for round in 0..2 {
+            let ids = ids.clone();
+            s.spawn(move || {
+                for id in &ids {
+                    let _ = manager.pause(*id);
+                    let _ = manager.resume(*id);
+                    if round == 0 {
+                        let _ = manager.cancel(*id);
+                    }
+                    let _ = manager.cancel(*id);
+                    let _ = manager.pause(*id);
+                    let _ = manager.resume(*id);
+                }
+            });
+        }
+    });
+
+    for id in &ids {
+        let info = m
+            .wait_for(*id, WAIT)
+            .unwrap_or_else(|| panic!("{id} never ended"));
+        assert!(info.state.is_finished(), "{id} stuck in {:?}", info.state);
+    }
+
+    // Every task produced exactly one terminal event, after its Added event.
+    let events: Vec<Event> = rx.try_iter().collect();
+    for id in &ids {
+        let mut added_at = None;
+        let mut terminals = 0;
+        let mut first_terminal = None;
+        for (i, e) in events.iter().enumerate() {
+            let terminal = matches!(
+                e,
+                Event::Finished { id: t, .. } | Event::Failed { id: t, .. } | Event::Cancelled(t) if *t == *id
+            );
+            if matches!(e, Event::Added(i2) if i2.id == *id) {
+                added_at = Some(i);
+            }
+            if terminal {
+                terminals += 1;
+                first_terminal = first_token(first_terminal, i);
+            }
+        }
+        assert_eq!(terminals, 1, "{id} produced {terminals} terminal events");
+        assert!(
+            added_at.is_some_and(|a| a < first_terminal.unwrap_or(usize::MAX)),
+            "{id} finished before it was added"
+        );
+    }
+
+    // Illegal or repeated operations on finished tasks are refused.
+    for id in &ids {
+        assert!(!m.cancel(*id));
+        assert!(!m.pause(*id));
+        assert!(!m.resume(*id));
+    }
+    assert!(m.get(999_999).is_none());
+}
+
+fn first_token(current: Option<usize>, candidate: usize) -> Option<usize> {
+    Some(current.map_or(candidate, |c| c.min(candidate)))
+}
+
+#[test]
+fn dropping_the_manager_mid_cancel_storm_never_hangs() {
+    let tmp = tempfile::tempdir().unwrap();
+    let src = tree(tmp.path());
+    fs::write(src.join("heavy.bin"), vec![7u8; 4 << 20]).unwrap();
+    let dir = tmp.path().to_path_buf();
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let m = TaskManager::new(3);
+        let mut ids = Vec::new();
+        for i in 0..3 {
+            ids.push(m.submit(compress_spec(
+                vec![src.clone()],
+                dir.join(format!("r{i}.zip")),
+            )));
+        }
+        for i in 0..2 {
+            m.submit_paused(compress_spec(
+                vec![src.clone()],
+                dir.join(format!("q{i}.zip")),
+            ));
+        }
+        // Cancel everything while the workers are mid-flight, then close the window.
+        for id in &ids {
+            let _ = m.cancel(*id);
+        }
+        drop(m);
+        let _ = tx.send(());
+    });
+    assert!(
+        rx.recv_timeout(Duration::from_secs(20)).is_ok(),
+        "dropping the manager mid-cancel hung"
+    );
+    for i in 0..3 {
+        let out = tmp.path().join(format!("r{i}.zip"));
+        assert!(
+            !out.exists() || no_temp_files(tmp.path(), &format!("r{i}.zip")),
+            "leftovers for r{i}.zip"
+        );
+    }
 }

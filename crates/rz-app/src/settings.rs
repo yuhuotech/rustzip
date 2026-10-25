@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 use std::ffi::OsString;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Mutex;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
@@ -20,11 +22,22 @@ pub enum Theme {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum OnConflict {
-    /// The UI asks; until it answers, the engine refuses to overwrite.
+    /// Nothing is lost and nothing fails: the new file gets a number (`name (1)`).
+    /// Settings saved with the old "ask" mean the same thing now.
     #[default]
-    Ask,
+    #[serde(alias = "ask")]
+    Rename,
     Skip,
     Replace,
+}
+
+/// Shared presentation preference for common locations and folder browsing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum FolderView {
+    #[default]
+    List,
+    Icons,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -58,6 +71,13 @@ pub struct Settings {
     pub ratio_check_above_mb: u64,
     pub max_total_gb: u64,
     pub recent: Vec<PathBuf>,
+    /// User-selected folders; removing a bookmark never removes files.
+    pub favorites: Vec<PathBuf>,
+    /// Parents of successfully opened archives, most recently used first.
+    pub recent_locations: Vec<PathBuf>,
+    /// Suppresses a location until an archive from it is opened again.
+    pub hidden_locations: Vec<PathBuf>,
+    pub folder_view: FolderView,
 }
 
 impl Default for Settings {
@@ -69,7 +89,7 @@ impl Default for Settings {
             default_format: "zip".into(),
             default_level: 6,
             threads: 0,
-            on_conflict: OnConflict::Ask,
+            on_conflict: OnConflict::Rename,
             smart_extract: true,
             open_folder_when_done: true,
             name_encoding: "auto".into(),
@@ -81,11 +101,39 @@ impl Default for Settings {
             ratio_check_above_mb: 256,
             max_total_gb: 1024,
             recent: Vec::new(),
+            favorites: Vec::new(),
+            recent_locations: Vec::new(),
+            hidden_locations: Vec::new(),
+            folder_view: FolderView::List,
         }
     }
 }
 
 const MAX_RECENT: usize = 20;
+
+trait SettingsFileOps {
+    fn write_and_sync(&self, tmp: &Path, contents: &[u8]) -> std::io::Result<()>;
+    fn publish(&self, tmp: &Path, path: &Path) -> std::io::Result<()>;
+    fn remove_temp(&self, tmp: &Path);
+}
+
+struct SystemSettingsFileOps;
+
+impl SettingsFileOps for SystemSettingsFileOps {
+    fn write_and_sync(&self, tmp: &Path, contents: &[u8]) -> std::io::Result<()> {
+        let mut file = std::fs::File::create(tmp)?;
+        file.write_all(contents)?;
+        file.sync_all()
+    }
+
+    fn publish(&self, tmp: &Path, path: &Path) -> std::io::Result<()> {
+        std::fs::rename(tmp, path)
+    }
+
+    fn remove_temp(&self, tmp: &Path) {
+        let _ = std::fs::remove_file(tmp);
+    }
+}
 
 impl Settings {
     /// Pulls every value back into a range the engine accepts, so a hand-edited
@@ -106,14 +154,35 @@ impl Settings {
             self.name_encoding = "auto".into();
         }
         self.recent.truncate(MAX_RECENT);
+        let mut seen = std::collections::HashSet::new();
+        self.favorites
+            .retain(|p| p.is_absolute() && seen.insert(p.clone()));
+        // Old settings only contain recent archives; reuse their parents without
+        // resurrecting locations the user explicitly removed.
+        for archive in &self.recent {
+            if let Some(parent) = archive.parent().filter(|p| p.is_absolute()) {
+                if !self.recent_locations.iter().any(|p| p == parent)
+                    && !self.hidden_locations.iter().any(|p| p == parent)
+                {
+                    self.recent_locations.push(parent.to_path_buf());
+                }
+            }
+        }
+        let mut seen = std::collections::HashSet::new();
+        self.recent_locations.retain(|p| {
+            p.is_absolute() && seen.insert(p.clone()) && !self.hidden_locations.contains(p)
+        });
+        self.recent_locations.truncate(MAX_RECENT);
+        let mut seen = std::collections::HashSet::new();
+        self.hidden_locations
+            .retain(|p| p.is_absolute() && seen.insert(p.clone()));
         self
     }
 
     pub fn extract_options(&self, password: Option<String>) -> ExtractOptions {
         ExtractOptions {
-            // "Ask" is a UI concern; the engine's safe default is to refuse.
             overwrite: match self.on_conflict {
-                OnConflict::Ask => Overwrite::Error,
+                OnConflict::Rename => Overwrite::Rename,
                 OnConflict::Skip => Overwrite::Skip,
                 OnConflict::Replace => Overwrite::Replace,
             },
@@ -143,9 +212,24 @@ impl Settings {
 
     /// Moves `path` to the front of the recent list.
     pub fn remember(&mut self, path: &Path) {
+        if let Some(parent) = path.parent().filter(|p| p.is_absolute()) {
+            self.hidden_locations.retain(|p| p != parent);
+            self.recent_locations.retain(|p| p != parent);
+            self.recent_locations.insert(0, parent.to_path_buf());
+            self.recent_locations.truncate(MAX_RECENT);
+        }
         self.recent.retain(|p| p != path);
         self.recent.insert(0, path.to_path_buf());
         self.recent.truncate(MAX_RECENT);
+    }
+
+    /// Removes a shortcut, preserving the real directory and all its contents.
+    pub fn hide_location(&mut self, path: &Path) {
+        self.favorites.retain(|p| p != path);
+        self.recent_locations.retain(|p| p != path);
+        if !self.hidden_locations.iter().any(|p| p == path) {
+            self.hidden_locations.push(path.to_path_buf());
+        }
     }
 
     /// Reads the file. A missing file gives the defaults; a damaged one is moved
@@ -167,22 +251,37 @@ impl Settings {
         }
     }
 
-    /// Writes atomically: a crash mid-save leaves the old file intact.
+    /// Writes atomically: a crash mid-save leaves the old file intact, a failed
+    /// save never replaces it, and concurrent savers each use their own
+    /// temporary file so their writes never interleave.
     pub fn save(&self, path: &Path) -> Result<()> {
+        // Savers run one at a time, so a slower, older snapshot cannot be
+        // published after a newer one.
+        static SERIALIZE: Mutex<()> = Mutex::new(());
+        let _turn = SERIALIZE.lock().unwrap_or_else(|p| p.into_inner());
+        self.save_with_io(path, &SystemSettingsFileOps)
+    }
+
+    fn save_with_io(&self, path: &Path, ops: &dyn SettingsFileOps) -> Result<()> {
+        static SEQ: AtomicU64 = AtomicU64::new(0);
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir)?;
         }
         let json = serde_json::to_string_pretty(&self.clone().sanitized())
             .map_err(|e| Error::Corrupt(e.to_string()))?;
-        let mut tmp = path.as_os_str().to_owned();
-        tmp.push(".tmp");
-        let tmp = PathBuf::from(tmp);
-        let mut f = std::fs::File::create(&tmp)?;
-        f.write_all(json.as_bytes())?;
-        f.sync_all()?;
-        drop(f);
-        std::fs::rename(&tmp, path)?;
-        Ok(())
+        let seq = SEQ.fetch_add(1, Ordering::Relaxed);
+        let name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let tmp = path.with_file_name(format!("{name}.rz-{}-{seq}.tmp", std::process::id()));
+        let outcome = ops
+            .write_and_sync(&tmp, json.as_bytes())
+            .and_then(|()| ops.publish(&tmp, path));
+        if outcome.is_err() {
+            ops.remove_temp(&tmp);
+        }
+        outcome.map_err(Error::Io)
     }
 }
 
@@ -339,9 +438,12 @@ mod tests {
     }
 
     #[test]
-    fn conflict_policy_maps_to_the_engine_and_ask_is_safe() {
+    fn conflict_policy_maps_to_the_engine_and_the_default_loses_nothing() {
         let mut s = Settings::default();
-        assert_eq!(s.extract_options(None).overwrite, Overwrite::Error);
+        assert_eq!(s.extract_options(None).overwrite, Overwrite::Rename);
+        // Files saved when "ask" existed keep working.
+        let old: Settings = serde_json::from_str(r#"{"on_conflict":"ask"}"#).unwrap();
+        assert_eq!(old.on_conflict, OnConflict::Rename);
         s.on_conflict = OnConflict::Skip;
         assert_eq!(s.extract_options(None).overwrite, Overwrite::Skip);
         s.on_conflict = OnConflict::Replace;
@@ -369,5 +471,124 @@ mod tests {
         assert_eq!(s.forced_encoding(), None);
         s.name_encoding = "GBK".into();
         assert_eq!(s.forced_encoding(), Some("GBK"));
+    }
+
+    #[test]
+    fn favorite_folders_round_trip_and_remove_relative_or_duplicate_paths() {
+        let dir = tempfile::tempdir().unwrap();
+        let absolute = dir.path().to_path_buf();
+        let path = dir.path().join("settings.json");
+        let settings = Settings {
+            favorites: vec![
+                absolute.clone(),
+                PathBuf::from("relative"),
+                absolute.clone(),
+            ],
+            ..Settings::default()
+        }
+        .sanitized();
+        settings.save(&path).unwrap();
+        assert_eq!(Settings::load(&path).favorites, vec![absolute]);
+    }
+
+    #[test]
+    fn recent_locations_are_bounded_reordered_and_backfilled_without_resurrecting_hidden_entries() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut settings = Settings::default();
+        for ix in 0..25 {
+            settings.remember(&dir.path().join(format!("project-{ix}/archive.zip")));
+        }
+        assert_eq!(settings.recent_locations.len(), 20);
+        let chosen = dir.path().join("project-10");
+        settings.remember(&chosen.join("other.zip"));
+        assert_eq!(settings.recent_locations[0], chosen);
+        settings.hide_location(&chosen);
+        settings.folder_view = FolderView::Icons;
+        let path = dir.path().join("settings.json");
+        settings.save(&path).unwrap();
+        let restored = Settings::load(&path);
+        assert_eq!(restored.folder_view, FolderView::Icons);
+        assert!(!restored.recent_locations.contains(&chosen));
+        assert!(restored.hidden_locations.contains(&chosen));
+        let older = Settings {
+            recent: vec![
+                chosen.join("a.zip"),
+                chosen.join("b.zip"),
+                dir.path().join("elsewhere/c.zip"),
+            ],
+            ..Settings::default()
+        }
+        .sanitized();
+        assert_eq!(
+            older.recent_locations,
+            vec![chosen.clone(), dir.path().join("elsewhere")]
+        );
+        let mut restored = restored;
+        restored.remember(&chosen.join("reopened.zip"));
+        assert_eq!(restored.recent_locations[0], chosen);
+        assert!(!restored.hidden_locations.contains(&chosen));
+    }
+
+    #[test]
+    fn partial_write_sync_and_publish_failures_preserve_the_last_good_settings() {
+        #[derive(Clone, Copy)]
+        enum Failure {
+            Write,
+            Sync,
+            Publish,
+        }
+        struct Fault(Failure);
+        impl SettingsFileOps for Fault {
+            fn write_and_sync(&self, tmp: &Path, contents: &[u8]) -> std::io::Result<()> {
+                match self.0 {
+                    Failure::Write => {
+                        use std::io::Write;
+                        let mut file = std::fs::File::create(tmp)?;
+                        file.write_all(&contents[..contents.len().min(12)])?;
+                        Err(std::io::Error::other("injected write failure"))
+                    }
+                    Failure::Sync => {
+                        std::fs::write(tmp, contents)?;
+                        Err(std::io::Error::other("injected sync failure"))
+                    }
+                    Failure::Publish => SystemSettingsFileOps.write_and_sync(tmp, contents),
+                }
+            }
+            fn publish(&self, tmp: &Path, path: &Path) -> std::io::Result<()> {
+                if matches!(self.0, Failure::Publish) {
+                    Err(std::io::Error::other("injected publish failure"))
+                } else {
+                    SystemSettingsFileOps.publish(tmp, path)
+                }
+            }
+            fn remove_temp(&self, tmp: &Path) {
+                SystemSettingsFileOps.remove_temp(tmp);
+            }
+        }
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        let good = Settings {
+            theme: Theme::Dark,
+            accent: "last-good".into(),
+            ..Settings::default()
+        };
+        good.save(&path).unwrap();
+        let original = std::fs::read(&path).unwrap();
+        let update = Settings {
+            theme: Theme::Light,
+            accent: "new".into(),
+            ..good.clone()
+        };
+        for failure in [Failure::Write, Failure::Sync, Failure::Publish] {
+            assert!(update.save_with_io(&path, &Fault(failure)).is_err());
+            assert_eq!(std::fs::read(&path).unwrap(), original);
+            assert_eq!(Settings::load(&path), good);
+            assert_eq!(
+                std::fs::read_dir(dir.path()).unwrap().count(),
+                1,
+                "failed save left a temp file"
+            );
+        }
     }
 }

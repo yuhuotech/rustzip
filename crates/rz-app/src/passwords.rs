@@ -9,8 +9,19 @@ use std::collections::BTreeMap;
 use std::io::Read;
 use std::path::Path;
 use std::sync::Mutex;
+use zeroize::Zeroizing;
 
 pub trait SecretStore: Send + Sync {
+    /// Fallible access for management screens: a locked store is not an empty store.
+    fn try_get(&self, label: &str) -> Result<Option<String>> {
+        Ok(self.get(label))
+    }
+    fn try_labels(&self) -> Result<Vec<String>> {
+        Ok(self.labels())
+    }
+    fn is_persistent(&self) -> bool {
+        false
+    }
     fn get(&self, label: &str) -> Option<String>;
     fn set(&self, label: &str, secret: &str) -> Result<()>;
     fn delete(&self, label: &str) -> Result<()>;
@@ -19,25 +30,39 @@ pub trait SecretStore: Send + Sync {
 
 /// A store that lives only in memory: for tests and for users who choose not to save passwords.
 #[derive(Default)]
-pub struct MemoryStore(Mutex<BTreeMap<String, String>>);
+pub struct MemoryStore(Mutex<BTreeMap<String, Zeroizing<String>>>);
 
 impl SecretStore for MemoryStore {
+    fn try_get(&self, label: &str) -> Result<Option<String>> {
+        self.0
+            .lock()
+            .map(|m| m.get(label).map(|v| v.to_string()))
+            .map_err(|_| Error::Corrupt("password store poisoned".into()))
+    }
+
+    fn try_labels(&self) -> Result<Vec<String>> {
+        self.0
+            .lock()
+            .map(|m| m.keys().cloned().collect())
+            .map_err(|_| Error::Corrupt("password store poisoned".into()))
+    }
     fn get(&self, label: &str) -> Option<String> {
-        self.0.lock().ok()?.get(label).cloned()
+        self.0.lock().ok()?.get(label).map(|v| v.to_string())
     }
 
     fn set(&self, label: &str, secret: &str) -> Result<()> {
         self.0
             .lock()
             .map_err(|_| Error::Corrupt("password store poisoned".into()))?
-            .insert(label.to_string(), secret.to_string());
+            .insert(label.to_string(), Zeroizing::new(secret.to_string()));
         Ok(())
     }
 
     fn delete(&self, label: &str) -> Result<()> {
-        if let Ok(mut m) = self.0.lock() {
-            m.remove(label);
-        }
+        self.0
+            .lock()
+            .map_err(|_| Error::Corrupt("password store poisoned".into()))?
+            .remove(label);
         Ok(())
     }
 

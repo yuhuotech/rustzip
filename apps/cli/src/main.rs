@@ -174,7 +174,7 @@ fn extract_cmd(archive: &Path, a: &Args) -> Result<()> {
         r.set_encoding(enc)?;
     }
     let opts = ExtractOptions {
-        overwrite: a.overwrite.unwrap_or(Overwrite::Error),
+        overwrite: a.overwrite.unwrap_or(Overwrite::Rename),
         password: a.password.clone(),
         threads: a.threads.unwrap_or(0),
         ..ExtractOptions::default()
