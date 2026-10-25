@@ -13,6 +13,7 @@ serde_json = "1.0.154"
 ureq = { version = "3.5.0", default-features = false, features = ["rustls", "gzip"] }
 keyring = "4.2.0"
 trash = "5.2.9"
+zeroize.workspace = true
 
 [lints]
 workspace = true
