@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
-  allowedDevOrigins: ["dev.rustzip.com"],
+  allowedDevOrigins: ["rustzip.dev.yuhuotech.cn"],
   async headers() {
     return [
       {

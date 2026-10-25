@@ -45,7 +45,7 @@ API 只接受 `event=activate|heartbeat` 和这 7 个字段，额外字段会拒
 
 1. 在 Vercel 导入仓库，新建独立项目，将 **Root Directory** 设为 `web`；使用默认 Next.js Install / Build 设置。
 2. 在 Vercel Marketplace 安装 Neon Postgres 并连接这个 Vercel 项目，勾选 Development、Preview、Production。建议为 Preview 部署启用独立 Neon 分支。
-3. Vercel Neon 集成自动注入 `DATABASE_URL`（连接池）和 `DATABASE_URL_UNPOOLED`（直连）。若手动连接 Neon，也使用这两个变量名，并让它们指向同一个 Neon database/branch；数据库可命名为 `rustzip`，应用不会硬编码数据库名。API 用 `DATABASE_URL`，迁移用 `DATABASE_URL_UNPOOLED`。为 Vercel Preview、Production 配置随机 `TELEMETRY_HASH_SECRET`（至少 32 个字符，Production 的值跨部署保持不变）。Development 配置 `SITE_URL=https://dev.rustzip.com`；Production 等 `rustzip.com` 完成 DNS 与 Vercel 域名验证后，再配置 `SITE_URL=https://rustzip.com`。
+3. Vercel Neon 集成自动注入 `DATABASE_URL`（连接池）和 `DATABASE_URL_UNPOOLED`（直连）。若手动连接 Neon，也使用这两个变量名，并让它们指向同一个 Neon database/branch；数据库可命名为 `rustzip`，应用不会硬编码数据库名。API 用 `DATABASE_URL`，迁移用 `DATABASE_URL_UNPOOLED`。为 Vercel Preview、Production 配置随机 `TELEMETRY_HASH_SECRET`（至少 32 个字符，Production 的值跨部署保持不变）。Development 配置 `SITE_URL=https://rustzip.dev.yuhuotech.cn`；Production 等 `rustzip.com` 完成 DNS 与 Vercel 域名验证后，再配置 `SITE_URL=https://rustzip.com`。
 4. 连接 Neon 后直接部署。Vercel 的 `npm run build` 会先检查两个数据库 URL 和哈希密钥，再自动执行 Postgres migrations，最后构建 Next.js。迁移按 Drizzle migration ledger 幂等执行；缺少必需变量或迁移失败会让部署失败，避免发布没有数据库表的 API。
 5. 部署 Preview 并验证；Preview 使用 Neon 集成创建的隔离分支，部署时会在该分支应用同一组 migrations。
 6. 部署并绑定正式域名后，将 `https://rustzip.com/api/v1/telemetry` 设置为 GitHub 仓库 Variable `RZ_STATS_URL`。该域名配置完成前不要启用此变量。重新构建/发布桌面安装包后，客户端才会开始向它发送统计。
@@ -56,7 +56,7 @@ API 只接受 `event=activate|heartbeat` 和这 7 个字段，额外字段会拒
 
 本地 `npm run dev` 默认使用 `web/rustzip.local.db` 这个 SQLite 文件。启动时 `predev` 会自动应用 SQLite 迁移；不用安装 PostgreSQL、不用拉取 Vercel 数据库变量，也不会把本地上报写入线上。这个本地数据库文件已加入 `.gitignore`。Vercel Preview / Production 在 `NODE_ENV=production` 下使用 Neon；Vercel 集成会为 Preview 提供独立分支，避免测试数据进入 Production。
 
-Next.js 监听 `0.0.0.0:8035`；Nginx 把 `dev.rustzip.com` 的 HTTPS 请求反向代理到 `http://127.0.0.1:8035`。浏览器访问 `https://dev.rustzip.com` 时不需要写端口。
+Next.js 监听 `0.0.0.0:8035`；Nginx 把 `rustzip.dev.yuhuotech.cn` 的 HTTPS 请求反向代理到 `http://127.0.0.1:8035`。浏览器访问 `https://rustzip.dev.yuhuotech.cn` 时不需要写端口。
 
 Nginx 的 `location /` 可按现有 HTTPS server 配置转发到这个 upstream：
 
@@ -79,7 +79,7 @@ npm ci
 npm run dev
 ```
 
-默认 SQLite 文件名是 `rustzip.local.db`，可用 `LOCAL_DATABASE_URL=file:./其他文件名.db` 修改。开发模式下若未设置 `TELEMETRY_HASH_SECRET`，服务使用仅限本地开发的固定测试密钥；Vercel Preview / Production 必须配置各自的强随机密钥。Development 域名变量可通过 `.env.local` 设置 `SITE_URL=https://dev.rustzip.com`。
+默认 SQLite 文件名是 `rustzip.local.db`，可用 `LOCAL_DATABASE_URL=file:./其他文件名.db` 修改。开发模式下若未设置 `TELEMETRY_HASH_SECRET`，服务使用仅限本地开发的固定测试密钥；Vercel Preview / Production 必须配置各自的强随机密钥。Development 域名变量可通过 `.env.local` 设置 `SITE_URL=https://rustzip.dev.yuhuotech.cn`。
 
 本地 SQLite 数据和 Vercel Neon 数据彼此独立，不会同步。若需要在本地调试 Postgres，可显式设置 `RZ_DATABASE_PROVIDER=postgres` 并配置一个非生产 `DATABASE_URL`；日常官网与接口开发保持 SQLite 即可。
 
@@ -88,7 +88,7 @@ npm run dev
 验证页面与数据库（经 Nginx 域名）：
 
 ```bash
-curl -i https://dev.rustzip.com/api/health
+curl -i https://rustzip.dev.yuhuotech.cn/api/health
 ```
 
 成功应返回 HTTP 200 和 `{"status":"ok","database":"ok"}`。没有有效数据库配置时应返回 503。绕过 Nginx 检查本机 Next.js 进程可请求 `http://127.0.0.1:8035/api/health`。
@@ -96,7 +96,7 @@ curl -i https://dev.rustzip.com/api/health
 验证统计接收、重复事件去重和字段白名单：
 
 ```bash
-curl -i https://dev.rustzip.com/api/v1/telemetry \
+curl -i https://rustzip.dev.yuhuotech.cn/api/v1/telemetry \
   -H 'content-type: application/json' \
   --data '{"event":"activate","install_id":"00000000-0000-4000-8000-000000000001","app_version":"0.1.0","os":"macos","os_version":"15.1","arch":"aarch64","language":"zh-CN"}'
 ```
@@ -136,5 +136,5 @@ npm run db:migrate:postgres         # Neon Postgres
 ## 端口与域名
 
 - 本地 Next.js `dev` 和自托管 `start` 命令都绑定 `0.0.0.0:8035`。
-- 本地域名：`dev.rustzip.com`，由 Nginx 终止 HTTPS 并代理到 `127.0.0.1:8035`；开发环境 `SITE_URL` 设为 `https://dev.rustzip.com`。
+- 本地域名：`rustzip.dev.yuhuotech.cn`，由 Nginx 终止 HTTPS 并代理到 `127.0.0.1:8035`；开发环境 `SITE_URL` 设为 `https://rustzip.dev.yuhuotech.cn`。
 - 生产域名：`rustzip.com`。Vercel 托管时在 Vercel 配置自定义域名与 `SITE_URL=https://rustzip.com`，不需要 Next.js 固定端口；若生产 Node.js 进程由 Nginx 托管，也监听 `0.0.0.0:8035` 并由 Nginx 对外提供无端口 HTTPS 域名。生产域名尚未配置。
