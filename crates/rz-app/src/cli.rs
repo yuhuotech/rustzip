@@ -82,15 +82,28 @@ pub fn list_archive(
     archive: &Path,
     password: Option<&str>,
     encoding: Option<&str>,
+    cancel: &CancelToken,
+    progress: &mut dyn ProgressSink,
 ) -> Result<ArchiveListing> {
     let mut reader = rz_formats::open(archive)?;
+    reader.set_read_control(cancel.clone(), u64::MAX);
     if let Some(encoding) = encoding {
         reader.set_encoding(encoding)?;
     }
     if let Some(password) = password {
         reader.set_password(password)?;
     }
-    let entries = reader.entries()?;
+    let entries = reader.entries_with_progress(cancel, progress)?;
+    cancel.check()?;
+    let bytes_done = entries
+        .iter()
+        .fold(0u64, |total, entry| total.saturating_add(entry.size));
+    progress.update(Progress {
+        files_done: entries.len() as u64,
+        files_total: entries.len() as u64,
+        bytes_done,
+        bytes_total: 0,
+    });
     Ok(ArchiveListing {
         format: reader.format_name().to_string(),
         entries,
@@ -238,4 +251,126 @@ pub fn transform_archive(
         skipped: report.skipped,
         issues: report.issues,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::io::Write;
+
+    fn make_zip(path: &Path) {
+        let mut writer = zip::ZipWriter::new(fs::File::create(path).unwrap());
+        for (name, contents) in [("one.txt", b"one".as_slice()), ("two.txt", b"second")] {
+            writer
+                .start_file(name, zip::write::SimpleFileOptions::default())
+                .unwrap();
+            writer.write_all(contents).unwrap();
+        }
+        writer.finish().unwrap();
+    }
+
+    #[test]
+    fn archive_listing_reports_metadata_progress() {
+        let temp = tempfile::tempdir().unwrap();
+        let archive = temp.path().join("list.zip");
+        make_zip(&archive);
+        let mut updates = Vec::new();
+
+        let listing = list_archive(
+            &archive,
+            None,
+            None,
+            &CancelToken::new(),
+            &mut |progress: Progress| updates.push(progress),
+        )
+        .unwrap();
+
+        assert_eq!(listing.entries.len(), 2);
+        let final_update = updates.last().unwrap();
+        assert_eq!(final_update.files_done, 2);
+        assert_eq!(final_update.files_total, 2);
+        assert_eq!(final_update.bytes_done, 9);
+    }
+
+    #[test]
+    fn archive_listing_can_be_cancelled_during_metadata_scan() {
+        let temp = tempfile::tempdir().unwrap();
+        let archive = temp.path().join("list.zip");
+        make_zip(&archive);
+        let cancel = CancelToken::new();
+        let during_progress = cancel.clone();
+
+        let result = list_archive(&archive, None, None, &cancel, &mut move |_: Progress| {
+            during_progress.cancel()
+        });
+
+        assert!(matches!(result, Err(Error::Cancelled)));
+    }
+
+    #[test]
+    fn streaming_archive_listing_can_be_cancelled_while_skipping_entry_data() {
+        let temp = tempfile::tempdir().unwrap();
+        let large = temp.path().join("large.bin");
+        let small = temp.path().join("small.txt");
+        let contents: Vec<u8> = (0..8 * 1024 * 1024)
+            .map(|index| ((index * 73 + index / 19) % 251) as u8)
+            .collect();
+        fs::write(&large, contents).unwrap();
+        fs::write(&small, b"last").unwrap();
+        let archive = temp.path().join("stream.tar.gz");
+        let mut create_progress = rz_core::NoProgress;
+        create_archive(
+            &[large, small],
+            &archive,
+            &CreateOptions::default(),
+            &CancelToken::new(),
+            &mut create_progress,
+        )
+        .unwrap();
+
+        let cancel = CancelToken::new();
+        let callback_cancel = cancel.clone();
+        let mut cancelled = false;
+        let result = list_archive(&archive, None, None, &cancel, &mut move |_: Progress| {
+            if !cancelled {
+                cancelled = true;
+                callback_cancel.cancel();
+            }
+        });
+
+        assert!(matches!(result, Err(Error::Cancelled)));
+    }
+
+    #[test]
+    fn single_stream_listing_can_be_cancelled_while_counting_unpacked_size() {
+        let temp = tempfile::tempdir().unwrap();
+        let source = temp.path().join("large.txt");
+        let contents: Vec<u8> = (0..4 * 1024 * 1024)
+            .map(|index| ((index * 41 + index / 7) % 251) as u8)
+            .collect();
+        fs::write(&source, contents).unwrap();
+        let archive = temp.path().join("large.txt.gz");
+        let mut create_progress = rz_core::NoProgress;
+        create_archive(
+            &[source],
+            &archive,
+            &CreateOptions::default(),
+            &CancelToken::new(),
+            &mut create_progress,
+        )
+        .unwrap();
+
+        let cancel = CancelToken::new();
+        let callback_cancel = cancel.clone();
+        let mut cancelled = false;
+        let result = list_archive(&archive, None, None, &cancel, &mut move |_: Progress| {
+            if !cancelled {
+                cancelled = true;
+                callback_cancel.cancel();
+            }
+        });
+
+        assert!(matches!(result, Err(Error::Cancelled)));
+    }
 }

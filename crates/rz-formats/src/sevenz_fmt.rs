@@ -1,6 +1,6 @@
 use rz_core::{
-    resolve_threads, ArchiveReader, ArchiveWriter, Caps, CreateOptions, Entry, EntryKind, Error,
-    FileSource, NewEntry, Result,
+    resolve_threads, ArchiveReader, ArchiveWriter, CancelToken, Caps, CreateOptions, Entry,
+    EntryKind, Error, FileSource, NewEntry, NoProgress, Progress, ProgressSink, Result,
 };
 use sevenz_rust2::encoder_options::{AesEncoderOptions, Lzma2Options};
 use sevenz_rust2::{
@@ -152,13 +152,32 @@ impl ArchiveReader for SevenReader {
     }
 
     fn entries(&mut self) -> Result<Vec<Entry>> {
+        self.entries_with_progress(&CancelToken::new(), &mut NoProgress)
+    }
+
+    fn entries_with_progress(
+        &mut self,
+        cancel: &CancelToken,
+        progress: &mut dyn ProgressSink,
+    ) -> Result<Vec<Entry>> {
+        cancel.check()?;
         let r = self.archive()?;
-        Ok(r.archive()
-            .files
-            .iter()
-            .enumerate()
-            .map(|(i, f)| describe(i, f))
-            .collect())
+        let files = &r.archive().files;
+        let mut entries = Vec::with_capacity(files.len());
+        let mut bytes_done = 0u64;
+        for (index, file) in files.iter().enumerate() {
+            cancel.check()?;
+            let entry = describe(index, file);
+            bytes_done = bytes_done.saturating_add(entry.size);
+            entries.push(entry);
+            progress.update(Progress {
+                files_done: index as u64 + 1,
+                files_total: 0,
+                bytes_done,
+                bytes_total: 0,
+            });
+        }
+        Ok(entries)
     }
 
     fn open<'a>(&'a mut self, entry: &Entry) -> Result<Box<dyn Read + 'a>> {

@@ -1,4 +1,7 @@
-use rz_core::{ArchiveReader, Caps, Entry, EntryKind, Error, Result};
+use rz_core::{
+    ArchiveReader, CancelToken, Caps, Entry, EntryKind, Error, NoProgress, Progress, ProgressSink,
+    Result,
+};
 use rz_ffi::libarchive::{EntryInfo, Format as NativeFormat, Reader as NativeReader};
 use std::fs::File;
 use std::io::Read;
@@ -66,10 +69,29 @@ impl ArchiveReader for LibarchiveReader {
     }
 
     fn entries(&mut self) -> Result<Vec<Entry>> {
+        self.entries_with_progress(&CancelToken::new(), &mut NoProgress)
+    }
+
+    fn entries_with_progress(
+        &mut self,
+        cancel: &CancelToken,
+        progress: &mut dyn ProgressSink,
+    ) -> Result<Vec<Entry>> {
+        cancel.check()?;
         let mut reader = self.open_native()?;
         let mut entries = Vec::new();
+        let mut bytes_done = 0u64;
         while let Some(info) = reader.next_entry().map_err(Error::Corrupt)? {
-            entries.push(Self::entry(entries.len(), info));
+            cancel.check()?;
+            let entry = Self::entry(entries.len(), info);
+            bytes_done = bytes_done.saturating_add(entry.size);
+            entries.push(entry);
+            progress.update(Progress {
+                files_done: entries.len() as u64,
+                files_total: 0,
+                bytes_done,
+                bytes_total: 0,
+            });
         }
         Ok(entries)
     }

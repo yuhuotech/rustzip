@@ -66,6 +66,27 @@ pub trait ArchiveReader: Send {
     fn format_name(&self) -> &'static str;
     fn caps(&self) -> Caps;
     fn entries(&mut self) -> Result<Vec<Entry>>;
+    /// Lists entries with cancellation and incremental metadata progress where supported.
+    fn entries_with_progress(
+        &mut self,
+        cancel: &CancelToken,
+        progress: &mut dyn ProgressSink,
+    ) -> Result<Vec<Entry>> {
+        cancel.check()?;
+        let entries = self.entries()?;
+        let mut bytes_done = 0u64;
+        for (index, entry) in entries.iter().enumerate() {
+            cancel.check()?;
+            bytes_done = bytes_done.saturating_add(entry.size);
+            progress.update(Progress {
+                files_done: index as u64 + 1,
+                files_total: 0,
+                bytes_done,
+                bytes_total: 0,
+            });
+        }
+        Ok(entries)
+    }
     /// Sets the password used to open encrypted entries. Formats without
     /// encryption ignore it.
     fn set_password(&mut self, _password: &str) -> Result<()> {

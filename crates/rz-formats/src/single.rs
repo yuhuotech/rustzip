@@ -3,7 +3,7 @@
 use crate::codec::{Compression, Sink};
 use rz_core::{
     ArchiveReader, ArchiveWriter, CancelToken, Caps, CreateOptions, Entry, EntryKind, Error,
-    NewEntry, Result,
+    NewEntry, Progress, ProgressSink, Result,
 };
 use std::fs::File;
 use std::io::{Read, Write};
@@ -44,7 +44,7 @@ impl SingleReader {
         }
     }
 
-    fn unpacked_size(&mut self) -> Result<u64> {
+    fn unpacked_size(&mut self, mut progress: Option<&mut dyn ProgressSink>) -> Result<u64> {
         if let Some(s) = self.size {
             return Ok(s);
         }
@@ -70,6 +70,14 @@ impl SingleReader {
                 return Err(Error::LimitExceeded(
                     "stream exceeds unpacked size limit".into(),
                 ));
+            }
+            if let Some(sink) = progress.as_mut() {
+                (**sink).update(Progress {
+                    files_done: 1,
+                    files_total: 0,
+                    bytes_done: total,
+                    bytes_total: 0,
+                });
             }
         }
         self.size = Some(total);
@@ -101,7 +109,29 @@ impl ArchiveReader for SingleReader {
     }
 
     fn entries(&mut self) -> Result<Vec<Entry>> {
-        let size = self.unpacked_size()?;
+        let size = self.unpacked_size(None)?;
+        let meta = std::fs::metadata(&self.path)?;
+        Ok(vec![Entry {
+            index: 0,
+            path: self.inner_name(),
+            kind: EntryKind::File,
+            size,
+            packed_size: Some(meta.len()),
+            modified: rz_platform::mtime_of(&meta),
+            encrypted: false,
+            unix_mode: None,
+        }])
+    }
+
+    fn entries_with_progress(
+        &mut self,
+        cancel: &CancelToken,
+        progress: &mut dyn ProgressSink,
+    ) -> Result<Vec<Entry>> {
+        cancel.check()?;
+        let max_total = self.control.as_ref().map_or(u64::MAX, |(_, max)| *max);
+        self.control = Some((cancel.clone(), max_total));
+        let size = self.unpacked_size(Some(progress))?;
         let meta = std::fs::metadata(&self.path)?;
         Ok(vec![Entry {
             index: 0,

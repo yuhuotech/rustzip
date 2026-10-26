@@ -1,5 +1,8 @@
 use crate::timeutil::{civil_to_unix, unix_to_civil};
-use rz_core::{ArchiveReader, Caps, Entry, EntryKind, Error, Result};
+use rz_core::{
+    ArchiveReader, CancelToken, Caps, Entry, EntryKind, Error, NoProgress, Progress, ProgressSink,
+    Result,
+};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
@@ -134,15 +137,34 @@ impl ArchiveReader for ZipReader {
     }
 
     fn entries(&mut self) -> Result<Vec<Entry>> {
+        self.entries_with_progress(&CancelToken::new(), &mut NoProgress)
+    }
+
+    fn entries_with_progress(
+        &mut self,
+        cancel: &CancelToken,
+        progress: &mut dyn ProgressSink,
+    ) -> Result<Vec<Entry>> {
+        cancel.check()?;
         let mut raw_names = Vec::with_capacity(self.archive.len());
+        let mut bytes_done = 0u64;
         for index in 0..self.archive.len() {
+            cancel.check()?;
             let f = self.archive.by_index_raw(index).map_err(map_err)?;
+            bytes_done = bytes_done.saturating_add(f.size());
             raw_names.push(f.name_raw().to_vec());
+            progress.update(Progress {
+                files_done: index as u64 + 1,
+                files_total: 0,
+                bytes_done,
+                bytes_total: 0,
+            });
         }
         let forced = self.encoding.is_some();
         let enc = self.encoding.or_else(|| guess_encoding(&raw_names));
         let mut out = Vec::with_capacity(self.archive.len());
         for (index, raw) in raw_names.iter().enumerate() {
+            cancel.check()?;
             let f = self.archive.by_index_raw(index).map_err(map_err)?;
             let mode = f.unix_mode();
             let kind = if f.is_dir() {

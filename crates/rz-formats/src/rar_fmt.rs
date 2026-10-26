@@ -4,7 +4,10 @@
 //! directory. RAR is a legacy format here: it is read, never written.
 
 use crate::timeutil::civil_to_unix;
-use rz_core::{ArchiveReader, Caps, Entry, EntryKind, Error, Result};
+use rz_core::{
+    ArchiveReader, CancelToken, Caps, Entry, EntryKind, Error, NoProgress, Progress, ProgressSink,
+    Result,
+};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use unrar::error::{Code, UnrarError};
@@ -101,14 +104,33 @@ impl ArchiveReader for RarReader {
     }
 
     fn entries(&mut self) -> Result<Vec<Entry>> {
+        self.entries_with_progress(&CancelToken::new(), &mut NoProgress)
+    }
+
+    fn entries_with_progress(
+        &mut self,
+        cancel: &CancelToken,
+        progress: &mut dyn ProgressSink,
+    ) -> Result<Vec<Entry>> {
+        cancel.check()?;
         let mut out = Vec::new();
+        let mut bytes_done = 0u64;
         for (index, header) in self
             .archive()
             .open_for_listing()
             .map_err(map_err)?
             .enumerate()
         {
-            out.push(describe(index, &header.map_err(map_err)?));
+            cancel.check()?;
+            let entry = describe(index, &header.map_err(map_err)?);
+            bytes_done = bytes_done.saturating_add(entry.size);
+            out.push(entry);
+            progress.update(Progress {
+                files_done: out.len() as u64,
+                files_total: 0,
+                bytes_done,
+                bytes_total: 0,
+            });
         }
         Ok(out)
     }

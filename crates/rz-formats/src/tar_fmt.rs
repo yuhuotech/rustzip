@@ -1,10 +1,50 @@
 use crate::codec::{Compression, Sink};
 use rz_core::{
-    ArchiveReader, ArchiveWriter, Caps, CreateOptions, Entry, EntryKind, Error, NewEntry, Result,
+    ArchiveReader, ArchiveWriter, CancelToken, Caps, CreateOptions, Entry, EntryKind, Error,
+    NewEntry, NoProgress, Progress, ProgressSink, Result,
 };
 use std::fs::File;
-use std::io::Read;
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
+const LIST_PROGRESS_INTERVAL: Duration = Duration::from_millis(100);
+const LIST_PROGRESS_BYTES: u64 = 1 << 20;
+
+struct ListingReader<'a> {
+    inner: Box<dyn Read + Send>,
+    cancel: CancelToken,
+    progress: &'a mut dyn ProgressSink,
+    entries_seen: Arc<AtomicU64>,
+    bytes_done: u64,
+    last_reported_bytes: u64,
+    last_update: Instant,
+}
+
+impl Read for ListingReader<'_> {
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        self.cancel.check().map_err(io::Error::other)?;
+        let count = self.inner.read(buffer)?;
+        if count > 0 {
+            self.bytes_done = self.bytes_done.saturating_add(count as u64);
+            if self.bytes_done.saturating_sub(self.last_reported_bytes) >= LIST_PROGRESS_BYTES
+                || self.last_update.elapsed() >= LIST_PROGRESS_INTERVAL
+            {
+                self.progress.update(Progress {
+                    files_done: self.entries_seen.load(Ordering::Relaxed),
+                    files_total: 0,
+                    bytes_done: self.bytes_done,
+                    bytes_total: 0,
+                });
+                self.last_reported_bytes = self.bytes_done;
+                self.last_update = Instant::now();
+            }
+        }
+        Ok(count)
+    }
+}
 
 /// tar is a sequential format. `entries` and `for_each` each make one pass over
 /// the file; `open` rescans, so bulk work should go through `for_each`.
@@ -77,11 +117,47 @@ impl ArchiveReader for TarReader {
     }
 
     fn entries(&mut self) -> Result<Vec<Entry>> {
-        let mut archive = tar::Archive::new(self.stream()?);
+        self.entries_with_progress(&CancelToken::new(), &mut NoProgress)
+    }
+
+    fn entries_with_progress(
+        &mut self,
+        cancel: &CancelToken,
+        progress: &mut dyn ProgressSink,
+    ) -> Result<Vec<Entry>> {
+        cancel.check()?;
+        let entries_seen = Arc::new(AtomicU64::new(0));
+        let mut archive = tar::Archive::new(ListingReader {
+            inner: self.stream()?,
+            cancel: cancel.clone(),
+            progress,
+            entries_seen: Arc::clone(&entries_seen),
+            bytes_done: 0,
+            last_reported_bytes: 0,
+            last_update: Instant::now(),
+        });
         let mut out = Vec::new();
-        for (index, item) in archive.entries().map_err(corrupt)?.enumerate() {
-            out.push(describe(index, &item.map_err(corrupt)?)?);
+        let iterator = archive.entries().map_err(|error| {
+            if cancel.is_cancelled() {
+                Error::Cancelled
+            } else {
+                corrupt(error)
+            }
+        })?;
+        for (index, item) in iterator.enumerate() {
+            cancel.check()?;
+            let item = item.map_err(|error| {
+                if cancel.is_cancelled() {
+                    Error::Cancelled
+                } else {
+                    corrupt(error)
+                }
+            })?;
+            let entry = describe(index, &item)?;
+            out.push(entry);
+            entries_seen.store(index as u64 + 1, Ordering::Relaxed);
         }
+        cancel.check()?;
         Ok(out)
     }
 

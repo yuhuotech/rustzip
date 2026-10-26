@@ -114,10 +114,12 @@ struct TerminalProgress {
 impl ProgressSink for TerminalProgress {
     fn update(&mut self, progress: Progress) {
         let now = Instant::now();
+        let complete = (progress.bytes_total > 0 && progress.bytes_done >= progress.bytes_total)
+            || (progress.files_total > 0 && progress.files_done >= progress.files_total);
         if self
             .last_update
             .is_some_and(|last| now.duration_since(last).as_millis() < 150)
-            && progress.bytes_done < progress.bytes_total
+            && !complete
         {
             return;
         }
@@ -135,7 +137,10 @@ impl ProgressSink for TerminalProgress {
                 self.line_open = false;
             }
         } else {
-            eprint!("\r{} entries", progress.files_done);
+            eprint!(
+                "\r{} items, {} bytes",
+                progress.files_done, progress.bytes_done
+            );
             self.line_open = true;
             if progress.files_total > 0 && progress.files_done >= progress.files_total {
                 eprintln!();
@@ -382,10 +387,14 @@ fn add(archive: &Path, a: &Args) -> Result<()> {
 }
 
 fn list(path: &Path, a: &Args) -> Result<()> {
+    let cancel = cancel_token().map_err(|error| Error::Io(std::io::Error::other(error)))?;
+    let mut progress = TerminalProgress::default();
     let listing = archive_ops::list_archive(
         path,
         a.password.as_ref().map(|password| password.as_str()),
         a.encoding.as_deref(),
+        &cancel,
+        &mut progress,
     )?;
     let mut total = 0u64;
     println!("{:>12}  Name", "Size");

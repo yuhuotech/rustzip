@@ -170,7 +170,7 @@
 
 - CLI 的创建、列表、解压、完整性读取、转换和修复通过 `rz-app::cli`；CLI crate 不直接依赖 `rz-engine` 或 `rz-formats`。长操作使用取消 token 和进度接口。
 - `-p -` 使用隐藏 TTY 提示，`-p @file` 读取密码文件的第一行且上限 4 KiB；不再接受明文密码作为参数。命令行使用 `ctrlc`（MIT OR Apache-2.0）处理 Ctrl+C，密码读取使用 `rpassword`（Apache-2.0）。
-- CLI 列表仍使用现有条目枚举接口，尚未提供取消和进度；这项留在后续工作中。
+- CLI 列表使用 `ArchiveReader::entries_with_progress`；ZIP、7z、tar、RAR、libarchive 和单文件流后端在枚举条目时检查取消并报告进度。单文件流计算解压大小时也可以取消。
 
 ## D23 桌面任务通知与完成后定位
 

@@ -57,10 +57,14 @@ fn add_list_test_extract_round_trip_for_every_format() {
         assert!(o.status.success(), "{ext}: add failed: {:?}", s(&o));
 
         let o = rz(&["l", p(&archive)]);
-        let (stdout, _) = s(&o);
+        let (stdout, stderr) = s(&o);
         assert!(o.status.success());
         assert!(stdout.contains("proj/readme.txt"), "{ext}: {stdout}");
         assert!(stdout.contains("proj/docs/说明.md"), "{ext}: {stdout}");
+        assert!(
+            stderr.contains("items,"),
+            "{ext}: missing listing progress: {stderr}"
+        );
 
         let o = rz(&["t", p(&archive)]);
         assert!(o.status.success(), "{ext}: {:?}", s(&o));
