@@ -1,0 +1,358 @@
+# key<TAB>Русский
+favorites	Избранные места
+home	Главная
+current_archive	Текущий архив
+kind_compress	Сжать
+kind_extract	Извлечь
+kind_test	Проверить
+kind_edit	Изменить
+error_password	Требуется пароль или он указан неверно.
+error_unknown_format	Неизвестный формат файла.
+error_unsupported	Не поддерживается: {detail}
+error_corrupt	Файл повреждён: {detail}
+error_unsafe_path	В архиве обнаружен небезопасный путь, операция отклонена: {path}
+error_limit	Достигнуто ограничение безопасности: {detail}
+error_io	Ошибка чтения или записи: {detail}
+error_cancelled	Отменено
+eta_seconds	{seconds} с
+eta_minutes_seconds	{minutes} мин {seconds} с
+eta_hours_minutes	{hours} ч {minutes} мин
+task_queued	В очереди
+task_paused	Приостановлено
+task_done	Завершено
+task_cancelled	Отменено
+task_failed	Ошибка
+task_remaining	Осталось {time}
+task_enter_password	Введите пароль
+task_continue	Продолжить
+task_pause	Приостановить
+task_cancel	Отменить
+search_archive	Поиск в архиве
+dialog_open_archive	Открыть архив
+dialog_choose_sources	Выберите файлы или папки для сжатия
+dialog_extract_to	Распаковать здесь
+dialog_add_to_archive	Добавить в архив
+notice_folder_open_failed	Не удалось открыть эту папку: {error}
+notice_safe_run	В целях безопасности программы и скрипты не открываются напрямую. Перед запуском проверьте их источник в файловом менеджере.
+notice_select_item	Сначала выберите файл или папку в списке.
+notice_select_file	Сначала выберите файл в списке.
+notice_copied_paths	Скопировано путей: {count}
+notice_read_only	Этот формат архива доступен только для чтения.
+notice_preview_file	Предпросмотр доступен только для файлов.
+notice_prepare_preview	Подготовка {name}…
+notice_external_edit_writeback	Открыто в системном приложении. Сохранённые изменения будут записаны обратно в архив.
+notice_external_read_only	Открыто в системном приложении. Этот архив доступен только для чтения, поэтому изменения не будут записаны.
+notice_preview_too_large	Файл слишком большой для предпросмотра. Распакуйте его, чтобы открыть.
+task_test_passed	{task} завершено: проблем не найдено в элементах — {count}
+task_edit_complete	{task} завершено: теперь в архиве элементов — {count}
+task_complete_count	{task} завершено: файлов — {count}, {size}
+task_password_needed	Для задачи «{task}» нужен пароль
+task_failed_detail	Задача «{task}» не выполнена: {reason}
+open_archive_tooltip	Открыть архив
+encrypted_badge	Зашифрован
+archive_read_only	Архивы {format} доступны только для чтения. Нельзя добавлять, переименовывать и удалять элементы.
+toolbar_extract	Распаковать в…
+toolbar_add	Добавить
+toolbar_test	Проверить
+toolbar_rename	Переименовать
+toolbar_delete	Удалить
+toolbar_preview	Предпросмотр
+settings_tooltip	Настройки
+welcome_drag	Перетащите архив или файлы сюда либо начните ниже.
+welcome_open_archive	Открыть архив
+welcome_new_archive	Создать архив
+welcome_recent	Недавно открытые
+selection_count	Выбрано: {count}
+selection_extract_hint	Выберите «Распаковать выбранное», чтобы извлечь только эти элементы.
+entry_folder	Папка
+entry_link	Ссылка
+detail_original_size	Исходный размер
+detail_packed_size	Размер после сжатия
+detail_saved	Экономия
+detail_modified	Изменён
+detail_file_count	Файлы
+detail_encrypted	Зашифрован
+common_yes	Да
+detail_extract_item	Распаковать этот элемент
+detail_archive_type	Архив {format}
+detail_extract_all	Распаковать всё
+status_task	Задачи
+status_opening	Открытие {name}…
+status_entry_count	Элементов: {count}
+status_check_passed	Проверено
+status_check_failed	Проверка не пройдена
+status_compression_ratio	Сжато до {ratio}% от исходного размера
+status_ready	Готово
+status_new_version	Доступно обновление: {version}
+status_downloading	Загрузка {version}…
+go_up	Вверх
+recent_column_name	Имя
+recent_column_size	Размер
+recent_column_location	Расположение
+recent_column_created	Создан
+recent_column_modified	Изменён
+recent_item_open	Открыть
+recent_item_missing	Не найден
+recent_empty_folder	Папка пуста.
+recent_empty_list	Недавно открытых архивов нет. Открытые архивы будут отображаться здесь.
+recent_clear	Очистить список недавних
+action_extract_here	Распаковать здесь
+action_extract_named	Распаковать в папку с именем
+action_reveal	Показать в папке
+action_rename	Переименовать
+action_remove_from_list	Убрать из списка
+action_enter	Открыть
+action_compress	Сжать
+list_separator	,
+rename_entry_title	Переименовать элемент
+rename_entry_hint	Имя внутри архива изменится, после чего архив будет создан заново.
+rename_archive_title	Переименовать архив
+rename_archive_hint	Изменится имя файла архива на диске.
+trash_folder_title	Удалить эту папку?
+trash_file_title	Удалить этот файл?
+trash_hint	Элемент будет перемещён в корзину, откуда его можно восстановить.
+password_dialog_title	Требуется пароль
+password_dialog_lead	Этот архив зашифрован. Введите пароль, чтобы продолжить.
+password_wrong	Неверный пароль. Попробуйте ещё раз.
+button_confirm	Подтвердить
+delete_archive_folder	Удалить эту папку?
+delete_archive_file	Удалить этот файл?
+delete_archive_many	Удалить выбранные элементы ({count})?
+delete_archive_more	… и ещё {count}
+delete_archive_safe	Для безопасности перед заменой оригинала рядом создаётся и проверяется новый архив. При ошибке оригинал останется без изменений.
+delete_archive_lead	Элементы будут удалены из архива. Это действие нельзя отменить.
+compress_name_label	Имя файла
+compress_format_label	Формат
+compress_preset_label	Предустановка
+preset_fast	Быстрое сжатие
+preset_balanced	Сбалансированное
+preset_smallest	Минимальный размер
+compress_password_label	Пароль
+compress_title	Создать архив
+compress_cancel	Отмена
+compress_start	Создать
+compress_selection	Выбрано {count}: {names}
+compress_name_invalid	Имя файла не может быть пустым, содержать / \\ : или начинаться с точки.
+compress_format_unknown	Не удалось определить формат архива.
+extract_suffix	распаковать
+context_add_here	Добавить файлы сюда…
+context_select_all	Выбрать всё
+context_open_folder	Открыть папку
+context_extract_named	Распаковать в папку «{name}»
+context_copy_path	Скопировать путь
+context_add_to_folder	Добавить файлы в эту папку…
+accent_graphite	Графитовый
+accent_teal	Бирюзовый
+accent_blue	Синий
+accent_violet	Фиолетовый
+accent_rose	Розовый
+entry_count	Элементов: {count}
+accent_custom	Свой цвет
+menu_app	RustZIP
+menu_settings	Настройки…
+menu_quit	Выйти из RustZIP
+menu_file	Файл
+menu_open_archive	Открыть архив…
+menu_new_archive	Создать архив…
+menu_extract_all	Распаковать всё…
+menu_search_archive	Поиск в архиве
+menu_close_tab	Закрыть вкладку
+menu_tools	Инструменты
+close_tab	Закрыть вкладку
+task_progress	Ход выполнения: {task}
+archive_file_list	Список файлов в архиве
+update_installed	Версия {version} загружена, подпись проверена. Следуйте инструкциям установщика.
+update_failed	Не удалось обновить: {error}. Попробуйте позже.
+passwords_cleared	Сохранённые пароли удалены.
+password_placeholder	Введите пароль
+password_optional_placeholder	Оставьте пустым, чтобы не шифровать
+default_archive_name	Архив
+status_recent_missing	Недавние архивы: {total} · отсутствуют: {missing}
+status_recent_count	Недавние архивы: {total}
+status_folder_count	{name} · элементов: {count}
+rename_placeholder	Новое имя
+rename_invalid	Имя не может быть пустым или содержать / \\ : * ? " < > |.
+rename_complete	Переименовано
+rename_exists	В этой папке уже есть файл с таким именем. Выберите другое.
+rename_failed	Не удалось переименовать: {error}
+trash_complete	Перемещено в корзину
+trash_failed	Не удалось удалить: {error}
+view_list	Список
+view_icons	Маленькие значки
+add_location	Добавить расположение…
+remove_location	Убрать расположение
+locations_empty	Здесь автоматически появятся папки открытых архивов.
+directory_empty	В этой папке нет элементов для отображения.
+location_missing	Недоступно
+col_name	Имя
+col_size	Размер
+col_path	Расположение
+col_modified	Изменён
+dir_desktop	Рабочий стол
+dir_downloads	Загрузки
+dir_documents	Документы
+dir_pictures	Изображения
+dir_music	Музыка
+dir_videos	Видео
+tools	Инструменты
+processed	Обработано: {bytes}
+case_conflict	Целевой диск считает «{first}» и «{second}» одним именем. Операция остановлена до записи. Используйте диск с учётом регистра, чтобы сохранить оба файла.
+destination_exists	В месте назначения уже есть файл с таким именем. Выберите новый путь или пустую папку либо измените обработку конфликтов в настройках.
+convert	Преобразовать архив
+repair	Восстановить архив
+passwords	Хранилище паролей
+add_folder	Добавить папку…
+add_password	Добавить пароль
+open	Открыть
+remove	Убрать
+edit	Изменить
+delete	Удалить
+refresh	Обновить
+empty_favorites	Сохраните здесь папки для быстрого доступа.
+empty_passwords	Сохранённых паролей нет. В списке отображаются только подписи, а не секреты.
+memory_only	Системное хранилище ключей недоступно. Пароли сохраняются только до завершения текущего сеанса.
+password_hint	Используйте имя файла архива как подпись. Включите «Запоминать пароли» в настройках, чтобы пароль подставлялся автоматически.
+label	Подпись / имя файла архива
+secret	Пароль
+cancel	Отмена
+save	Сохранить
+busy	Выполняется…
+password_required	Введите короткую подпись и пароль. Пути и зарезервированная подпись __labels__ не допускаются.
+duplicate_label	Такая подпись уже есть. Измените существующую запись или выберите другую.
+vault_error	Не удалось получить доступ к хранилищу ключей. Разблокируйте его и повторите попытку.
+confirm_delete	Удалить сохранённый пароль?
+delete_hint	Будет удалена только запись из хранилища паролей. Убедитесь, что помните пароль.
+source	Исходный архив
+choose_source	Выбрать архив…
+source_current	Открыт сейчас
+source_empty	Архив не выбран
+change_source	Изменить…
+source_password	Пароль исходного архива (необязательно)
+output_password	Пароль нового архива (пусто — без шифрования)
+format	Формат результата
+convert_hint	Преобразовать поток данных в новый архив. Проверьте шифрование результата. Исходный архив останется без изменений.
+repair_hint	Сохранить читаемые файлы в новый архив. Повреждённые данные могут быть потеряны. После завершения просмотрите отчёт.
+unencrypted	Результат не будет зашифрован. Чтобы защитить его, выберите ZIP / 7z и задайте пароль.
+choose_output	Сохранить новый архив
+start_convert	Сохранить и преобразовать…
+start_repair	Сохранить и восстановить…
+report	Отчёт о восстановлении
+report_counts	Восстановлено элементов: {files} · пропущено: {skipped}
+report_warnings	Предупреждения / проблемы восстановления
+report_complete	Ничего не пропущено. Восстановленный архив прошёл проверку целостности.
+report_truncated	Показаны только первые 1000 подробностей.
+issue_directory	Не удалось прочитать каталог ZIP. Использованы локальные заголовки; разрешения и типы ссылок могут быть потеряны, неизвестные ссылки станут обычными файлами.
+issue_local	Без каталога нельзя безопасно восстановить зашифрованные, ZIP64-, усечённые записи и записи с дескрипторами.
+issue_link	Символические ссылки пока нельзя сохранить; они пропущены.
+issue_path	Небезопасный путь элемента; элемент пропущен. Проверьте исходный архив.
+issue_checksum	Проверка целостности не пройдена; элемент пропущен. Попробуйте другую копию источника.
+issue_truncated	Данные усечены и не могут быть восстановлены полностью; элемент пропущен.
+issue_solid	Солидный блок повреждён; этот элемент не удаётся декодировать.
+issue_conflict	Повторяющееся имя файла или конфликт с папкой; элемент пропущен.
+open_folder	Показать выходной файл
+close	Закрыть
+report_button	Посмотреть отчёт
+favorite_error	Не удалось сохранить избранное. Проверьте права доступа к папке настроек.
+settings_error	Не удалось сохранить настройки. Проверьте права доступа к папке настроек.
+folder_error	Не удалось открыть расположение. Убедитесь, что папка существует и доступна.
+folder_busy	Загрузка…
+converted	Преобразование завершено. Новый архив прошёл проверку целостности.
+recovered	Восстановление завершено. Проверьте в отчёте пропущенные элементы.
+open_not_archive	Выбранный файл не является архивом.
+open_unsupported	Сжатие, распаковка и управление этим типом файлов пока не поддерживаются.
+open_corrupt	Этот архив повреждён и не может быть открыт.
+open_missing	Файл не найден. Возможно, он перемещён или удалён.
+open_denied	У вас нет разрешения читать этот файл. Проверьте права доступа.
+open_limit	Архив достиг ограничения безопасности, открытие остановлено.
+open_failed	Не удалось прочитать файл. Убедитесь, что он не используется, и повторите попытку.
+history	История задач
+history_empty	История пока пуста. Завершённые задачи сжатия, распаковки и проверки будут отображаться здесь.
+history_clear	Очистить историю
+history_hint	Сохраняются последние 200 записей; записываются только имена файлов и результаты.
+history_reveal_result	Показать результат
+history_running	Выполняется
+history_failed	Ошибка
+history_succeeded	Завершено
+history_cancelled	Отменено
+history_new	Новое
+volume_size	Размер тома (МиБ; пусто — без разделения)
+volume_invalid	Укажите положительное целое число МиБ для размера тома.
+preset_email_share	Для отправки по почте (тома по 20 МиБ)
+preset_portable	Совместимость с разными платформами
+dict_size	Размер словаря (МиБ; пусто — автоматически)
+dict_invalid	Укажите размер словаря от 1 до 64 МиБ.
+solid_size	Размер солидного блока (МиБ; пусто — весь архив, 0 — отключить)
+solid_invalid	Укажите 0 или положительное целое число МиБ.
+hash	Вычислить контрольные суммы
+hash_complete	Контрольные суммы файла вычислены
+task_resource_limit	Задача достигла ограничения ресурсов или безопасности. Проверьте параметры и повторите попытку.
+open_after_extract	Открывать папку после распаковки
+open_after_extract_hint	После успешной распаковки показать папку результата в файловом менеджере.
+task_notifications	Системные уведомления
+task_notifications_hint	Короткое уведомление при завершении или ошибке задачи; имена файлов и пути не включаются.
+notification_done	Фоновая задача завершена
+notification_failed	Фоновая задача завершилась с ошибкой
+duplicate_scan	Поиск дубликатов
+duplicate_none	Совпадающих файлов не найдено. Можно продолжить сжатие.
+duplicate_found	Найдено групп дубликатов: {groups} (дополнительных файлов: {files}, {size}). При продолжении все файлы сохранятся.
+duplicate_scan_limit	Превышен предел сканирования, поэтому поиск дубликатов не выполнен.
+duplicate_scan_limit_title	Поиск дубликатов не завершён
+duplicate_scan_limit_hint	Можно сжать выбранные файлы. В этом запуске дубликаты не проверялись, файлы не удалялись.
+duplicate_prompt_title	Найдены дубликаты
+duplicate_prompt_lead	Хеши содержимого совпадают. При продолжении сохранятся все файлы, ничего не будет удалено.
+duplicate_continue	Продолжить сжатие
+duplicate_cancel	Отменить сжатие
+duplicate_cancelled	Сжатие отменено
+duplicate_group_files	Файлов: {count}
+duplicate_more	Не показано групп: {count}
+duplicate_file_more	Ещё файлов: {count}
+language	Язык интерфейса
+language_auto	Использовать язык системы
+language_zh_cn	Упрощённый китайский
+language_en	Английский
+language_es	Испанский
+language_fr	Французский
+language_de	Немецкий
+language_ja	Японский
+language_ko	Корейский
+language_ar	Арабский
+language_pt	Португальский
+language_ru	Русский
+settings_title	Настройки
+settings_hint	Изменения сохраняются сразу.
+settings_done	Готово
+settings_appearance	Внешний вид
+theme_system	Как в системе
+theme_light	Светлая
+theme_dark	Тёмная
+settings_accent	Цвет акцента
+settings_conflict	Если файл уже существует
+settings_keep_both	Сохранить оба
+settings_skip	Пропустить
+settings_replace	Заменить
+settings_smart_extract	Умная распаковка
+settings_smart_extract_hint	Если в архиве есть несколько файлов в корне, поместить их в папку с именем архива.
+settings_check_updates	Автоматически проверять обновления
+settings_check_updates_hint	При запуске искать новые версии в фоновом режиме. Подписи пакетов обновлений проверяются.
+settings_remember_passwords	Запоминать пароли
+settings_remember_passwords_hint	После открытия зашифрованного архива сохранить пароль в системном хранилище ключей и попробовать его в следующий раз.
+settings_forget_passwords	Удалить сохранённые пароли
+settings_install_stats	Анонимная статистика установок
+settings_install_stats_hint	Передаются только анонимный идентификатор, версия, система и язык. Имена файлов и действия не собираются.
+settings_show_stats_privacy	Просмотреть сведения о статистике и выбрать снова…
+privacy_sent_title	Что отправляется
+privacy_sent_fields	Случайный ID · версия приложения · ОС и версия · архитектура процессора · язык интерфейса
+privacy_never_title	Что никогда не собирается
+privacy_never_fields	Имена файлов, пути, содержимое и действия пользователя.
+privacy_timing	Один раз при первом использовании, затем не чаще раза в день. Неудачные отправки отбрасываются и не влияют на приложение. Выбор можно изменить в настройках в любое время.
+privacy_choice_joined	Текущий выбор: участвовать
+privacy_choice_left	Текущий выбор: не участвовать
+privacy_return	Назад
+privacy_decline	Не участвовать
+privacy_participate	Участвовать
+privacy_ok	ОК
+privacy_title	Об анонимной статистике
+privacy_intro	RustZIP — бесплатное ПО с открытым исходным кодом. Чтобы понимать, сколько людей им пользуется, мы отправляем небольшой набор полностью анонимных данных.
+sidebar_locations	Расположения
+sidebar_recent	Недавние
+sidebar_quick_actions	Быстрые действия

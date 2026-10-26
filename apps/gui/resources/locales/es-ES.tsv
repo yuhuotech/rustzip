@@ -1,0 +1,358 @@
+# key<TAB>Spanish (Spain)
+favorites	Favoritos
+home	Inicio
+current_archive	Archivo actual
+kind_compress	Comprimir
+kind_extract	Extraer
+kind_test	Verificar
+kind_edit	Modificar
+error_password	Se necesita una contraseña o no es correcta.
+error_unknown_format	Formato de archivo desconocido.
+error_unsupported	No compatible: {detail}
+error_corrupt	El archivo está dañado: {detail}
+error_unsafe_path	El archivo comprimido contiene una ruta no segura que se ha rechazado: {path}
+error_limit	Se ha alcanzado un límite de seguridad: {detail}
+error_io	Error de lectura o escritura: {detail}
+error_cancelled	Cancelado
+eta_seconds	{seconds} s
+eta_minutes_seconds	{minutes} min {seconds} s
+eta_hours_minutes	{hours} h {minutes} min
+task_queued	En cola
+task_paused	En pausa
+task_done	Finalizado
+task_cancelled	Cancelado
+task_failed	Error
+task_remaining	Quedan {time}
+task_enter_password	Introducir contraseña
+task_continue	Reanudar
+task_pause	Pausar
+task_cancel	Cancelar
+search_archive	Buscar en el archivo comprimido
+dialog_open_archive	Abrir archivo comprimido
+dialog_choose_sources	Selecciona archivos o carpetas para comprimir
+dialog_extract_to	Extraer aquí
+dialog_add_to_archive	Añadir al archivo comprimido
+notice_folder_open_failed	No se pudo abrir esta carpeta: {error}
+notice_safe_run	Por seguridad, los programas y scripts no se abren directamente. Comprueba su origen en el gestor de archivos antes de ejecutarlos.
+notice_select_item	Primero selecciona un archivo o una carpeta de la lista.
+notice_select_file	Primero selecciona un archivo de la lista.
+notice_copied_paths	Se han copiado {count} rutas
+notice_read_only	Este formato de archivo comprimido es de solo lectura.
+notice_preview_file	La vista previa solo está disponible para archivos.
+notice_prepare_preview	Preparando {name}…
+notice_external_edit_writeback	Abierto en la aplicación del sistema. Los cambios guardados se escribirán en el archivo comprimido.
+notice_external_read_only	Abierto en la aplicación del sistema. Este archivo es de solo lectura, así que no se guardarán los cambios.
+notice_preview_too_large	El archivo es demasiado grande para la vista previa. Extráelo para verlo.
+task_test_passed	{task} completado: no se han encontrado problemas en {count} elementos
+task_edit_complete	{task} completado: el archivo comprimido ahora contiene {count} elementos
+task_complete_count	{task} completado: {count} archivos, {size}
+task_password_needed	{task} necesita una contraseña
+task_failed_detail	{task} ha fallado: {reason}
+open_archive_tooltip	Abrir archivo comprimido
+encrypted_badge	Cifrado
+archive_read_only	Los archivos {format} son de solo lectura. No puedes añadir, cambiar el nombre ni eliminar elementos.
+toolbar_extract	Extraer en…
+toolbar_add	Añadir
+toolbar_test	Verificar
+toolbar_rename	Cambiar nombre
+toolbar_delete	Eliminar
+toolbar_preview	Vista previa
+settings_tooltip	Ajustes
+welcome_drag	Arrastra aquí un archivo comprimido o archivos, o empieza abajo.
+welcome_open_archive	Abrir archivo comprimido
+welcome_new_archive	Crear archivo comprimido
+welcome_recent	Abiertos recientemente
+selection_count	{count} seleccionados
+selection_extract_hint	Elige «Extraer selección» para extraer solo estos elementos.
+entry_folder	Carpeta
+entry_link	Enlace
+detail_original_size	Tamaño original
+detail_packed_size	Tamaño comprimido
+detail_saved	Ahorrado
+detail_modified	Modificado
+detail_file_count	Archivos
+detail_encrypted	Cifrado
+common_yes	Sí
+detail_extract_item	Extraer este elemento
+detail_archive_type	Archivo {format}
+detail_extract_all	Extraer todo
+status_task	Tareas
+status_opening	Abriendo {name}…
+status_entry_count	{count} elementos
+status_check_passed	Verificado
+status_check_failed	Error de verificación
+status_compression_ratio	Comprimido al {ratio} % del tamaño original
+status_ready	Listo
+status_new_version	Actualización disponible: {version}
+status_downloading	Descargando {version}…
+go_up	Subir
+recent_column_name	Nombre
+recent_column_size	Tamaño
+recent_column_location	Ubicación
+recent_column_created	Creado
+recent_column_modified	Modificado
+recent_item_open	Abrir
+recent_item_missing	No encontrado
+recent_empty_folder	Esta carpeta está vacía.
+recent_empty_list	No hay archivos comprimidos recientes. Los que abras aparecerán aquí.
+recent_clear	Borrar lista de recientes
+action_extract_here	Extraer aquí
+action_extract_named	Extraer en una carpeta con nombre
+action_reveal	Mostrar en la carpeta
+action_rename	Cambiar nombre
+action_remove_from_list	Quitar de la lista
+action_enter	Entrar
+action_compress	Comprimir
+list_separator	,
+rename_entry_title	Cambiar nombre del elemento
+rename_entry_hint	Cambiará el nombre dentro del archivo comprimido y lo reconstruirá.
+rename_archive_title	Cambiar nombre del archivo comprimido
+rename_archive_hint	Cambiará el nombre del archivo comprimido en el disco.
+trash_folder_title	¿Eliminar esta carpeta?
+trash_file_title	¿Eliminar este archivo?
+trash_hint	Se moverá a la papelera, desde donde podrás restaurarlo.
+password_dialog_title	Se necesita una contraseña
+password_dialog_lead	Este archivo comprimido está cifrado. Introduce la contraseña para continuar.
+password_wrong	La contraseña no es correcta. Inténtalo de nuevo.
+button_confirm	Confirmar
+delete_archive_folder	¿Eliminar esta carpeta?
+delete_archive_file	¿Eliminar este archivo?
+delete_archive_many	¿Eliminar los {count} elementos seleccionados?
+delete_archive_more	… y {count} más
+delete_archive_safe	Por seguridad, se creará y comprobará un archivo comprimido nuevo junto al original antes de sustituirlo. Si algo falla, el original no se modificará.
+delete_archive_lead	Los elementos se quitarán del archivo comprimido. Esta acción no se puede deshacer.
+compress_name_label	Nombre de archivo
+compress_format_label	Formato
+compress_preset_label	Preajuste
+preset_fast	Rápido
+preset_balanced	Equilibrado
+preset_smallest	Máxima compresión
+compress_password_label	Contraseña
+compress_title	Crear archivo comprimido
+compress_cancel	Cancelar
+compress_start	Crear
+compress_selection	{count} seleccionados: {names}
+compress_name_invalid	El nombre del archivo no puede estar vacío, contener / \\ : ni empezar por un punto.
+compress_format_unknown	No se pudo determinar el formato del archivo comprimido.
+extract_suffix	extraer
+context_add_here	Añadir archivos aquí…
+context_select_all	Seleccionar todo
+context_open_folder	Abrir carpeta
+context_extract_named	Extraer en «{name}»
+context_copy_path	Copiar ruta
+context_add_to_folder	Añadir archivos a esta carpeta…
+accent_graphite	Grafito
+accent_teal	Verde azulado
+accent_blue	Azul
+accent_violet	Violeta
+accent_rose	Rosa
+entry_count	{count} elementos
+accent_custom	Personalizado
+menu_app	RustZIP
+menu_settings	Ajustes…
+menu_quit	Salir de RustZIP
+menu_file	Archivo
+menu_open_archive	Abrir archivo comprimido…
+menu_new_archive	Crear archivo comprimido…
+menu_extract_all	Extraer todo…
+menu_search_archive	Buscar en el archivo comprimido
+menu_close_tab	Cerrar pestaña
+menu_tools	Herramientas
+close_tab	Cerrar pestaña
+task_progress	Progreso de la tarea: {task}
+archive_file_list	Lista de archivos del archivo comprimido
+update_installed	La versión {version} se ha descargado y verificado. Sigue las instrucciones del instalador.
+update_failed	La actualización ha fallado: {error}. Puedes volver a intentarlo más tarde.
+passwords_cleared	Se han borrado las contraseñas guardadas.
+password_placeholder	Introducir contraseña
+password_optional_placeholder	Déjalo vacío para no cifrar
+default_archive_name	Archivo
+status_recent_missing	{total} archivos comprimidos recientes · faltan {missing}
+status_recent_count	{total} archivos comprimidos recientes
+status_folder_count	{name} · {count} elementos
+rename_placeholder	Nombre nuevo
+rename_invalid	El nombre no puede estar vacío ni contener / \\ : * ? " < > |.
+rename_complete	Nombre cambiado
+rename_exists	Ya existe un archivo con ese nombre en esta carpeta. Elige otro nombre.
+rename_failed	No se pudo cambiar el nombre: {error}
+trash_complete	Movido a la papelera
+trash_failed	No se pudo eliminar: {error}
+view_list	Lista
+view_icons	Iconos pequeños
+add_location	Añadir ubicación…
+remove_location	Quitar ubicación
+locations_empty	Las carpetas de los archivos comprimidos que abras aparecerán aquí automáticamente.
+directory_empty	Esta carpeta no contiene elementos que se puedan mostrar.
+location_missing	No disponible
+col_name	Nombre
+col_size	Tamaño
+col_path	Ubicación
+col_modified	Modificado
+dir_desktop	Escritorio
+dir_downloads	Descargas
+dir_documents	Documentos
+dir_pictures	Imágenes
+dir_music	Música
+dir_videos	Vídeos
+tools	Herramientas
+processed	Procesados {bytes}
+case_conflict	El destino considera que «{first}» y «{second}» tienen el mismo nombre. Se ha detenido antes de escribir. Usa un volumen que distinga mayúsculas y minúsculas para conservar ambos archivos.
+destination_exists	Ya existe un archivo con el mismo nombre en el destino. Elige otra ruta o una carpeta vacía, o cambia el comportamiento de conflictos en los ajustes.
+convert	Convertir
+repair	Reparar
+passwords	Gestor de contraseñas
+add_folder	Añadir carpeta…
+add_password	Añadir contraseña
+open	Abrir
+remove	Quitar
+edit	Editar
+delete	Eliminar
+refresh	Actualizar
+empty_favorites	Guarda aquí carpetas para acceder a ellas rápidamente.
+empty_passwords	No hay contraseñas guardadas. Esta lista solo muestra etiquetas, nunca secretos.
+memory_only	El llavero del sistema no está disponible. Las contraseñas solo se conservarán durante esta sesión.
+password_hint	Usa el nombre del archivo comprimido como etiqueta. Activa «Recordar contraseñas» en Ajustes para probarla automáticamente.
+label	Etiqueta / nombre del archivo comprimido
+secret	Contraseña
+cancel	Cancelar
+save	Guardar
+busy	Procesando…
+password_required	Introduce una etiqueta breve y una contraseña. No se permiten rutas ni la etiqueta reservada __labels__.
+duplicate_label	Esta etiqueta ya existe. Edita esa entrada o elige otra.
+vault_error	No se puede acceder al llavero. Desbloquéalo e inténtalo de nuevo.
+confirm_delete	¿Eliminar esta contraseña guardada?
+delete_hint	Esto solo elimina la entrada del gestor de contraseñas. Asegúrate de recordar la contraseña.
+source	Archivo comprimido de origen
+choose_source	Elegir archivo comprimido…
+source_current	Abierto actualmente
+source_empty	No se ha seleccionado ningún archivo comprimido
+change_source	Cambiar…
+source_password	Contraseña de origen (opcional)
+output_password	Contraseña del nuevo archivo (vacío significa sin cifrar)
+format	Formato de salida
+convert_hint	Convierte el contenido en flujo y guarda un archivo nuevo. Comprueba el cifrado de salida. El archivo de origen se conserva.
+repair_hint	Recupera los archivos legibles en un archivo nuevo. Puede que no se puedan recuperar datos dañados. Revisa el informe al terminar.
+unencrypted	El archivo de salida no está cifrado. Elige ZIP / 7z y establece una contraseña para protegerlo.
+choose_output	Guardar el nuevo archivo comprimido
+start_convert	Guardar y convertir…
+start_repair	Guardar y recuperar…
+report	Informe de recuperación
+report_counts	Se han recuperado {files} elementos · se han omitido {skipped}
+report_warnings	Advertencias / problemas de recuperación
+report_complete	No se ha omitido ningún elemento. El archivo recuperado ha superado la comprobación de integridad.
+report_truncated	Solo se muestran los primeros 1000 detalles.
+issue_directory	No se puede leer el directorio ZIP. Se han usado las cabeceras locales; podrían perderse permisos y tipos de enlace, y los enlaces no identificados se convertirán en archivos normales.
+issue_local	Sin el directorio, no es seguro recuperar entradas cifradas, ZIP64, con descriptor o truncadas.
+issue_link	No se pueden conservar los enlaces simbólicos por ahora; se han omitido.
+issue_path	La ruta de la entrada no es segura y se ha omitido. Comprueba el archivo comprimido de origen.
+issue_checksum	Ha fallado la comprobación de integridad. Se ha omitido; prueba con otra copia del origen.
+issue_truncated	Los datos están truncados y no se pueden recuperar por completo. Se han omitido.
+issue_solid	El bloque sólido está dañado y no se puede descodificar esta entrada.
+issue_conflict	Se ha omitido por un nombre duplicado o un conflicto entre archivo y carpeta.
+open_folder	Mostrar archivo de salida
+close	Cerrar
+report_button	Ver informe
+favorite_error	No se pueden guardar las ubicaciones favoritas. Comprueba los permisos de la carpeta de ajustes.
+settings_error	No se pueden guardar los ajustes. Comprueba los permisos de la carpeta de ajustes.
+folder_error	No se puede abrir esta ubicación. Comprueba que la carpeta exista y que tengas acceso.
+folder_busy	Cargando…
+converted	Conversión completada. El nuevo archivo comprimido ha superado la comprobación de integridad.
+recovered	Recuperación completada. Revisa el informe para ver los elementos omitidos.
+open_not_archive	El archivo seleccionado no es un archivo comprimido.
+open_unsupported	Aún no se admite comprimir, extraer ni administrar este tipo de archivo.
+open_corrupt	Este archivo comprimido está dañado y no se puede abrir.
+open_missing	No se ha encontrado el archivo. Puede que se haya movido o eliminado.
+open_denied	No tienes permiso para leer este archivo. Comprueba sus permisos.
+open_limit	Este archivo comprimido ha alcanzado un límite de seguridad y se ha detenido su apertura.
+open_failed	No se pudo leer el archivo. Comprueba que no esté en uso e inténtalo de nuevo.
+history	Historial de tareas
+history_empty	Aún no hay tareas en el historial. Las tareas de compresión, extracción y verificación aparecerán aquí al terminar.
+history_clear	Borrar historial
+history_hint	Se conservan las 200 entradas más recientes; solo se registran nombres de archivo y resultados.
+history_reveal_result	Mostrar resultado
+history_running	En curso
+history_failed	Error
+history_succeeded	Completada
+history_cancelled	Cancelada
+history_new	Nuevo
+volume_size	Tamaño de cada parte (MiB; vacío significa sin dividir)
+volume_invalid	Introduce un número entero positivo de MiB para el tamaño de cada parte.
+preset_email_share	Compartir por correo (partes de 20 MiB)
+preset_portable	Compatible entre plataformas
+dict_size	Tamaño del diccionario (MiB; vacío significa automático)
+dict_invalid	Introduce un tamaño de diccionario de entre 1 y 64 MiB.
+solid_size	Tamaño del bloque sólido (MiB; vacío significa archivo completo, 0 desactiva el modo sólido)
+solid_invalid	Introduce 0 o un número entero positivo de MiB.
+hash	Calcular sumas de verificación
+hash_complete	Se han calculado las sumas de verificación del archivo
+task_resource_limit	Esta tarea ha alcanzado un límite de recursos o seguridad. Revisa los ajustes e inténtalo de nuevo.
+open_after_extract	Abrir la carpeta al terminar de extraer
+open_after_extract_hint	Tras extraer correctamente, muestra la carpeta de destino en el gestor de archivos.
+task_notifications	Notificaciones del sistema
+task_notifications_hint	Envía una notificación breve cuando una tarea termine o falle; no incluye nombres ni rutas.
+notification_done	Una tarea en segundo plano ha terminado
+notification_failed	Ha fallado una tarea en segundo plano
+duplicate_scan	Buscar archivos duplicados
+duplicate_none	No se han encontrado archivos idénticos. Puedes continuar con la compresión.
+duplicate_found	Se han encontrado {groups} grupos de duplicados ({files} archivos adicionales, {size}). Si continúas, se conservarán todos.
+duplicate_scan_limit	Se ha superado el límite de análisis. No se han podido buscar duplicados.
+duplicate_scan_limit_title	Análisis de duplicados incompleto
+duplicate_scan_limit_hint	Puedes comprimir los archivos seleccionados. No se han comprobado los duplicados ni se ha eliminado nada.
+duplicate_prompt_title	Se han encontrado archivos duplicados
+duplicate_prompt_lead	Los hashes de contenido coinciden. Si continúas, se conservarán todos los archivos; no se eliminará ninguno.
+duplicate_continue	Continuar con la compresión
+duplicate_cancel	Cancelar compresión
+duplicate_cancelled	Se ha cancelado la compresión
+duplicate_group_files	{count} archivos
+duplicate_more	Quedan {count} grupos sin mostrar
+duplicate_file_more	Quedan {count} archivos más
+language	Idioma de la interfaz
+language_auto	Seguir el idioma del sistema
+language_zh_cn	Chino simplificado
+language_en	Inglés
+language_es	Español
+language_fr	Francés
+language_de	Alemán
+language_ja	Japonés
+language_ko	Coreano
+language_ar	Árabe
+language_pt	Portugués
+language_ru	Ruso
+settings_title	Ajustes
+settings_hint	Los cambios se guardan al instante.
+settings_done	Listo
+settings_appearance	Apariencia
+theme_system	Seguir el sistema
+theme_light	Claro
+theme_dark	Oscuro
+settings_accent	Color de énfasis
+settings_conflict	Si ya existe un archivo
+settings_keep_both	Conservar ambos
+settings_skip	Omitir
+settings_replace	Reemplazar
+settings_smart_extract	Extracción inteligente
+settings_smart_extract_hint	Si el archivo comprimido contiene varios archivos sueltos, guárdalos en una carpeta con su nombre.
+settings_check_updates	Buscar actualizaciones automáticamente
+settings_check_updates_hint	Busca nuevas versiones en segundo plano al iniciar. Se verifica la firma de los paquetes de actualización.
+settings_remember_passwords	Recordar contraseñas
+settings_remember_passwords_hint	Al abrir un archivo cifrado, guarda su contraseña en el llavero del sistema y pruébala la próxima vez.
+settings_forget_passwords	Borrar contraseñas guardadas
+settings_install_stats	Estadísticas anónimas de instalación
+settings_install_stats_hint	Solo se envían un identificador anónimo, la versión, el sistema y el idioma. No se recopilan nombres de archivos ni actividad.
+settings_show_stats_privacy	Ver detalles de las estadísticas y volver a elegir…
+privacy_sent_title	Datos que se envían
+privacy_sent_fields	Identificador aleatorio · versión de la aplicación · sistema y versión · arquitectura de CPU · idioma de la interfaz
+privacy_never_title	Datos que nunca se recopilan
+privacy_never_fields	Nombres de archivos, rutas, contenido ni actividad de uso.
+privacy_timing	Se envía una vez al usar la aplicación por primera vez y, después, como máximo una vez al día. Los envíos fallidos se descartan y no afectan a la aplicación. Puedes cambiar esta opción en Ajustes cuando quieras.
+privacy_choice_joined	Opción actual: participa
+privacy_choice_left	Opción actual: no participa
+privacy_return	Volver
+privacy_decline	No participar
+privacy_participate	Participar
+privacy_ok	Aceptar
+privacy_title	Acerca de las estadísticas anónimas
+privacy_intro	RustZIP es un programa gratuito y de código abierto. Para saber cuántas personas lo usan, enviamos un pequeño conjunto de datos anónimos.
+sidebar_locations	Ubicaciones
+sidebar_recent	Recientes
+sidebar_quick_actions	Acciones

@@ -1,0 +1,358 @@
+# key<TAB>Deutsch
+favorites	Favoriten
+home	Startseite
+current_archive	Aktuelles Archiv
+kind_compress	Komprimieren
+kind_extract	Entpacken
+kind_test	Prüfen
+kind_edit	Ändern
+error_password	Ein Passwort ist erforderlich oder falsch.
+error_unknown_format	Unbekanntes Dateiformat.
+error_unsupported	Nicht unterstützt: {detail}
+error_corrupt	Die Datei ist beschädigt: {detail}
+error_unsafe_path	Das Archiv enthält einen unsicheren Pfad, der abgewiesen wurde: {path}
+error_limit	Eine Sicherheitsgrenze wurde erreicht: {detail}
+error_io	Lese- oder Schreibfehler: {detail}
+error_cancelled	Abgebrochen
+eta_seconds	{seconds} s
+eta_minutes_seconds	{minutes} min {seconds} s
+eta_hours_minutes	{hours} h {minutes} min
+task_queued	In Warteschlange
+task_paused	Pausiert
+task_done	Abgeschlossen
+task_cancelled	Abgebrochen
+task_failed	Fehlgeschlagen
+task_remaining	Noch {time}
+task_enter_password	Passwort eingeben
+task_continue	Fortsetzen
+task_pause	Pausieren
+task_cancel	Abbrechen
+search_archive	Im Archiv suchen
+dialog_open_archive	Archiv öffnen
+dialog_choose_sources	Dateien oder Ordner zum Komprimieren auswählen
+dialog_extract_to	Hier entpacken
+dialog_add_to_archive	Zum Archiv hinzufügen
+notice_folder_open_failed	Dieser Ordner konnte nicht geöffnet werden: {error}
+notice_safe_run	Aus Sicherheitsgründen werden Programme und Skripte nicht direkt geöffnet. Prüfe ihre Herkunft im Dateimanager, bevor du sie ausführst.
+notice_select_item	Wähle zuerst eine Datei oder einen Ordner aus der Liste aus.
+notice_select_file	Wähle zuerst eine Datei aus der Liste aus.
+notice_copied_paths	{count} Pfade kopiert
+notice_read_only	Dieses Archivformat ist schreibgeschützt.
+notice_preview_file	Die Vorschau ist nur für Dateien verfügbar.
+notice_prepare_preview	{name} wird vorbereitet…
+notice_external_edit_writeback	In der System-App geöffnet. Gespeicherte Änderungen werden zurück ins Archiv geschrieben.
+notice_external_read_only	In der System-App geöffnet. Dieses Archiv ist schreibgeschützt, Änderungen werden nicht zurückgeschrieben.
+notice_preview_too_large	Diese Datei ist für eine Vorschau zu groß. Entpacke sie, um sie anzusehen.
+task_test_passed	{task} abgeschlossen: Keine Probleme in {count} Einträgen gefunden
+task_edit_complete	{task} abgeschlossen: Das Archiv enthält jetzt {count} Elemente
+task_complete_count	{task} abgeschlossen: {count} Dateien, {size}
+task_password_needed	{task} benötigt ein Passwort
+task_failed_detail	{task} fehlgeschlagen: {reason}
+open_archive_tooltip	Archiv öffnen
+encrypted_badge	Verschlüsselt
+archive_read_only	{format}-Archive sind schreibgeschützt. Du kannst keine Elemente hinzufügen, umbenennen oder löschen.
+toolbar_extract	Entpacken nach…
+toolbar_add	Hinzufügen
+toolbar_test	Prüfen
+toolbar_rename	Umbenennen
+toolbar_delete	Löschen
+toolbar_preview	Vorschau
+settings_tooltip	Einstellungen
+welcome_drag	Lege hier ein Archiv oder Dateien ab oder beginne unten.
+welcome_open_archive	Archiv öffnen
+welcome_new_archive	Archiv erstellen
+welcome_recent	Zuletzt geöffnet
+selection_count	{count} ausgewählt
+selection_extract_hint	Wähle „Auswahl entpacken“, um nur diese Elemente zu entpacken.
+entry_folder	Ordner
+entry_link	Verknüpfung
+detail_original_size	Originalgröße
+detail_packed_size	Komprimierte Größe
+detail_saved	Eingespart
+detail_modified	Geändert
+detail_file_count	Dateien
+detail_encrypted	Verschlüsselt
+common_yes	Ja
+detail_extract_item	Dieses Element entpacken
+detail_archive_type	{format}-Archiv
+detail_extract_all	Alles entpacken
+status_task	Aufgaben
+status_opening	{name} wird geöffnet…
+status_entry_count	{count} Elemente
+status_check_passed	Überprüft
+status_check_failed	Überprüfung fehlgeschlagen
+status_compression_ratio	Auf {ratio} % der Originalgröße komprimiert
+status_ready	Bereit
+status_new_version	Update verfügbar: {version}
+status_downloading	{version} wird heruntergeladen…
+go_up	Nach oben
+recent_column_name	Name
+recent_column_size	Größe
+recent_column_location	Speicherort
+recent_column_created	Erstellt
+recent_column_modified	Geändert
+recent_item_open	Öffnen
+recent_item_missing	Fehlt
+recent_empty_folder	Dieser Ordner ist leer.
+recent_empty_list	Keine zuletzt geöffneten Archive. Geöffnete Archive erscheinen hier.
+recent_clear	Zuletzt verwendete leeren
+action_extract_here	Hier entpacken
+action_extract_named	In benanntem Ordner entpacken
+action_reveal	Im Ordner anzeigen
+action_rename	Umbenennen
+action_remove_from_list	Aus Liste entfernen
+action_enter	Öffnen
+action_compress	Komprimieren
+list_separator	,
+rename_entry_title	Element umbenennen
+rename_entry_hint	Der Name im Archiv wird geändert und das Archiv neu erstellt.
+rename_archive_title	Archiv umbenennen
+rename_archive_hint	Der Dateiname des Archivs auf dem Datenträger wird geändert.
+trash_folder_title	Diesen Ordner löschen?
+trash_file_title	Diese Datei löschen?
+trash_hint	Das Element wird in den Papierkorb verschoben und kann dort wiederhergestellt werden.
+password_dialog_title	Passwort erforderlich
+password_dialog_lead	Dieses Archiv ist verschlüsselt. Gib das Passwort ein, um fortzufahren.
+password_wrong	Falsches Passwort. Versuche es erneut.
+button_confirm	Bestätigen
+delete_archive_folder	Diesen Ordner löschen?
+delete_archive_file	Diese Datei löschen?
+delete_archive_many	Die {count} ausgewählten Elemente löschen?
+delete_archive_more	… und {count} weitere
+delete_archive_safe	Aus Sicherheitsgründen wird vor dem Ersetzen neben dem Original ein neues Archiv erstellt und geprüft. Bei einem Fehler bleibt das Original unverändert.
+delete_archive_lead	Elemente werden aus dem Archiv entfernt. Dieser Vorgang kann nicht rückgängig gemacht werden.
+compress_name_label	Dateiname
+compress_format_label	Format
+compress_preset_label	Voreinstellung
+preset_fast	Schnell
+preset_balanced	Ausgewogen
+preset_smallest	Kleinste Größe
+compress_password_label	Passwort
+compress_title	Archiv erstellen
+compress_cancel	Abbrechen
+compress_start	Erstellen
+compress_selection	{count} ausgewählt: {names}
+compress_name_invalid	Der Dateiname darf nicht leer sein, / \\ : enthalten oder mit einem Punkt beginnen.
+compress_format_unknown	Das Archivformat konnte nicht ermittelt werden.
+extract_suffix	entpacken
+context_add_here	Dateien hier hinzufügen…
+context_select_all	Alles auswählen
+context_open_folder	Ordner öffnen
+context_extract_named	In „{name}“ entpacken
+context_copy_path	Pfad kopieren
+context_add_to_folder	Dateien zu diesem Ordner hinzufügen…
+accent_graphite	Graphit
+accent_teal	Blaugrün
+accent_blue	Blau
+accent_violet	Violett
+accent_rose	Rosa
+entry_count	{count} Elemente
+accent_custom	Benutzerdefiniert
+menu_app	RustZIP
+menu_settings	Einstellungen…
+menu_quit	RustZIP beenden
+menu_file	Datei
+menu_open_archive	Archiv öffnen…
+menu_new_archive	Archiv erstellen…
+menu_extract_all	Alles entpacken…
+menu_search_archive	Im Archiv suchen
+menu_close_tab	Tab schließen
+menu_tools	Werkzeuge
+close_tab	Tab schließen
+task_progress	Aufgabenfortschritt: {task}
+archive_file_list	Dateiliste des Archivs
+update_installed	Version {version} wurde heruntergeladen und ihre Signatur geprüft. Folge den Anweisungen des Installationsprogramms.
+update_failed	Update fehlgeschlagen: {error}. Du kannst es später erneut versuchen.
+passwords_cleared	Gespeicherte Passwörter gelöscht.
+password_placeholder	Passwort eingeben
+password_optional_placeholder	Leer lassen, um nicht zu verschlüsseln
+default_archive_name	Archiv
+status_recent_missing	{total} zuletzt verwendete Archive · {missing} fehlen
+status_recent_count	{total} zuletzt verwendete Archive
+status_folder_count	{name} · {count} Elemente
+rename_placeholder	Neuer Name
+rename_invalid	Der Name darf nicht leer sein und keines der Zeichen / \\ : * ? " < > | enthalten.
+rename_complete	Umbenannt
+rename_exists	In diesem Ordner gibt es bereits eine Datei mit diesem Namen. Wähle einen anderen Namen.
+rename_failed	Umbenennen fehlgeschlagen: {error}
+trash_complete	In den Papierkorb verschoben
+trash_failed	Löschen fehlgeschlagen: {error}
+view_list	Liste
+view_icons	Kleine Symbole
+add_location	Speicherort hinzufügen…
+remove_location	Speicherort entfernen
+locations_empty	Ordner der geöffneten Archive erscheinen hier automatisch.
+directory_empty	Dieser Ordner enthält keine anzeigbaren Elemente.
+location_missing	Nicht verfügbar
+col_name	Name
+col_size	Größe
+col_path	Speicherort
+col_modified	Geändert
+dir_desktop	Desktop
+dir_downloads	Downloads
+dir_documents	Dokumente
+dir_pictures	Bilder
+dir_music	Musik
+dir_videos	Videos
+tools	Werkzeuge
+processed	{bytes} verarbeitet
+case_conflict	Das Zielvolume behandelt „{first}“ und „{second}“ als denselben Namen. Der Vorgang wurde vor dem Schreiben angehalten. Verwende ein Volume mit Beachtung der Groß-/Kleinschreibung, um beide Dateien zu behalten.
+destination_exists	Am Ziel ist bereits eine Datei mit demselben Namen vorhanden. Wähle einen neuen Pfad oder einen leeren Ordner oder ändere die Konfliktbehandlung in den Einstellungen.
+convert	Konvertieren
+repair	Reparieren
+passwords	Passwortverwaltung
+add_folder	Ordner hinzufügen…
+add_password	Passwort hinzufügen
+open	Öffnen
+remove	Entfernen
+edit	Bearbeiten
+delete	Löschen
+refresh	Aktualisieren
+empty_favorites	Speichere hier Ordner für den schnellen Zugriff.
+empty_passwords	Keine Passwörter gespeichert. Die Liste zeigt nur Bezeichnungen, keine Geheimnisse.
+memory_only	Der Systemschlüsselbund ist nicht verfügbar. Passwörter bleiben nur für diese Sitzung erhalten.
+password_hint	Verwende den Archivdateinamen als Bezeichnung. Aktiviere „Passwörter merken“ in den Einstellungen, damit es automatisch verwendet wird.
+label	Bezeichnung / Archivdateiname
+secret	Passwort
+cancel	Abbrechen
+save	Speichern
+busy	Wird verarbeitet…
+password_required	Gib eine kurze Bezeichnung und ein Passwort ein. Pfade und die reservierte Bezeichnung __labels__ sind nicht erlaubt.
+duplicate_label	Diese Bezeichnung gibt es bereits. Bearbeite den Eintrag oder wähle eine andere Bezeichnung.
+vault_error	Auf den Schlüsselbund kann nicht zugegriffen werden. Entsperre ihn und versuche es erneut.
+confirm_delete	Dieses gespeicherte Passwort löschen?
+delete_hint	Dadurch wird nur der Eintrag in der Passwortverwaltung gelöscht. Stelle sicher, dass du das Passwort noch kennst.
+source	Quellarchiv
+choose_source	Archiv auswählen…
+source_current	Derzeit geöffnet
+source_empty	Kein Archiv ausgewählt
+change_source	Ändern…
+source_password	Quellpasswort (optional)
+output_password	Passwort für neues Archiv (leer = unverschlüsselt)
+format	Ausgabeformat
+convert_hint	In einem Datenstrom in ein neues Archiv umwandeln. Prüfe die Verschlüsselung der Ausgabe. Die Quelle bleibt erhalten.
+repair_hint	Lesbare Dateien in ein neues Archiv retten. Beschädigte Daten können verloren gehen. Prüfe anschließend den Wiederherstellungsbericht.
+unencrypted	Die Ausgabe ist unverschlüsselt. Wähle ZIP / 7z und lege zum Schutz ein Passwort fest.
+choose_output	Neues Archiv speichern
+start_convert	Speichern und konvertieren…
+start_repair	Speichern und wiederherstellen…
+report	Wiederherstellungsbericht
+report_counts	{files} Einträge wiederhergestellt · {skipped} übersprungen
+report_warnings	Warnungen / Wiederherstellungsprobleme
+report_complete	Es wurden keine Einträge übersprungen. Das wiederhergestellte Archiv hat die Integritätsprüfung bestanden.
+report_truncated	Es werden nur die ersten 1000 Details angezeigt.
+issue_directory	Das ZIP-Verzeichnis ist nicht lesbar. Es wurden lokale Header verwendet; Berechtigungen und Linktypen können verloren gehen, nicht erkannte Links werden zu normalen Dateien.
+issue_local	Ohne Verzeichnis können verschlüsselte, ZIP64-, Descriptor- oder abgeschnittene Einträge nicht sicher wiederhergestellt werden.
+issue_link	Symbolische Links können derzeit nicht erhalten werden und wurden übersprungen.
+issue_path	Unsicherer Eintragspfad; übersprungen. Prüfe das Quellarchiv.
+issue_checksum	Integritätsprüfung fehlgeschlagen; übersprungen. Versuche eine andere Kopie der Quelle.
+issue_truncated	Die Daten sind abgeschnitten und können nicht vollständig wiederhergestellt werden; übersprungen.
+issue_solid	Der solide Block ist beschädigt; dieser Eintrag kann nicht dekodiert werden.
+issue_conflict	Doppelter Dateiname oder Konflikt mit einem Ordner; übersprungen.
+open_folder	Ausgabedatei anzeigen
+close	Schließen
+report_button	Bericht anzeigen
+favorite_error	Favoriten konnten nicht gespeichert werden. Prüfe die Berechtigungen des Einstellungsordners.
+settings_error	Einstellungen konnten nicht gespeichert werden. Prüfe die Berechtigungen des Einstellungsordners.
+folder_error	Dieser Speicherort kann nicht geöffnet werden. Prüfe, ob der Ordner existiert und zugänglich ist.
+folder_busy	Wird geladen…
+converted	Konvertierung abgeschlossen. Das neue Archiv hat die Integritätsprüfung bestanden.
+recovered	Wiederherstellung abgeschlossen. Prüfe im Bericht, ob Einträge übersprungen wurden.
+open_not_archive	Die ausgewählte Datei ist kein Archiv.
+open_unsupported	Dieser Dateityp wird noch nicht zum Komprimieren, Entpacken oder Verwalten unterstützt.
+open_corrupt	Dieses Archiv ist beschädigt und kann nicht geöffnet werden.
+open_missing	Die Datei wurde nicht gefunden. Möglicherweise wurde sie verschoben oder gelöscht.
+open_denied	Du hast keine Berechtigung, diese Datei zu lesen. Prüfe die Dateiberechtigungen.
+open_limit	Dieses Archiv hat eine Sicherheitsgrenze erreicht. Das Öffnen wurde angehalten.
+open_failed	Die Datei konnte nicht gelesen werden. Prüfe, ob sie verwendet wird, und versuche es erneut.
+history	Aufgabenverlauf
+history_empty	Noch keine Aufgaben im Verlauf. Abgeschlossene Komprimierungs-, Entpack- und Prüfvorgänge erscheinen hier.
+history_clear	Verlauf löschen
+history_hint	Die letzten 200 Einträge werden gespeichert; erfasst werden nur Dateinamen und Ergebnisse.
+history_reveal_result	Ergebnis anzeigen
+history_running	Wird ausgeführt
+history_failed	Fehlgeschlagen
+history_succeeded	Abgeschlossen
+history_cancelled	Abgebrochen
+history_new	Neu
+volume_size	Volumegröße (MiB; leer = keine Aufteilung)
+volume_invalid	Gib eine positive ganze Zahl in MiB für die Volumegröße ein.
+preset_email_share	Per E-Mail teilen (20-MiB-Volumes)
+preset_portable	Plattformübergreifend kompatibel
+dict_size	Wörterbuchgröße (MiB; leer = automatisch)
+dict_invalid	Gib eine Wörterbuchgröße von 1 bis 64 MiB ein.
+solid_size	Größe des soliden Blocks (MiB; leer = ganzes Archiv, 0 = deaktiviert)
+solid_invalid	Gib 0 oder eine positive ganze Zahl in MiB ein.
+hash	Prüfsummen berechnen
+hash_complete	Dateiprüfsummen berechnet
+task_resource_limit	Diese Aufgabe hat eine Ressourcen- oder Sicherheitsgrenze erreicht. Prüfe die Einstellungen und versuche es erneut.
+open_after_extract	Nach dem Entpacken Ordner öffnen
+open_after_extract_hint	Nach erfolgreichem Entpacken den Ausgabeordner im Dateimanager anzeigen.
+task_notifications	Systembenachrichtigungen
+task_notifications_hint	Bei Abschluss oder Fehler einer Aufgabe eine kurze Benachrichtigung senden; sie enthält keine Dateinamen oder Pfade.
+notification_done	Eine Hintergrundaufgabe wurde abgeschlossen
+notification_failed	Eine Hintergrundaufgabe ist fehlgeschlagen
+duplicate_scan	Nach doppelten Dateien suchen
+duplicate_none	Keine identischen Dateien gefunden. Du kannst mit dem Komprimieren fortfahren.
+duplicate_found	{groups} Gruppen mit Duplikaten gefunden ({files} zusätzliche Dateien, {size}). Beim Fortfahren bleiben alle erhalten.
+duplicate_scan_limit	Das Scanlimit wurde überschritten; Duplikate konnten nicht geprüft werden.
+duplicate_scan_limit_title	Duplikatsuche unvollständig
+duplicate_scan_limit_hint	Du kannst die ausgewählten Dateien komprimieren. Duplikate wurden bei diesem Durchlauf nicht geprüft und nichts wurde gelöscht.
+duplicate_prompt_title	Doppelte Dateien gefunden
+duplicate_prompt_lead	Die Inhaltshashes stimmen überein. Beim Fortfahren bleiben alle Dateien erhalten; nichts wird gelöscht.
+duplicate_continue	Komprimierung fortsetzen
+duplicate_cancel	Komprimierung abbrechen
+duplicate_cancelled	Komprimierung abgebrochen
+duplicate_group_files	{count} Dateien
+duplicate_more	{count} weitere Gruppen werden nicht angezeigt
+duplicate_file_more	{count} weitere Dateien
+language	Oberflächensprache
+language_auto	Systemsprache verwenden
+language_zh_cn	Vereinfachtes Chinesisch
+language_en	Englisch
+language_es	Spanisch
+language_fr	Französisch
+language_de	Deutsch
+language_ja	Japanisch
+language_ko	Koreanisch
+language_ar	Arabisch
+language_pt	Portugiesisch
+language_ru	Russisch
+settings_title	Einstellungen
+settings_hint	Änderungen werden sofort gespeichert.
+settings_done	Fertig
+settings_appearance	Darstellung
+theme_system	Systemeinstellung verwenden
+theme_light	Hell
+theme_dark	Dunkel
+settings_accent	Akzentfarbe
+settings_conflict	Wenn eine Datei bereits existiert
+settings_keep_both	Beide behalten
+settings_skip	Überspringen
+settings_replace	Ersetzen
+settings_smart_extract	Intelligentes Entpacken
+settings_smart_extract_hint	Mehrere lose Dateien in einem Archiv werden in einen Ordner mit dem Archivnamen gelegt.
+settings_check_updates	Automatisch nach Updates suchen
+settings_check_updates_hint	Beim Start im Hintergrund nach neuen Versionen suchen. Updatepakete werden auf ihre Signatur geprüft.
+settings_remember_passwords	Passwörter merken
+settings_remember_passwords_hint	Nach dem Öffnen eines verschlüsselten Archivs das Passwort im Systemschlüsselbund speichern und beim nächsten Mal ausprobieren.
+settings_forget_passwords	Gespeicherte Passwörter löschen
+settings_install_stats	Anonyme Installationsstatistik
+settings_install_stats_hint	Nur eine anonyme ID, Version, Betriebssystem und Sprache werden gesendet. Dateinamen und Nutzungsaktivitäten werden nicht erfasst.
+settings_show_stats_privacy	Details zur Statistik ansehen und Auswahl ändern…
+privacy_sent_title	Gesendete Daten
+privacy_sent_fields	Zufällige ID · App-Version · Betriebssystem und Version · CPU-Architektur · Oberflächensprache
+privacy_never_title	Niemals erfasst
+privacy_never_fields	Dateinamen, Pfade, Inhalte oder Nutzungsaktivitäten.
+privacy_timing	Einmal bei der ersten Nutzung, danach höchstens einmal täglich. Fehlgeschlagene Sendungen werden verworfen und beeinträchtigen die App nicht. Du kannst diese Auswahl jederzeit in den Einstellungen ändern.
+privacy_choice_joined	Aktuelle Auswahl: aktiviert
+privacy_choice_left	Aktuelle Auswahl: deaktiviert
+privacy_return	Zurück
+privacy_decline	Nicht teilnehmen
+privacy_participate	Teilnehmen
+privacy_ok	OK
+privacy_title	Über anonyme Statistiken
+privacy_intro	RustZIP ist kostenlose Open-Source-Software. Um zu erfahren, wie viele Menschen sie verwenden, senden wir wenige vollständig anonyme Angaben.
+sidebar_locations	Orte
+sidebar_recent	Zuletzt
+sidebar_quick_actions	Schnellzugriff

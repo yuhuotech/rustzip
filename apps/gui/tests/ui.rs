@@ -38,10 +38,12 @@ fn open_window(
             cx,
             move |window, cx| {
                 rustzip_gui::view::init_window(window, cx);
-                let settings = settings_path
+                let mut settings = settings_path
                     .as_deref()
                     .map(Settings::load)
                     .unwrap_or_default();
+                // Most UI assertions use Chinese copy; locale behavior is covered explicitly.
+                settings.language = "zh-CN".into();
                 let view = cx.new(|cx| MainView::new(settings, settings_path, window, cx));
                 // A test must never start a real program on the machine running it.
                 view.update(cx, |v, _| v.opener = std::sync::Arc::new(|_| {}));
@@ -2225,7 +2227,8 @@ fn interface_language_can_be_changed_and_is_saved(cx: &mut TestAppContext) {
     with_view(cx, handle, &view, |v, _, cx| v.open_settings(cx));
 
     cx.update_window(handle.into(), |_, window, cx| {
-        window.click("language-en", cx)
+        window.click("language-picker-settings", cx);
+        window.within("popup-menu").click(2usize, cx)
     })
     .unwrap();
     cx.update(|cx| {
@@ -2241,7 +2244,21 @@ fn interface_language_can_be_changed_and_is_saved(cx: &mut TestAppContext) {
     assert_eq!(name_column.as_ref(), "Name");
 
     cx.update_window(handle.into(), |_, window, cx| {
-        window.click("language-zh-cn", cx)
+        window.click("language-picker-settings", cx);
+        window.within("popup-menu").click(4usize, cx)
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update(|cx| {
+        let view = view.read(cx);
+        assert_eq!(view.settings.language, "fr-FR");
+        assert_eq!(view.tool_text("settings_title"), "Paramètres");
+        assert_eq!(view.tool_text("toolbar_extract"), "Extraire vers…");
+    });
+
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.click("language-picker-settings", cx);
+        window.within("popup-menu").click(1usize, cx)
     })
     .unwrap();
     cx.run_until_parked();
@@ -2255,6 +2272,102 @@ fn interface_language_can_be_changed_and_is_saved(cx: &mut TestAppContext) {
     let name_column = cx.update(|cx| table.read(cx).delegate().column(0, cx).name);
     assert_eq!(name_column.as_ref(), "名称");
     assert_eq!(Settings::load(&path).language, "zh-CN");
+}
+
+#[gpui_kit::test]
+fn every_language_menu_choice_updates_the_visible_interface(cx: &mut TestAppContext) {
+    let (handle, view) = open_window(cx, None);
+    with_view(cx, handle, &view, |v, _, cx| v.open_settings(cx));
+    let expected = [
+        ("zh-CN", "设置"),
+        ("en-US", "Settings"),
+        ("es-ES", "Ajustes"),
+        ("fr-FR", "Paramètres"),
+        ("de-DE", "Einstellungen"),
+        ("ja-JP", "設定"),
+        ("ko-KR", "설정"),
+        ("ar", "الإعدادات"),
+        ("pt-BR", "Configurações"),
+        ("ru-RU", "Настройки"),
+    ];
+
+    for (index, (language, title)) in expected.into_iter().enumerate() {
+        cx.update_window(handle.into(), |_, window, cx| {
+            window.click("language-picker-settings", cx);
+            window.within("popup-menu").click(index + 1, cx);
+        })
+        .unwrap();
+        cx.run_until_parked();
+        cx.update(|cx| {
+            let view = view.read(cx);
+            assert_eq!(view.settings.language, language);
+            assert_eq!(view.tool_text("settings_title"), title);
+        });
+    }
+}
+
+#[gpui_kit::test]
+fn localized_sidebar_labels_stay_inside_the_fixed_width_menu(cx: &mut TestAppContext) {
+    let (handle, view) = open_window(cx, None);
+    for choice in rustzip_gui::text::LANGUAGE_CHOICES {
+        with_view(cx, handle, &view, |v, _, cx| {
+            v.change_settings(|settings| settings.language = choice.tag.into(), cx);
+        });
+        let recent = rustzip_gui::text::tr(choice.tag, "sidebar_recent");
+        cx.update_window(handle.into(), |_, window, _| {
+            let mut main = window.within("main");
+            let sidebar = main.find("sidebar").bounds();
+            let label = main.within("sidebar").find(recent).bounds();
+            assert!(sidebar.contains(&label.origin), "{choice:?}: {label:?}");
+            assert!(
+                sidebar.contains(&label.bottom_right()),
+                "{choice:?}: {label:?}"
+            );
+            assert!(
+                label.size.width < gpui_kit::px(152.),
+                "{choice:?}: {label:?}"
+            );
+        })
+        .unwrap();
+    }
+}
+
+#[gpui_kit::test]
+fn language_and_settings_controls_stay_in_the_top_row_after_opening_an_archive(
+    cx: &mut TestAppContext,
+) {
+    let tmp = tempfile::tempdir().unwrap();
+    let archive = make_archive(tmp.path(), "top-row.zip", None);
+    let (handle, view) = open_window(cx, None);
+
+    let empty_header = if rustzip_gui::view::TABS_IN_TITLEBAR {
+        "empty-titlebar"
+    } else {
+        "empty"
+    };
+    cx.update_window(handle.into(), |_, window, _| {
+        assert!(window.within(empty_header).find("open-settings").visible());
+        assert!(
+            window
+                .within(empty_header)
+                .find("language-picker-titlebar")
+                .visible()
+        );
+    })
+    .unwrap();
+
+    open_sync(cx, handle, &view, &archive, None);
+    cx.update_window(handle.into(), |_, window, _| {
+        assert!(window.within("tabs").find("open-settings").visible());
+        assert!(
+            window
+                .within("tabs")
+                .find("language-picker-titlebar")
+                .visible()
+        );
+        assert!(window.within("toolbar").try_find("open-settings").is_none());
+    })
+    .unwrap();
 }
 
 #[gpui_kit::test]

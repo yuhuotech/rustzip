@@ -2,34 +2,146 @@
 
 use std::sync::OnceLock;
 
-fn prefers_english(language: &str, system_locale: Option<&str>) -> bool {
-    if language.eq_ignore_ascii_case("auto") {
-        system_locale
-            .map(|locale| locale.to_ascii_lowercase().starts_with("en"))
-            .unwrap_or(false)
-    } else {
-        language.to_ascii_lowercase().starts_with("en")
-    }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LanguageChoice {
+    pub tag: &'static str,
+    pub short: &'static str,
+    pub native_name: &'static str,
 }
 
-fn system_locale() -> Option<&'static str> {
-    static LOCALE: OnceLock<Option<String>> = OnceLock::new();
-    LOCALE
-        .get_or_init(|| {
-            ["LC_ALL", "LC_MESSAGES", "LANG"]
-                .into_iter()
-                .find_map(|name| {
-                    std::env::var(name)
-                        .ok()
-                        .filter(|value| !value.trim().is_empty())
-                })
-        })
-        .as_deref()
+pub const LANGUAGE_CHOICES: [LanguageChoice; 10] = [
+    LanguageChoice {
+        tag: "zh-CN",
+        short: "中",
+        native_name: "简体中文",
+    },
+    LanguageChoice {
+        tag: "en-US",
+        short: "EN",
+        native_name: "English",
+    },
+    LanguageChoice {
+        tag: "es-ES",
+        short: "ES",
+        native_name: "Español",
+    },
+    LanguageChoice {
+        tag: "fr-FR",
+        short: "FR",
+        native_name: "Français",
+    },
+    LanguageChoice {
+        tag: "de-DE",
+        short: "DE",
+        native_name: "Deutsch",
+    },
+    LanguageChoice {
+        tag: "ja-JP",
+        short: "日",
+        native_name: "日本語",
+    },
+    LanguageChoice {
+        tag: "ko-KR",
+        short: "한",
+        native_name: "한국어",
+    },
+    LanguageChoice {
+        tag: "ar",
+        short: "ع",
+        native_name: "العربية",
+    },
+    LanguageChoice {
+        tag: "pt-BR",
+        short: "PT",
+        native_name: "Português",
+    },
+    LanguageChoice {
+        tag: "ru-RU",
+        short: "RU",
+        native_name: "Русский",
+    },
+];
+
+fn language_choice(locale: &str) -> Option<LanguageChoice> {
+    let language = locale
+        .trim()
+        .split(['-', '_', '.', '@'])
+        .next()?
+        .to_ascii_lowercase();
+    let tag = match language.as_str() {
+        "zh" => "zh-CN",
+        "en" => "en-US",
+        "es" => "es-ES",
+        "fr" => "fr-FR",
+        "de" => "de-DE",
+        "ja" => "ja-JP",
+        "ko" => "ko-KR",
+        "ar" => "ar",
+        "pt" => "pt-BR",
+        "ru" => "ru-RU",
+        _ => return None,
+    };
+    LANGUAGE_CHOICES
+        .iter()
+        .copied()
+        .find(|choice| choice.tag == tag)
+}
+
+fn system_locales() -> &'static [String] {
+    static LOCALES: OnceLock<Vec<String>> = OnceLock::new();
+    LOCALES.get_or_init(|| sys_locale::get_locales().collect())
+}
+
+pub fn resolve_language(language: &str, preferred_locales: &[String]) -> &'static str {
+    if !language.eq_ignore_ascii_case("auto") {
+        return language_choice(language).map_or("zh-CN", |choice| choice.tag);
+    }
+    preferred_locales
+        .iter()
+        .find_map(|locale| language_choice(locale).map(|choice| choice.tag))
+        .unwrap_or("zh-CN")
+}
+
+pub fn language_choice_for(language: &str) -> LanguageChoice {
+    let resolved = resolve_language(language, system_locales());
+    LANGUAGE_CHOICES
+        .iter()
+        .copied()
+        .find(|choice| choice.tag == resolved)
+        .unwrap_or(LANGUAGE_CHOICES[0])
+}
+
+fn localized_catalog(language: &str) -> Option<&'static str> {
+    Some(match language {
+        "es-ES" => include_str!("../resources/locales/es-ES.tsv"),
+        "fr-FR" => include_str!("../resources/locales/fr-FR.tsv"),
+        "de-DE" => include_str!("../resources/locales/de-DE.tsv"),
+        "ja-JP" => include_str!("../resources/locales/ja-JP.tsv"),
+        "ko-KR" => include_str!("../resources/locales/ko-KR.tsv"),
+        "ar" => include_str!("../resources/locales/ar.tsv"),
+        "pt-BR" => include_str!("../resources/locales/pt-BR.tsv"),
+        "ru-RU" => include_str!("../resources/locales/ru-RU.tsv"),
+        _ => return None,
+    })
+}
+
+fn localized_value(language: &str, key: &str) -> Option<&'static str> {
+    let catalog = localized_catalog(language)?;
+    catalog.lines().find_map(|line| {
+        let (resource_key, value) = line.split_once('\t')?;
+        (resource_key == key).then_some(value)
+    })
 }
 
 /// Resolves the configured language; automatic mode follows the process locale when available.
 pub fn tr(language: &str, key: &str) -> &'static str {
-    let english = prefers_english(language, system_locale());
+    let language = resolve_language(language, system_locales());
+    if language != "zh-CN"
+        && language != "en-US"
+        && let Some(value) = localized_value(language, key)
+    {
+        return value;
+    }
     include_str!("../resources/tools.tsv")
         .lines()
         .find_map(|line| {
@@ -37,7 +149,7 @@ pub fn tr(language: &str, key: &str) -> &'static str {
             let id = columns.next()?;
             let zh = columns.next()?;
             let en = columns.next()?;
-            (id == key).then_some(if english { en } else { zh })
+            (id == key).then_some(if language == "zh-CN" { zh } else { en })
         })
         .unwrap_or("?")
 }
@@ -116,12 +228,71 @@ mod tests {
     }
 
     #[test]
-    fn explicit_language_overrides_system_locale_and_auto_uses_it() {
-        assert!(prefers_english("en-GB", Some("zh_CN.UTF-8")));
-        assert!(!prefers_english("zh-CN", Some("en_US.UTF-8")));
-        assert!(prefers_english("auto", Some("en_US.UTF-8")));
-        assert!(!prefers_english("auto", Some("zh_CN.UTF-8")));
-        assert!(!prefers_english("auto", None));
+    fn auto_uses_the_first_supported_system_language_and_explicit_choices_win() {
+        let system = vec!["it-IT".into(), "zh-Hans-CN".into(), "en-US".into()];
+        assert_eq!(resolve_language("auto", &system), "zh-CN");
+        assert_eq!(resolve_language("en-GB", &["zh-CN".into()]), "en-US");
+        assert_eq!(resolve_language("es-MX", &[]), "es-ES");
+        assert_eq!(resolve_language("auto", &["C.UTF-8".into()]), "zh-CN");
+    }
+
+    #[test]
+    fn language_list_has_ten_unique_tags_and_native_names() {
+        let tags: std::collections::HashSet<_> =
+            LANGUAGE_CHOICES.iter().map(|choice| choice.tag).collect();
+        assert_eq!(tags.len(), 10);
+        assert!(
+            LANGUAGE_CHOICES
+                .iter()
+                .all(|choice| !choice.short.is_empty() && !choice.native_name.is_empty())
+        );
+    }
+
+    #[test]
+    fn every_localized_catalog_covers_all_resources_and_keeps_placeholders() {
+        let base: Vec<_> = include_str!("../resources/tools.tsv")
+            .lines()
+            .map(|line| {
+                let mut columns = line.split('\t');
+                let key = columns.next().unwrap_or_default();
+                let english = columns.nth(1).unwrap_or_default();
+                (key, english)
+            })
+            .collect();
+        for language in [
+            "es-ES", "fr-FR", "de-DE", "ja-JP", "ko-KR", "ar", "pt-BR", "ru-RU",
+        ] {
+            let catalog = localized_catalog(language).unwrap_or_default();
+            let keys: Vec<_> = catalog
+                .lines()
+                .filter_map(|line| line.split_once('\t').map(|(key, _)| key))
+                .collect();
+            assert_eq!(keys.len(), base.len(), "wrong number of {language} entries");
+            assert_eq!(
+                keys.iter().collect::<std::collections::HashSet<_>>().len(),
+                keys.len(),
+                "duplicate key in {language}"
+            );
+            for (key, english) in &base {
+                let translated = localized_value(language, key);
+                assert!(translated.is_some(), "{language} is missing {key}");
+                if let Some(translated) = translated {
+                    assert_eq!(
+                        placeholders(english),
+                        placeholders(translated),
+                        "placeholder mismatch for {language}:{key}"
+                    );
+                }
+            }
+        }
+    }
+
+    fn placeholders(value: &str) -> std::collections::BTreeSet<&str> {
+        value
+            .split('{')
+            .skip(1)
+            .filter_map(|part| part.split_once('}').map(|(name, _)| name))
+            .collect()
     }
 
     #[test]

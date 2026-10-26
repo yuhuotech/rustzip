@@ -1,0 +1,358 @@
+# key<TAB>Français
+favorites	Favoris
+home	Accueil
+current_archive	Archive actuelle
+kind_compress	Compresser
+kind_extract	Extraire
+kind_test	Tester
+kind_edit	Modifier
+error_password	Un mot de passe est requis ou incorrect.
+error_unknown_format	Format de fichier inconnu.
+error_unsupported	Non pris en charge : {detail}
+error_corrupt	Le fichier est endommagé : {detail}
+error_unsafe_path	L’archive contient un chemin non sûr qui a été refusé : {path}
+error_limit	Une limite de sécurité a été atteinte : {detail}
+error_io	Erreur de lecture ou d’écriture : {detail}
+error_cancelled	Annulé
+eta_seconds	{seconds} s
+eta_minutes_seconds	{minutes} min {seconds} s
+eta_hours_minutes	{hours} h {minutes} min
+task_queued	En attente
+task_paused	En pause
+task_done	Terminé
+task_cancelled	Annulé
+task_failed	Échec
+task_remaining	Il reste {time}
+task_enter_password	Saisir le mot de passe
+task_continue	Reprendre
+task_pause	Mettre en pause
+task_cancel	Annuler
+search_archive	Rechercher dans l’archive
+dialog_open_archive	Ouvrir une archive
+dialog_choose_sources	Sélectionnez des fichiers ou dossiers à compresser
+dialog_extract_to	Extraire ici
+dialog_add_to_archive	Ajouter à l’archive
+notice_folder_open_failed	Impossible d’ouvrir ce dossier : {error}
+notice_safe_run	Pour votre sécurité, les programmes et scripts ne sont pas ouverts directement. Vérifiez leur origine dans le gestionnaire de fichiers avant de les exécuter.
+notice_select_item	Sélectionnez d’abord un fichier ou un dossier dans la liste.
+notice_select_file	Sélectionnez d’abord un fichier dans la liste.
+notice_copied_paths	{count} chemins copiés
+notice_read_only	Ce format d’archive est en lecture seule.
+notice_preview_file	L’aperçu est uniquement disponible pour les fichiers.
+notice_prepare_preview	Préparation de {name}…
+notice_external_edit_writeback	Ouvert dans l’application système. Les modifications enregistrées seront réécrites dans l’archive.
+notice_external_read_only	Ouvert dans l’application système. Cette archive est en lecture seule, les modifications ne seront donc pas enregistrées.
+notice_preview_too_large	Ce fichier est trop volumineux pour être prévisualisé. Extrayez-le pour le consulter.
+task_test_passed	{task} terminé : aucun problème détecté dans {count} éléments
+task_edit_complete	{task} terminé : l’archive contient maintenant {count} éléments
+task_complete_count	{task} terminé : {count} fichiers, {size}
+task_password_needed	{task} nécessite un mot de passe
+task_failed_detail	Échec de {task} : {reason}
+open_archive_tooltip	Ouvrir une archive
+encrypted_badge	Chiffré
+archive_read_only	Les archives {format} sont en lecture seule. Vous ne pouvez ni ajouter, ni renommer, ni supprimer d’éléments.
+toolbar_extract	Extraire vers…
+toolbar_add	Ajouter
+toolbar_test	Tester
+toolbar_rename	Renommer
+toolbar_delete	Supprimer
+toolbar_preview	Aperçu
+settings_tooltip	Paramètres
+welcome_drag	Déposez une archive ou des fichiers ici, ou commencez ci-dessous.
+welcome_open_archive	Ouvrir une archive
+welcome_new_archive	Créer une archive
+welcome_recent	Ouvert récemment
+selection_count	{count} sélectionnés
+selection_extract_hint	Choisissez « Extraire la sélection » pour extraire uniquement ces éléments.
+entry_folder	Dossier
+entry_link	Lien
+detail_original_size	Taille d’origine
+detail_packed_size	Taille compressée
+detail_saved	Économisé
+detail_modified	Modifié
+detail_file_count	Fichiers
+detail_encrypted	Chiffré
+common_yes	Oui
+detail_extract_item	Extraire cet élément
+detail_archive_type	Archive {format}
+detail_extract_all	Tout extraire
+status_task	Tâches
+status_opening	Ouverture de {name}…
+status_entry_count	{count} éléments
+status_check_passed	Vérifié
+status_check_failed	Échec de la vérification
+status_compression_ratio	Compressé à {ratio} % de la taille d’origine
+status_ready	Prêt
+status_new_version	Mise à jour disponible : {version}
+status_downloading	Téléchargement de {version}…
+go_up	Remonter
+recent_column_name	Nom
+recent_column_size	Taille
+recent_column_location	Emplacement
+recent_column_created	Créé
+recent_column_modified	Modifié
+recent_item_open	Ouvrir
+recent_item_missing	Introuvable
+recent_empty_folder	Ce dossier est vide.
+recent_empty_list	Aucune archive récente. Les archives ouvertes apparaîtront ici.
+recent_clear	Effacer les archives récentes
+action_extract_here	Extraire ici
+action_extract_named	Extraire dans un dossier nommé
+action_reveal	Afficher dans le dossier
+action_rename	Renommer
+action_remove_from_list	Retirer de la liste
+action_enter	Ouvrir
+action_compress	Compresser
+list_separator	,
+rename_entry_title	Renommer l’élément
+rename_entry_hint	Le nom dans l’archive changera et celle-ci sera reconstruite.
+rename_archive_title	Renommer l’archive
+rename_archive_hint	Le nom du fichier archive sur le disque changera.
+trash_folder_title	Supprimer ce dossier ?
+trash_file_title	Supprimer ce fichier ?
+trash_hint	L’élément sera placé dans la corbeille, où vous pourrez le restaurer.
+password_dialog_title	Mot de passe requis
+password_dialog_lead	Cette archive est chiffrée. Saisissez son mot de passe pour continuer.
+password_wrong	Mot de passe incorrect. Réessayez.
+button_confirm	Confirmer
+delete_archive_folder	Supprimer ce dossier ?
+delete_archive_file	Supprimer ce fichier ?
+delete_archive_many	Supprimer les {count} éléments sélectionnés ?
+delete_archive_more	… et {count} autres
+delete_archive_safe	Par sécurité, une nouvelle archive est créée et vérifiée à côté de l’original avant son remplacement. En cas d’échec, l’original reste intact.
+delete_archive_lead	Les éléments seront retirés de l’archive. Cette action est irréversible.
+compress_name_label	Nom du fichier
+compress_format_label	Format
+compress_preset_label	Préréglage
+preset_fast	Rapide
+preset_balanced	Équilibré
+preset_smallest	Taille minimale
+compress_password_label	Mot de passe
+compress_title	Créer une archive
+compress_cancel	Annuler
+compress_start	Créer
+compress_selection	{count} sélectionnés : {names}
+compress_name_invalid	Le nom de fichier ne peut pas être vide, contenir / \\ : ou commencer par un point.
+compress_format_unknown	Impossible de déterminer le format de l’archive.
+extract_suffix	extraire
+context_add_here	Ajouter des fichiers ici…
+context_select_all	Tout sélectionner
+context_open_folder	Ouvrir le dossier
+context_extract_named	Extraire dans « {name} »
+context_copy_path	Copier le chemin
+context_add_to_folder	Ajouter des fichiers à ce dossier…
+accent_graphite	Graphite
+accent_teal	Sarcelle
+accent_blue	Bleu
+accent_violet	Violet
+accent_rose	Rose
+entry_count	{count} éléments
+accent_custom	Personnalisée
+menu_app	RustZIP
+menu_settings	Paramètres…
+menu_quit	Quitter RustZIP
+menu_file	Fichier
+menu_open_archive	Ouvrir une archive…
+menu_new_archive	Créer une archive…
+menu_extract_all	Tout extraire…
+menu_search_archive	Rechercher dans l’archive
+menu_close_tab	Fermer l’onglet
+menu_tools	Outils
+close_tab	Fermer l’onglet
+task_progress	Progression de la tâche : {task}
+archive_file_list	Liste des fichiers de l’archive
+update_installed	La version {version} a été téléchargée et sa signature vérifiée. Suivez les instructions du programme d’installation.
+update_failed	Échec de la mise à jour : {error}. Vous pourrez réessayer plus tard.
+passwords_cleared	Les mots de passe enregistrés ont été effacés.
+password_placeholder	Saisir le mot de passe
+password_optional_placeholder	Laisser vide pour ne pas chiffrer
+default_archive_name	Archive
+status_recent_missing	{total} archives récentes · {missing} introuvables
+status_recent_count	{total} archives récentes
+status_folder_count	{name} · {count} éléments
+rename_placeholder	Nouveau nom
+rename_invalid	Le nom ne peut pas être vide ni contenir / \\ : * ? " < > |.
+rename_complete	Renommé
+rename_exists	Un fichier portant ce nom existe déjà dans ce dossier. Choisissez un autre nom.
+rename_failed	Impossible de renommer : {error}
+trash_complete	Déplacé dans la corbeille
+trash_failed	Impossible de supprimer : {error}
+view_list	Liste
+view_icons	Petites icônes
+add_location	Ajouter un emplacement…
+remove_location	Retirer l’emplacement
+locations_empty	Les dossiers des archives que vous ouvrez apparaîtront ici automatiquement.
+directory_empty	Ce dossier ne contient aucun élément à afficher.
+location_missing	Indisponible
+col_name	Nom
+col_size	Taille
+col_path	Emplacement
+col_modified	Modifié
+dir_desktop	Bureau
+dir_downloads	Téléchargements
+dir_documents	Documents
+dir_pictures	Images
+dir_music	Musique
+dir_videos	Vidéos
+tools	Outils
+processed	{bytes} traités
+case_conflict	Le volume de destination considère « {first} » et « {second} » comme le même nom. L’opération a été arrêtée avant l’écriture. Utilisez un volume sensible à la casse pour conserver les deux fichiers.
+destination_exists	Un fichier portant le même nom existe déjà à cet emplacement. Choisissez un nouvel emplacement ou un dossier vide, ou modifiez le traitement des conflits dans les paramètres.
+convert	Convertir
+repair	Réparer
+passwords	Gestionnaire de mots de passe
+add_folder	Ajouter un dossier…
+add_password	Ajouter un mot de passe
+open	Ouvrir
+remove	Retirer
+edit	Modifier
+delete	Supprimer
+refresh	Actualiser
+empty_favorites	Enregistrez des dossiers ici pour y accéder rapidement.
+empty_passwords	Aucun mot de passe enregistré. Cette liste affiche uniquement des libellés, jamais les secrets.
+memory_only	Le trousseau système est indisponible. Les mots de passe seront conservés uniquement pendant cette session.
+password_hint	Utilisez le nom du fichier archive comme libellé. Activez « Mémoriser les mots de passe » dans les paramètres pour l’essayer automatiquement.
+label	Libellé / nom du fichier archive
+secret	Mot de passe
+cancel	Annuler
+save	Enregistrer
+busy	Traitement…
+password_required	Saisissez un libellé court et un mot de passe. Les chemins et le libellé réservé __labels__ sont interdits.
+duplicate_label	Ce libellé existe déjà. Modifiez cette entrée ou choisissez-en un autre.
+vault_error	Impossible d’accéder au trousseau. Déverrouillez-le et réessayez.
+confirm_delete	Supprimer ce mot de passe enregistré ?
+delete_hint	Cette action supprime uniquement l’entrée du gestionnaire de mots de passe. Assurez-vous de toujours connaître ce mot de passe.
+source	Archive source
+choose_source	Choisir une archive…
+source_current	Actuellement ouverte
+source_empty	Aucune archive sélectionnée
+change_source	Modifier…
+source_password	Mot de passe source (facultatif)
+output_password	Mot de passe de la nouvelle archive (vide = non chiffrée)
+format	Format de sortie
+convert_hint	Convertit en flux vers une nouvelle archive. Vérifiez le chiffrement de sortie. La source est conservée.
+repair_hint	Récupère les fichiers lisibles dans une nouvelle archive. Les données endommagées peuvent être perdues. Consultez le rapport après l’opération.
+unencrypted	La sortie n’est pas chiffrée. Choisissez ZIP / 7z et définissez un mot de passe pour protéger son contenu.
+choose_output	Enregistrer la nouvelle archive
+start_convert	Enregistrer et convertir…
+start_repair	Enregistrer et récupérer…
+report	Rapport de récupération
+report_counts	{files} éléments récupérés · {skipped} ignorés
+report_warnings	Avertissements / problèmes de récupération
+report_complete	Aucun élément n’a été ignoré. L’archive récupérée a passé la vérification d’intégrité.
+report_truncated	Seuls les 1000 premiers détails sont affichés.
+issue_directory	Le répertoire ZIP est illisible. Les en-têtes locaux ont été utilisés ; les permissions et types de liens peuvent être perdus, et les liens non identifiés deviennent des fichiers ordinaires.
+issue_local	Sans le répertoire, la récupération des entrées chiffrées, ZIP64, avec descripteur ou tronquées n’est pas sûre.
+issue_link	Les liens symboliques ne peuvent pas être conservés pour l’instant et ont été ignorés.
+issue_path	Chemin d’entrée non sûr ; entrée ignorée. Vérifiez l’archive source.
+issue_checksum	La vérification d’intégrité a échoué ; entrée ignorée. Essayez une autre copie de la source.
+issue_truncated	Les données sont tronquées et ne peuvent pas être récupérées entièrement ; entrée ignorée.
+issue_solid	Le bloc solide est endommagé ; cette entrée ne peut pas être décodée.
+issue_conflict	Nom de fichier en double ou conflit avec un dossier ; entrée ignorée.
+open_folder	Afficher le fichier de sortie
+close	Fermer
+report_button	Voir le rapport
+favorite_error	Impossible d’enregistrer les favoris. Vérifiez les permissions du dossier de paramètres.
+settings_error	Impossible d’enregistrer les paramètres. Vérifiez les permissions du dossier de paramètres.
+folder_error	Impossible d’ouvrir cet emplacement. Vérifiez que le dossier existe et qu’il est accessible.
+folder_busy	Chargement…
+converted	Conversion terminée. La nouvelle archive a passé la vérification d’intégrité.
+recovered	Récupération terminée. Consultez le rapport pour connaître les éléments ignorés.
+open_not_archive	Le fichier sélectionné n’est pas une archive.
+open_unsupported	La compression, l’extraction et la gestion de ce type de fichier ne sont pas encore prises en charge.
+open_corrupt	Cette archive est endommagée et ne peut pas être ouverte.
+open_missing	Fichier introuvable. Il a peut-être été déplacé ou supprimé.
+open_denied	Vous n’avez pas la permission de lire ce fichier. Vérifiez ses permissions.
+open_limit	Cette archive a atteint une limite de sécurité ; l’ouverture a été interrompue.
+open_failed	Impossible de lire ce fichier. Vérifiez qu’il n’est pas utilisé et réessayez.
+history	Historique des tâches
+history_empty	Aucune tâche dans l’historique. Les opérations de compression, d’extraction et de vérification apparaîtront ici une fois terminées.
+history_clear	Effacer l’historique
+history_hint	Les 200 entrées les plus récentes sont conservées ; seuls les noms de fichiers et les résultats sont enregistrés.
+history_reveal_result	Afficher le résultat
+history_running	En cours
+history_failed	Échec
+history_succeeded	Terminé
+history_cancelled	Annulé
+history_new	Nouveau
+volume_size	Taille des volumes (MiB ; vide = pas de découpage)
+volume_invalid	Saisissez un nombre entier positif de MiB pour la taille des volumes.
+preset_email_share	Partage par e-mail (volumes de 20 MiB)
+preset_portable	Compatible entre plateformes
+dict_size	Taille du dictionnaire (MiB ; vide = automatique)
+dict_invalid	Saisissez une taille de dictionnaire entre 1 et 64 MiB.
+solid_size	Taille du bloc solide (MiB ; vide = archive entière, 0 = désactivé)
+solid_invalid	Saisissez 0 ou un nombre entier positif de MiB.
+hash	Calculer les sommes de contrôle
+hash_complete	Sommes de contrôle du fichier calculées
+task_resource_limit	Cette tâche a atteint une limite de ressources ou de sécurité. Vérifiez ses paramètres et réessayez.
+open_after_extract	Ouvrir le dossier après l’extraction
+open_after_extract_hint	Après une extraction réussie, afficher le dossier de sortie dans le gestionnaire de fichiers.
+task_notifications	Notifications système
+task_notifications_hint	Envoyer une courte notification à la fin ou en cas d’échec d’une tâche ; aucun nom ni chemin n’est inclus.
+notification_done	Une tâche en arrière-plan est terminée
+notification_failed	Échec d’une tâche en arrière-plan
+duplicate_scan	Recherche des fichiers en double
+duplicate_none	Aucun fichier identique trouvé. Vous pouvez lancer la compression.
+duplicate_found	{groups} groupes de doublons trouvés ({files} fichiers supplémentaires, {size}). Si vous continuez, tous seront conservés.
+duplicate_scan_limit	La limite d’analyse a été dépassée ; les doublons n’ont pas pu être recherchés.
+duplicate_scan_limit_title	Recherche des doublons incomplète
+duplicate_scan_limit_hint	Vous pouvez compresser les fichiers sélectionnés. Cette opération n’a pas recherché les doublons et n’a rien supprimé.
+duplicate_prompt_title	Fichiers en double détectés
+duplicate_prompt_lead	Les empreintes des contenus sont identiques. Si vous continuez, tous les fichiers seront conservés ; rien ne sera supprimé.
+duplicate_continue	Continuer la compression
+duplicate_cancel	Annuler la compression
+duplicate_cancelled	Compression annulée
+duplicate_group_files	{count} fichiers
+duplicate_more	{count} groupes supplémentaires non affichés
+duplicate_file_more	{count} fichiers supplémentaires
+language	Langue de l’interface
+language_auto	Suivre la langue du système
+language_zh_cn	Chinois simplifié
+language_en	Anglais
+language_es	Espagnol
+language_fr	Français
+language_de	Allemand
+language_ja	Japonais
+language_ko	Coréen
+language_ar	Arabe
+language_pt	Portugais
+language_ru	Russe
+settings_title	Paramètres
+settings_hint	Les modifications sont enregistrées immédiatement.
+settings_done	Terminé
+settings_appearance	Apparence
+theme_system	Suivre le système
+theme_light	Clair
+theme_dark	Sombre
+settings_accent	Couleur d’accentuation
+settings_conflict	Lorsqu’un fichier existe déjà
+settings_keep_both	Conserver les deux
+settings_skip	Ignorer
+settings_replace	Remplacer
+settings_smart_extract	Extraction intelligente
+settings_smart_extract_hint	Si l’archive contient plusieurs fichiers à la racine, les placer dans un dossier portant son nom.
+settings_check_updates	Rechercher automatiquement les mises à jour
+settings_check_updates_hint	Rechercher les nouvelles versions en arrière-plan au démarrage. La signature des mises à jour est vérifiée.
+settings_remember_passwords	Mémoriser les mots de passe
+settings_remember_passwords_hint	Après l’ouverture d’une archive chiffrée, enregistrer son mot de passe dans le trousseau système et l’essayer la prochaine fois.
+settings_forget_passwords	Effacer les mots de passe enregistrés
+settings_install_stats	Statistiques d’installation anonymes
+settings_install_stats_hint	Seuls un identifiant anonyme, la version, le système et la langue sont envoyés. Les noms de fichiers et l’activité ne sont pas collectés.
+settings_show_stats_privacy	Consulter les détails des statistiques et choisir à nouveau…
+privacy_sent_title	Données envoyées
+privacy_sent_fields	Identifiant aléatoire · version de l’application · système et version · architecture du processeur · langue de l’interface
+privacy_never_title	Données jamais collectées
+privacy_never_fields	Noms de fichiers, chemins, contenus ou activité d’utilisation.
+privacy_timing	Un envoi lors de la première utilisation, puis au maximum une fois par jour. Les échecs sont ignorés et n’affectent pas l’application. Vous pouvez modifier votre choix dans les paramètres à tout moment.
+privacy_choice_joined	Choix actuel : participer
+privacy_choice_left	Choix actuel : ne pas participer
+privacy_return	Retour
+privacy_decline	Ne pas participer
+privacy_participate	Participer
+privacy_ok	OK
+privacy_title	À propos des statistiques anonymes
+privacy_intro	RustZIP est un logiciel gratuit et libre. Pour connaître son nombre d’utilisateurs, nous envoyons un petit ensemble de données entièrement anonymes.
+sidebar_locations	Emplacements
+sidebar_recent	Récents
+sidebar_quick_actions	Outils

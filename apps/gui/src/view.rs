@@ -17,6 +17,7 @@ use crate::{
 use gpui_kit::base::TestSupportExt as _;
 use gpui_kit::component::button::*;
 use gpui_kit::component::input::{Input, InputEvent, InputState};
+use gpui_kit::component::menu::{DropdownMenu, PopupMenuItem};
 use gpui_kit::component::progress::Progress;
 use gpui_kit::component::switch::Switch;
 use gpui_kit::component::table::{DataTable, TableEvent, TableState};
@@ -1886,8 +1887,10 @@ impl MainView {
     fn submit(&mut self, spec: JobSpec, cx: &mut Context<Self>) -> TaskId {
         let id = self.tasks.submit(spec);
         self.notice = None;
-        self.refresh_tasks(cx);
+        // Callers may need to attach a test/edit record before a fast task is observed as done.
+        self.task_view = self.tasks.snapshot();
         self.ensure_polling(cx);
+        cx.notify();
         id
     }
 
@@ -2687,6 +2690,7 @@ impl MainView {
                     .flex_1()
                     .window_control_area(WindowControlArea::Drag),
             )
+            .child(self.language_picker(cx, "language-picker-titlebar", false))
             .child(self.settings_button(cx))
     }
 
@@ -2720,6 +2724,9 @@ impl MainView {
                         .on_click(cx.listener(|this, _, window, cx| this.pick_archive(window, cx))),
                 ),
             )
+            .child(div().flex_1())
+            .child(self.language_picker(cx, "language-picker-titlebar", false))
+            .child(self.settings_button(cx))
     }
 
     /// A tab for an archive that is open: click to switch, × to close.
@@ -2889,7 +2896,6 @@ impl MainView {
                     .w(px(190.))
                     .child(Input::new(&self.search).id("search")),
             )
-            .child(self.settings_button(cx))
     }
 
     fn settings_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -2901,6 +2907,58 @@ impl MainView {
             .on_click(cx.listener(|this, _, _, cx| this.open_settings(cx)))
     }
 
+    fn language_picker(
+        &self,
+        cx: &mut Context<Self>,
+        id: &'static str,
+        show_name: bool,
+    ) -> impl IntoElement {
+        let configured = self.settings.language.clone();
+        let current = crate::text::language_choice_for(&configured);
+        let is_auto = configured.eq_ignore_ascii_case("auto");
+        let auto_label = self.tool_text("language_auto").to_string();
+        let view = cx.entity().downgrade();
+        Button::new(id)
+            .ghost()
+            .small()
+            .icon(IconName::Globe)
+            .when(show_name, |button| button.label(current.native_name))
+            .when(!show_name, |button| button.label(current.short))
+            .tooltip(self.tool_text("language"))
+            .accessibility_label(self.tool_text("language"))
+            .dropdown_menu(move |mut menu, _, _| {
+                let auto_view = view.clone();
+                menu = menu.item(
+                    PopupMenuItem::new(auto_label.clone())
+                        .checked(is_auto)
+                        .on_click(move |_, _, app| {
+                            let _ = auto_view.update(app, |this, cx| {
+                                this.change_settings(
+                                    |settings| settings.language = "auto".into(),
+                                    cx,
+                                );
+                            });
+                        }),
+                );
+                for choice in crate::text::LANGUAGE_CHOICES {
+                    let selected = !is_auto && configured.eq_ignore_ascii_case(choice.tag);
+                    let tag = choice.tag.to_string();
+                    let item_view = view.clone();
+                    menu = menu.item(
+                        PopupMenuItem::new(choice.native_name)
+                            .checked(selected)
+                            .on_click(move |_, _, app| {
+                                let tag = tag.clone();
+                                let _ = item_view.update(app, |this, cx| {
+                                    this.change_settings(|settings| settings.language = tag, cx);
+                                });
+                            }),
+                    );
+                }
+                menu
+            })
+    }
+
     fn render_empty(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let p = palette(cx);
         v_flex()
@@ -2909,11 +2967,12 @@ impl MainView {
             .flex_1()
             .when(!TABS_IN_TITLEBAR, |d| {
                 d.child(
-                    div()
-                        .absolute()
-                        .top_2()
-                        .right_2()
-                        .child(self.settings_button(cx)),
+                    div().absolute().top_2().right_2().child(
+                        h_flex()
+                            .gap_1()
+                            .child(self.language_picker(cx, "language-picker-titlebar", false))
+                            .child(self.settings_button(cx)),
+                    ),
                 )
             })
             .items_center()
@@ -3719,6 +3778,9 @@ impl MainView {
         });
         let heading = |text: &'static str| {
             div()
+                .min_w_0()
+                .overflow_hidden()
+                .text_ellipsis()
                 .px_2()
                 .pt_2()
                 .pb_1()
@@ -3742,7 +3804,16 @@ impl MainView {
                 .text_color(fg)
                 .when(state == Nav::Current, |d| d.bg(p.accent_soft))
                 .child(icon.size_4().text_color(icon_fg))
-                .child(div().flex_1().child(label))
+                .child(
+                    div()
+                        .id(label)
+                        .test_support()
+                        .flex_1()
+                        .min_w_0()
+                        .overflow_hidden()
+                        .text_ellipsis()
+                        .child(label),
+                )
                 .when_some(count, |d, n| {
                     d.child(
                         div()
@@ -3755,6 +3826,7 @@ impl MainView {
         };
         v_flex()
             .id("sidebar")
+            .test_support()
             .w(px(168.))
             .flex_none()
             .p_2()
@@ -4717,30 +4789,7 @@ impl MainView {
                 .gap_4()
                 .child(group(
                     self.tool_text("language"),
-                    h_flex()
-                        .gap_1()
-                        .children(
-                            [
-                                ("language-auto", "language_auto", "auto"),
-                                ("language-zh-cn", "language_zh_cn", "zh-CN"),
-                                ("language-en", "language_en", "en-US"),
-                            ]
-                            .map(|(id, key, value)| {
-                                segment(
-                                    id,
-                                    self.tool_text(key),
-                                    s.language.eq_ignore_ascii_case(value),
-                                )
-                                .on_click(cx.listener(
-                                    move |this, _, _, cx| {
-                                        this.change_settings(
-                                            |settings| settings.language = value.to_string(),
-                                            cx,
-                                        );
-                                    },
-                                ))
-                            }),
-                        )
+                    self.language_picker(cx, "language-picker-settings", true)
                         .into_any_element(),
                 ))
                 .child(group(

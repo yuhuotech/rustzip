@@ -1,0 +1,358 @@
+# key<TAB>Português do Brasil
+favorites	Locais favoritos
+home	Início
+current_archive	Arquivo atual
+kind_compress	Compactar
+kind_extract	Extrair
+kind_test	Testar
+kind_edit	Modificar
+error_password	A senha é necessária ou está incorreta.
+error_unknown_format	Formato de arquivo desconhecido.
+error_unsupported	Não compatível: {detail}
+error_corrupt	O arquivo está danificado: {detail}
+error_unsafe_path	O arquivo compactado contém um caminho inseguro, que foi recusado: {path}
+error_limit	Um limite de segurança foi atingido: {detail}
+error_io	Erro de leitura ou gravação: {detail}
+error_cancelled	Cancelado
+eta_seconds	{seconds}s
+eta_minutes_seconds	{minutes}min {seconds}s
+eta_hours_minutes	{hours}h {minutes}min
+task_queued	Na fila
+task_paused	Pausado
+task_done	Concluído
+task_cancelled	Cancelado
+task_failed	Falhou
+task_remaining	Restam {time}
+task_enter_password	Digite a senha
+task_continue	Retomar
+task_pause	Pausar
+task_cancel	Cancelar
+search_archive	Pesquisar no arquivo compactado
+dialog_open_archive	Abrir arquivo compactado
+dialog_choose_sources	Selecione arquivos ou pastas para compactar
+dialog_extract_to	Extrair aqui
+dialog_add_to_archive	Adicionar ao arquivo compactado
+notice_folder_open_failed	Não foi possível abrir esta pasta: {error}
+notice_safe_run	Por segurança, programas e scripts não são abertos diretamente. Confira a origem no gerenciador de arquivos antes de executá-los.
+notice_select_item	Selecione primeiro um arquivo ou uma pasta na lista.
+notice_select_file	Selecione primeiro um arquivo na lista.
+notice_copied_paths	{count} caminhos copiados
+notice_read_only	Este formato de arquivo compactado é somente leitura.
+notice_preview_file	A visualização está disponível apenas para arquivos.
+notice_prepare_preview	Preparando {name}…
+notice_external_edit_writeback	Aberto no aplicativo do sistema. As alterações salvas serão gravadas de volta no arquivo compactado.
+notice_external_read_only	Aberto no aplicativo do sistema. Este arquivo compactado é somente leitura, então as alterações não serão gravadas de volta.
+notice_preview_too_large	Este arquivo é grande demais para visualizar. Extraia-o para abrir.
+task_test_passed	{task} concluída: nenhum problema encontrado em {count} itens
+task_edit_complete	{task} concluída: o arquivo compactado agora tem {count} itens
+task_complete_count	{task} concluída: {count} arquivos, {size}
+task_password_needed	{task} precisa de uma senha
+task_failed_detail	{task} falhou: {reason}
+open_archive_tooltip	Abrir arquivo compactado
+encrypted_badge	Criptografado
+archive_read_only	Arquivos {format} são somente leitura. Não é possível adicionar, renomear ou excluir itens.
+toolbar_extract	Extrair para…
+toolbar_add	Adicionar
+toolbar_test	Testar
+toolbar_rename	Renomear
+toolbar_delete	Excluir
+toolbar_preview	Visualizar
+settings_tooltip	Configurações
+welcome_drag	Solte um arquivo compactado ou arquivos aqui, ou comece abaixo.
+welcome_open_archive	Abrir arquivo compactado
+welcome_new_archive	Criar arquivo compactado
+welcome_recent	Abertos recentemente
+selection_count	{count} selecionados
+selection_extract_hint	Escolha “Extrair seleção” para extrair apenas estes itens.
+entry_folder	Pasta
+entry_link	Link
+detail_original_size	Tamanho original
+detail_packed_size	Tamanho compactado
+detail_saved	Economizado
+detail_modified	Modificado
+detail_file_count	Arquivos
+detail_encrypted	Criptografado
+common_yes	Sim
+detail_extract_item	Extrair este item
+detail_archive_type	Arquivo {format}
+detail_extract_all	Extrair tudo
+status_task	Tarefas
+status_opening	Abrindo {name}…
+status_entry_count	{count} itens
+status_check_passed	Verificado
+status_check_failed	Falha na verificação
+status_compression_ratio	Compactado para {ratio}% do tamanho original
+status_ready	Pronto
+status_new_version	Atualização disponível: {version}
+status_downloading	Baixando {version}…
+go_up	Subir
+recent_column_name	Nome
+recent_column_size	Tamanho
+recent_column_location	Local
+recent_column_created	Criado
+recent_column_modified	Modificado
+recent_item_open	Abrir
+recent_item_missing	Ausente
+recent_empty_folder	Esta pasta está vazia.
+recent_empty_list	Nenhum arquivo compactado recente. Os arquivos abertos aparecerão aqui.
+recent_clear	Limpar lista de recentes
+action_extract_here	Extrair aqui
+action_extract_named	Extrair para uma pasta com nome
+action_reveal	Mostrar na pasta
+action_rename	Renomear
+action_remove_from_list	Remover da lista
+action_enter	Entrar
+action_compress	Compactar
+list_separator	,
+rename_entry_title	Renomear item
+rename_entry_hint	O nome dentro do arquivo compactado será alterado e o arquivo será recriado.
+rename_archive_title	Renomear arquivo compactado
+rename_archive_hint	O nome do arquivo compactado no disco será alterado.
+trash_folder_title	Excluir esta pasta?
+trash_file_title	Excluir este arquivo?
+trash_hint	O item será movido para a lixeira, de onde poderá ser restaurado.
+password_dialog_title	Senha necessária
+password_dialog_lead	Este arquivo compactado está criptografado. Digite a senha para continuar.
+password_wrong	Senha incorreta. Tente novamente.
+button_confirm	Confirmar
+delete_archive_folder	Excluir esta pasta?
+delete_archive_file	Excluir este arquivo?
+delete_archive_many	Excluir os {count} itens selecionados?
+delete_archive_more	… e mais {count}
+delete_archive_safe	Por segurança, um novo arquivo compactado é criado e verificado ao lado do original antes de substituí-lo. Se algo falhar, o original permanece intacto.
+delete_archive_lead	Os itens serão removidos do arquivo compactado. Esta ação não pode ser desfeita.
+compress_name_label	Nome do arquivo
+compress_format_label	Formato
+compress_preset_label	Predefinição
+preset_fast	Rápido
+preset_balanced	Equilibrado
+preset_smallest	Menor tamanho
+compress_password_label	Senha
+compress_title	Criar arquivo compactado
+compress_cancel	Cancelar
+compress_start	Criar
+compress_selection	{count} selecionados: {names}
+compress_name_invalid	O nome do arquivo não pode ficar vazio, conter / \\ : ou começar com ponto.
+compress_format_unknown	Não foi possível identificar o formato do arquivo compactado.
+extract_suffix	extração
+context_add_here	Adicionar arquivos aqui…
+context_select_all	Selecionar tudo
+context_open_folder	Abrir pasta
+context_extract_named	Extrair para “{name}”
+context_copy_path	Copiar caminho
+context_add_to_folder	Adicionar arquivos a esta pasta…
+accent_graphite	Grafite
+accent_teal	Verde-azulado
+accent_blue	Azul
+accent_violet	Violeta
+accent_rose	Rosa
+entry_count	{count} itens
+accent_custom	Personalizado
+menu_app	RustZIP
+menu_settings	Configurações…
+menu_quit	Sair do RustZIP
+menu_file	Arquivo
+menu_open_archive	Abrir arquivo compactado…
+menu_new_archive	Criar arquivo compactado…
+menu_extract_all	Extrair tudo…
+menu_search_archive	Pesquisar no arquivo compactado
+menu_close_tab	Fechar aba
+menu_tools	Ferramentas
+close_tab	Fechar aba
+task_progress	Progresso da tarefa: {task}
+archive_file_list	Lista de arquivos do arquivo compactado
+update_installed	A versão {version} foi baixada e a assinatura foi verificada. Siga as instruções do instalador.
+update_failed	A atualização falhou: {error}. Você pode tentar novamente mais tarde.
+passwords_cleared	Senhas salvas apagadas.
+password_placeholder	Digite a senha
+password_optional_placeholder	Deixe em branco para não criptografar
+default_archive_name	Arquivo
+status_recent_missing	{total} arquivos compactados recentes · {missing} ausentes
+status_recent_count	{total} arquivos compactados recentes
+status_folder_count	{name} · {count} itens
+rename_placeholder	Novo nome
+rename_invalid	O nome não pode ficar vazio nem conter / \\ : * ? " < > |.
+rename_complete	Renomeado
+rename_exists	Já existe um arquivo com esse nome nesta pasta. Escolha outro nome.
+rename_failed	Não foi possível renomear: {error}
+trash_complete	Movido para a lixeira
+trash_failed	Não foi possível excluir: {error}
+view_list	Lista
+view_icons	Ícones pequenos
+add_location	Adicionar local…
+remove_location	Remover local
+locations_empty	As pastas dos arquivos compactados que você abrir aparecerão aqui automaticamente.
+directory_empty	Esta pasta não tem itens para mostrar.
+location_missing	Indisponível
+col_name	Nome
+col_size	Tamanho
+col_path	Local
+col_modified	Modificado
+dir_desktop	Área de trabalho
+dir_downloads	Downloads
+dir_documents	Documentos
+dir_pictures	Imagens
+dir_music	Músicas
+dir_videos	Vídeos
+tools	Ferramentas
+processed	{bytes} processados
+case_conflict	O destino trata “{first}” e “{second}” como o mesmo nome. A operação foi interrompida antes da gravação. Use um volume que diferencie maiúsculas de minúsculas para manter os dois arquivos.
+destination_exists	Já existe um arquivo com o mesmo nome no destino. Escolha outro caminho ou uma pasta vazia, ou altere o tratamento de conflitos nas configurações.
+convert	Converter arquivo compactado
+repair	Reparar arquivo compactado
+passwords	Gerenciador de senhas
+add_folder	Adicionar pasta…
+add_password	Adicionar senha
+open	Abrir
+remove	Remover
+edit	Editar
+delete	Excluir
+refresh	Atualizar
+empty_favorites	Salve pastas aqui para acessá-las rapidamente.
+empty_passwords	Nenhuma senha salva. Esta lista mostra apenas rótulos, nunca os segredos.
+memory_only	O chaveiro do sistema está indisponível. As senhas serão mantidas apenas nesta sessão.
+password_hint	Use o nome do arquivo compactado como rótulo. Ative “Lembrar senhas” nas configurações para usá-la automaticamente.
+label	Rótulo / nome do arquivo compactado
+secret	Senha
+cancel	Cancelar
+save	Salvar
+busy	Processando…
+password_required	Digite um rótulo curto e uma senha. Caminhos e o rótulo reservado __labels__ não são permitidos.
+duplicate_label	Este rótulo já existe. Edite essa entrada ou escolha outro.
+vault_error	Não foi possível acessar o chaveiro. Desbloqueie-o e tente novamente.
+confirm_delete	Excluir esta senha salva?
+delete_hint	Isso exclui apenas a entrada do gerenciador de senhas. Confirme que ainda se lembra da senha.
+source	Arquivo compactado de origem
+choose_source	Escolher arquivo compactado…
+source_current	Aberto no momento
+source_empty	Nenhum arquivo compactado selecionado
+change_source	Alterar…
+source_password	Senha de origem (opcional)
+output_password	Senha do novo arquivo (em branco = sem criptografia)
+format	Formato de saída
+convert_hint	Converte os dados em fluxo para um novo arquivo compactado. Confira a criptografia da saída. A origem é preservada.
+repair_hint	Recupera arquivos legíveis para um novo arquivo compactado. Dados danificados podem ser perdidos. Consulte o relatório ao terminar.
+unencrypted	A saída não está criptografada. Escolha ZIP / 7z e defina uma senha para protegê-la.
+choose_output	Salvar o novo arquivo compactado
+start_convert	Salvar e converter…
+start_repair	Salvar e recuperar…
+report	Relatório de recuperação
+report_counts	{files} itens recuperados · {skipped} ignorados
+report_warnings	Avisos / problemas de recuperação
+report_complete	Nenhum item foi ignorado. O arquivo compactado recuperado passou na verificação de integridade.
+report_truncated	Apenas os primeiros 1000 detalhes são exibidos.
+issue_directory	O diretório ZIP está ilegível. Foram usados cabeçalhos locais; permissões e tipos de link podem ser perdidos, e links não identificados se tornam arquivos comuns.
+issue_local	Sem o diretório, não é seguro recuperar entradas criptografadas, ZIP64, com descritor ou truncadas.
+issue_link	Links simbólicos não podem ser preservados no momento e foram ignorados.
+issue_path	Caminho de entrada inseguro; ignorado. Verifique o arquivo compactado de origem.
+issue_checksum	A verificação de integridade falhou; item ignorado. Tente outra cópia da origem.
+issue_truncated	Os dados estão truncados e não podem ser recuperados por completo; item ignorado.
+issue_solid	O bloco sólido está danificado; este item não pode ser decodificado.
+issue_conflict	Nome de arquivo duplicado ou conflito com uma pasta; item ignorado.
+open_folder	Mostrar arquivo de saída
+close	Fechar
+report_button	Ver relatório
+favorite_error	Não foi possível salvar os favoritos. Verifique as permissões da pasta de configurações.
+settings_error	Não foi possível salvar as configurações. Verifique as permissões da pasta de configurações.
+folder_error	Não foi possível abrir este local. Verifique se a pasta existe e está acessível.
+folder_busy	Carregando…
+converted	Conversão concluída. O novo arquivo compactado passou na verificação de integridade.
+recovered	Recuperação concluída. Consulte o relatório para ver os itens ignorados.
+open_not_archive	O arquivo selecionado não é um arquivo compactado.
+open_unsupported	A compactação, extração e administração deste tipo de arquivo ainda não são compatíveis.
+open_corrupt	Este arquivo compactado está danificado e não pode ser aberto.
+open_missing	O arquivo não foi encontrado. Ele pode ter sido movido ou excluído.
+open_denied	Você não tem permissão para ler este arquivo. Verifique as permissões.
+open_limit	Este arquivo compactado atingiu um limite de segurança; a abertura foi interrompida.
+open_failed	Não foi possível ler o arquivo. Verifique se ele não está em uso e tente novamente.
+history	Histórico de tarefas
+history_empty	Ainda não há tarefas no histórico. Tarefas de compactação, extração e teste aparecerão aqui quando terminarem.
+history_clear	Limpar histórico
+history_hint	Os 200 registros mais recentes são mantidos; apenas nomes de arquivos e resultados são registrados.
+history_reveal_result	Mostrar resultado
+history_running	Em andamento
+history_failed	Falhou
+history_succeeded	Concluída
+history_cancelled	Cancelada
+history_new	Novo
+volume_size	Tamanho dos volumes (MiB; em branco = sem divisão)
+volume_invalid	Digite um número inteiro positivo de MiB para o tamanho do volume.
+preset_email_share	Compartilhar por e-mail (volumes de 20 MiB)
+preset_portable	Compatível entre plataformas
+dict_size	Tamanho do dicionário (MiB; em branco = automático)
+dict_invalid	Digite um tamanho de dicionário entre 1 e 64 MiB.
+solid_size	Tamanho do bloco sólido (MiB; em branco = arquivo inteiro, 0 = desativado)
+solid_invalid	Digite 0 ou um número inteiro positivo de MiB.
+hash	Calcular somas de verificação
+hash_complete	Somas de verificação do arquivo calculadas
+task_resource_limit	Esta tarefa atingiu um limite de recursos ou segurança. Revise as configurações e tente novamente.
+open_after_extract	Abrir pasta após a extração
+open_after_extract_hint	Após a extração, mostre a pasta de saída no gerenciador de arquivos.
+task_notifications	Notificações do sistema
+task_notifications_hint	Enviar uma notificação curta quando uma tarefa terminar ou falhar; ela não inclui nomes nem caminhos.
+notification_done	Uma tarefa em segundo plano foi concluída
+notification_failed	Uma tarefa em segundo plano falhou
+duplicate_scan	Verificação de arquivos duplicados
+duplicate_none	Nenhum arquivo idêntico encontrado. Você pode continuar a compactação.
+duplicate_found	{groups} grupos duplicados encontrados ({files} arquivos extras, {size}). Se continuar, todos serão mantidos.
+duplicate_scan_limit	O limite da verificação foi excedido; não foi possível procurar duplicados.
+duplicate_scan_limit_title	Verificação de duplicados incompleta
+duplicate_scan_limit_hint	Você pode compactar os arquivos selecionados. Esta execução não verificou duplicados nem removeu arquivos.
+duplicate_prompt_title	Arquivos duplicados encontrados
+duplicate_prompt_lead	Os hashes do conteúdo são iguais. Se continuar, todos os arquivos serão mantidos; nada será excluído.
+duplicate_continue	Continuar a compactação
+duplicate_cancel	Cancelar a compactação
+duplicate_cancelled	Compactação cancelada
+duplicate_group_files	{count} arquivos
+duplicate_more	Mais {count} grupos não exibidos
+duplicate_file_more	Mais {count} arquivos
+language	Idioma da interface
+language_auto	Seguir idioma do sistema
+language_zh_cn	Chinês simplificado
+language_en	Inglês
+language_es	Espanhol
+language_fr	Francês
+language_de	Alemão
+language_ja	Japonês
+language_ko	Coreano
+language_ar	Árabe
+language_pt	Português
+language_ru	Russo
+settings_title	Configurações
+settings_hint	As alterações são salvas imediatamente.
+settings_done	Concluído
+settings_appearance	Aparência
+theme_system	Seguir o sistema
+theme_light	Claro
+theme_dark	Escuro
+settings_accent	Cor de destaque
+settings_conflict	Quando um arquivo já existe
+settings_keep_both	Manter ambos
+settings_skip	Ignorar
+settings_replace	Substituir
+settings_smart_extract	Extração inteligente
+settings_smart_extract_hint	Quando um arquivo compactado tiver vários arquivos soltos, coloque-os em uma pasta com o nome do arquivo compactado.
+settings_check_updates	Verificar atualizações automaticamente
+settings_check_updates_hint	Verifique novas versões em segundo plano ao iniciar. A assinatura dos pacotes de atualização é verificada.
+settings_remember_passwords	Lembrar senhas
+settings_remember_passwords_hint	Depois de abrir um arquivo compactado criptografado, salve a senha no chaveiro do sistema e tente-a na próxima vez.
+settings_forget_passwords	Apagar senhas salvas
+settings_install_stats	Estatísticas anônimas de instalação
+settings_install_stats_hint	Somente um ID anônimo, a versão, o sistema e o idioma são enviados. Nomes de arquivos e atividade de uso não são coletados.
+settings_show_stats_privacy	Ver detalhes das estatísticas e escolher novamente…
+privacy_sent_title	O que é enviado
+privacy_sent_fields	ID aleatório · versão do aplicativo · sistema e versão · arquitetura da CPU · idioma da interface
+privacy_never_title	O que nunca é coletado
+privacy_never_fields	Nomes de arquivos, caminhos, conteúdo ou atividade de uso.
+privacy_timing	Enviado uma vez no primeiro uso e, depois, no máximo uma vez por dia. Envios com falha são descartados e não afetam o aplicativo. Você pode mudar sua escolha nas configurações a qualquer momento.
+privacy_choice_joined	Escolha atual: participar
+privacy_choice_left	Escolha atual: não participar
+privacy_return	Voltar
+privacy_decline	Não participar
+privacy_participate	Participar
+privacy_ok	OK
+privacy_title	Sobre estatísticas anônimas
+privacy_intro	RustZIP é um software gratuito e de código aberto. Para saber quantas pessoas o usam, enviamos um pequeno conjunto de informações totalmente anônimas.
+sidebar_locations	Locais
+sidebar_recent	Recentes
+sidebar_quick_actions	Ações rápidas

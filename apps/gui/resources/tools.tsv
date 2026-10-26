@@ -309,6 +309,14 @@ language	界面语言	Interface language
 language_auto	跟随系统	Follow system
 language_zh_cn	简体中文	Simplified Chinese
 language_en	English	English
+language_es	西班牙语	Spanish
+language_fr	法语	French
+language_de	德语	German
+language_ja	日语	Japanese
+language_ko	韩语	Korean
+language_ar	阿拉伯语	Arabic
+language_pt	葡萄牙语	Portuguese
+language_ru	俄语	Russian
 settings_title	设置	Settings
 settings_hint	改动会立即保存。	Changes are saved immediately.
 settings_done	完成	Done

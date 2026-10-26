@@ -6509,6 +6509,7 @@ dependencies = [
  "rz-engine",
  "rz-formats",
  "rz-services",
+ "sys-locale",
  "tempfile",
  "winresource",
  "zeroize",

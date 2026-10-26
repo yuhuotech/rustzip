@@ -1,0 +1,358 @@
+# key<TAB>العربية
+favorites	المواقع المفضلة
+home	الرئيسية
+current_archive	الأرشيف الحالي
+kind_compress	ضغط
+kind_extract	استخراج
+kind_test	اختبار
+kind_edit	تعديل
+error_password	كلمة المرور مطلوبة أو غير صحيحة.
+error_unknown_format	تنسيق ملف غير معروف.
+error_unsupported	غير مدعوم: {detail}
+error_corrupt	الملف تالف: {detail}
+error_unsafe_path	يحتوي الأرشيف على مسار غير آمن وتم رفضه: {path}
+error_limit	تم بلوغ حد أمان: {detail}
+error_io	خطأ في القراءة أو الكتابة: {detail}
+error_cancelled	تم الإلغاء
+eta_seconds	{seconds} ث
+eta_minutes_seconds	{minutes} د {seconds} ث
+eta_hours_minutes	{hours} س {minutes} د
+task_queued	في قائمة الانتظار
+task_paused	متوقف مؤقتًا
+task_done	اكتمل
+task_cancelled	أُلغي
+task_failed	فشل
+task_remaining	متبقي {time}
+task_enter_password	أدخل كلمة المرور
+task_continue	استئناف
+task_pause	إيقاف مؤقت
+task_cancel	إلغاء
+search_archive	البحث داخل الأرشيف
+dialog_open_archive	فتح أرشيف
+dialog_choose_sources	اختر ملفات أو مجلدات لضغطها
+dialog_extract_to	استخراج هنا
+dialog_add_to_archive	إضافة إلى الأرشيف
+notice_folder_open_failed	تعذر فتح هذا المجلد: {error}
+notice_safe_run	لأسباب أمنية، لا تُفتح البرامج والنصوص البرمجية مباشرة. تحقق من مصدرها في مدير الملفات قبل تشغيلها.
+notice_select_item	حدد ملفًا أو مجلدًا من القائمة أولًا.
+notice_select_file	حدد ملفًا من القائمة أولًا.
+notice_copied_paths	تم نسخ {count} مسارات
+notice_read_only	تنسيق الأرشيف هذا للقراءة فقط.
+notice_preview_file	المعاينة متاحة للملفات فقط.
+notice_prepare_preview	جارٍ تحضير {name}…
+notice_external_edit_writeback	فُتح في تطبيق النظام. ستُكتب التغييرات المحفوظة إلى الأرشيف.
+notice_external_read_only	فُتح في تطبيق النظام. هذا الأرشيف للقراءة فقط، لذا لن تُكتب التغييرات.
+notice_preview_too_large	هذا الملف كبير جدًا للمعاينة. استخرجه لعرضه.
+task_test_passed	اكتمل {task}: لم تُكتشف مشكلات في {count} عناصر
+task_edit_complete	اكتمل {task}: يحتوي الأرشيف الآن على {count} عناصر
+task_complete_count	اكتمل {task}: {count} ملفات، {size}
+task_password_needed	يحتاج {task} إلى كلمة مرور
+task_failed_detail	فشل {task}: {reason}
+open_archive_tooltip	فتح أرشيف
+encrypted_badge	مشفّر
+archive_read_only	أرشيفات {format} للقراءة فقط. لا يمكنك إضافة العناصر أو إعادة تسميتها أو حذفها.
+toolbar_extract	استخراج إلى…
+toolbar_add	إضافة
+toolbar_test	اختبار
+toolbar_rename	إعادة تسمية
+toolbar_delete	حذف
+toolbar_preview	معاينة
+settings_tooltip	الإعدادات
+welcome_drag	أفلت أرشيفًا أو ملفات هنا، أو ابدأ من الأسفل.
+welcome_open_archive	فتح أرشيف
+welcome_new_archive	إنشاء أرشيف
+welcome_recent	المفتوحة مؤخرًا
+selection_count	تم تحديد {count}
+selection_extract_hint	اختر «استخراج المحدد» لاستخراج هذه العناصر فقط.
+entry_folder	مجلد
+entry_link	رابط
+detail_original_size	الحجم الأصلي
+detail_packed_size	الحجم المضغوط
+detail_saved	تم توفيره
+detail_modified	تاريخ التعديل
+detail_file_count	الملفات
+detail_encrypted	مشفّر
+common_yes	نعم
+detail_extract_item	استخراج هذا العنصر
+detail_archive_type	أرشيف {format}
+detail_extract_all	استخراج الكل
+status_task	المهام
+status_opening	جارٍ فتح {name}…
+status_entry_count	{count} عناصر
+status_check_passed	تم التحقق
+status_check_failed	فشل التحقق
+status_compression_ratio	تم الضغط إلى {ratio}% من الحجم الأصلي
+status_ready	جاهز
+status_new_version	يتوفر تحديث: {version}
+status_downloading	جارٍ تنزيل {version}…
+go_up	للأعلى
+recent_column_name	الاسم
+recent_column_size	الحجم
+recent_column_location	الموقع
+recent_column_created	تاريخ الإنشاء
+recent_column_modified	تاريخ التعديل
+recent_item_open	فتح
+recent_item_missing	غير موجود
+recent_empty_folder	هذا المجلد فارغ.
+recent_empty_list	لا توجد أرشيفات مفتوحة مؤخرًا. ستظهر الأرشيفات التي تفتحها هنا.
+recent_clear	مسح القائمة الأخيرة
+action_extract_here	استخراج هنا
+action_extract_named	استخراج إلى مجلد مسمّى
+action_reveal	إظهار في المجلد
+action_rename	إعادة تسمية
+action_remove_from_list	إزالة من القائمة
+action_enter	دخول
+action_compress	ضغط
+list_separator	،
+rename_entry_title	إعادة تسمية العنصر
+rename_entry_hint	سيُغيّر الاسم داخل الأرشيف ويُعاد إنشاؤه.
+rename_archive_title	إعادة تسمية الأرشيف
+rename_archive_hint	سيُغيّر اسم ملف الأرشيف على القرص.
+trash_folder_title	هل تريد حذف هذا المجلد؟
+trash_file_title	هل تريد حذف هذا الملف؟
+trash_hint	سيُنقل إلى سلة المحذوفات، ويمكنك استعادته منها.
+password_dialog_title	كلمة المرور مطلوبة
+password_dialog_lead	هذا الأرشيف مشفّر. أدخل كلمة المرور للمتابعة.
+password_wrong	كلمة المرور غير صحيحة. حاول مرة أخرى.
+button_confirm	تأكيد
+delete_archive_folder	هل تريد حذف هذا المجلد؟
+delete_archive_file	هل تريد حذف هذا الملف؟
+delete_archive_many	هل تريد حذف العناصر المحددة وعددها {count}؟
+delete_archive_more	… و{count} أخرى
+delete_archive_safe	لأسباب أمنية، يُنشأ أرشيف جديد بجانب الأصلي ويُفحص قبل استبداله. إذا حدث خطأ، فلن يتغير الأرشيف الأصلي.
+delete_archive_lead	ستُزال العناصر من الأرشيف. لا يمكن التراجع عن هذا الإجراء.
+compress_name_label	اسم الملف
+compress_format_label	التنسيق
+compress_preset_label	الإعداد المسبق
+preset_fast	سريع
+preset_balanced	متوازن
+preset_smallest	أصغر حجم
+compress_password_label	كلمة المرور
+compress_title	إنشاء أرشيف
+compress_cancel	إلغاء
+compress_start	إنشاء
+compress_selection	تم تحديد {count}: {names}
+compress_name_invalid	لا يمكن ترك اسم الملف فارغًا أو أن يحتوي على / \\ : أو أن يبدأ بنقطة.
+compress_format_unknown	تعذر تحديد تنسيق الأرشيف.
+extract_suffix	استخراج
+context_add_here	إضافة ملفات هنا…
+context_select_all	تحديد الكل
+context_open_folder	فتح المجلد
+context_extract_named	استخراج إلى مجلد «{name}»
+context_copy_path	نسخ المسار
+context_add_to_folder	إضافة ملفات إلى هذا المجلد…
+accent_graphite	فحمي
+accent_teal	أزرق مخضر
+accent_blue	أزرق
+accent_violet	بنفسجي
+accent_rose	وردي
+entry_count	{count} عناصر
+accent_custom	مخصص
+menu_app	RustZIP
+menu_settings	الإعدادات…
+menu_quit	إنهاء RustZIP
+menu_file	ملف
+menu_open_archive	فتح أرشيف…
+menu_new_archive	إنشاء أرشيف…
+menu_extract_all	استخراج الكل…
+menu_search_archive	البحث داخل الأرشيف
+menu_close_tab	إغلاق علامة التبويب
+menu_tools	الأدوات
+close_tab	إغلاق علامة التبويب
+task_progress	تقدم المهمة: {task}
+archive_file_list	قائمة ملفات الأرشيف
+update_installed	تم تنزيل الإصدار {version} والتحقق من توقيعه. اتبع تعليمات المثبّت.
+update_failed	فشل التحديث: {error}. يمكنك المحاولة مرة أخرى لاحقًا.
+passwords_cleared	تم مسح كلمات المرور المحفوظة.
+password_placeholder	أدخل كلمة المرور
+password_optional_placeholder	اتركه فارغًا لإيقاف التشفير
+default_archive_name	أرشيف
+status_recent_missing	{total} أرشيفات حديثة · {missing} غير موجودة
+status_recent_count	{total} أرشيفات حديثة
+status_folder_count	{name} · {count} عناصر
+rename_placeholder	اسم جديد
+rename_invalid	لا يمكن ترك الاسم فارغًا أو أن يحتوي على / \\ : * ? " < > |.
+rename_complete	تمت إعادة التسمية
+rename_exists	يوجد ملف بهذا الاسم في هذا المجلد. اختر اسمًا آخر.
+rename_failed	تعذرت إعادة التسمية: {error}
+trash_complete	تم النقل إلى سلة المحذوفات
+trash_failed	تعذر الحذف: {error}
+view_list	قائمة
+view_icons	أيقونات صغيرة
+add_location	إضافة موقع…
+remove_location	إزالة الموقع
+locations_empty	ستظهر هنا تلقائيًا مجلدات الأرشيفات التي تفتحها.
+directory_empty	لا توجد عناصر قابلة للعرض في هذا المجلد.
+location_missing	غير متاح
+col_name	الاسم
+col_size	الحجم
+col_path	الموقع
+col_modified	تاريخ التعديل
+dir_desktop	سطح المكتب
+dir_downloads	التنزيلات
+dir_documents	المستندات
+dir_pictures	الصور
+dir_music	الموسيقى
+dir_videos	الفيديوهات
+tools	الأدوات
+processed	تمت معالجة {bytes}
+case_conflict	يتعامل قرص الوجهة مع «{first}» و«{second}» على أنهما الاسم نفسه. تم الإيقاف قبل الكتابة. استخدم قرصًا يميز حالة الأحرف للاحتفاظ بالملفين.
+destination_exists	يوجد ملف بالاسم نفسه في الوجهة. اختر مسارًا جديدًا أو مجلدًا فارغًا، أو غيّر طريقة معالجة التعارض في الإعدادات.
+convert	تحويل الأرشيف
+repair	إصلاح الأرشيف
+passwords	مدير كلمات المرور
+add_folder	إضافة مجلد…
+add_password	إضافة كلمة مرور
+open	فتح
+remove	إزالة
+edit	تعديل
+delete	حذف
+refresh	تحديث
+empty_favorites	احفظ المجلدات هنا للوصول إليها بسرعة.
+empty_passwords	لا توجد كلمات مرور محفوظة. تعرض هذه القائمة التسميات فقط، ولا تعرض الأسرار.
+memory_only	مخزن مفاتيح النظام غير متاح. ستُحفظ كلمات المرور لهذه الجلسة فقط.
+password_hint	استخدم اسم ملف الأرشيف كتسمية. فعّل «تذكر كلمات المرور» في الإعدادات لاستخدامها تلقائيًا.
+label	التسمية / اسم ملف الأرشيف
+secret	كلمة المرور
+cancel	إلغاء
+save	حفظ
+busy	جارٍ العمل…
+password_required	أدخل تسمية قصيرة وكلمة مرور. لا يُسمح بالمسارات أو بالتسمية المحجوزة __labels__.
+duplicate_label	هذه التسمية مستخدمة بالفعل. عدّل هذا الإدخال أو اختر تسمية أخرى.
+vault_error	تعذر الوصول إلى مخزن المفاتيح. أزل قفله وحاول مرة أخرى.
+confirm_delete	هل تريد حذف كلمة المرور المحفوظة هذه؟
+delete_hint	سيؤدي ذلك إلى حذف الإدخال من مدير كلمات المرور فقط. تأكد من أنك ما زلت تتذكر كلمة المرور.
+source	الأرشيف المصدر
+choose_source	اختيار أرشيف…
+source_current	مفتوح حاليًا
+source_empty	لم يتم تحديد أرشيف
+change_source	تغيير…
+source_password	كلمة مرور المصدر (اختيارية)
+output_password	كلمة مرور الأرشيف الجديد (اتركها فارغة لعدم التشفير)
+format	تنسيق الإخراج
+convert_hint	حوّل البيانات إلى أرشيف جديد باستخدام التدفق. تحقق من تشفير الإخراج. سيبقى المصدر كما هو.
+repair_hint	استعد الملفات القابلة للقراءة إلى أرشيف جديد. قد تُفقد البيانات التالفة. راجع تقرير الاستعادة بعد الانتهاء.
+unencrypted	الإخراج غير مشفّر. اختر ZIP / 7z وحدد كلمة مرور لحماية محتواه.
+choose_output	حفظ الأرشيف الجديد
+start_convert	حفظ وتحويل…
+start_repair	حفظ واستعادة…
+report	تقرير الاستعادة
+report_counts	تمت استعادة {files} عناصر · تم تخطي {skipped}
+report_warnings	تحذيرات / مشكلات الاستعادة
+report_complete	لم يتم تخطي أي عنصر. اجتاز الأرشيف المستعاد فحص السلامة.
+report_truncated	تُعرض أول 1000 تفصيلة فقط.
+issue_directory	تعذرت قراءة دليل ZIP، لذا استُخدمت الترويسات المحلية. قد تُفقد الأذونات وأنواع الروابط، وستتحول الروابط غير المحددة إلى ملفات عادية.
+issue_local	لا يمكن استعادة الإدخالات المشفّرة أو ZIP64 أو ذات واصف البيانات أو المبتورة بأمان من دون الدليل.
+issue_link	لا يمكن الحفاظ على الروابط الرمزية حاليًا، وتم تخطيها.
+issue_path	مسار إدخال غير آمن؛ تم تخطيه. تحقق من الأرشيف المصدر.
+issue_checksum	فشل التحقق من السلامة؛ تم التخطي. جرّب نسخة أخرى من المصدر.
+issue_truncated	البيانات مبتورة ولا يمكن استعادتها بالكامل؛ تم تخطيها.
+issue_solid	الكتلة الصلبة تالفة؛ تعذر فك ترميز هذا الإدخال.
+issue_conflict	اسم ملف مكرر أو تعارض مع مجلد؛ تم التخطي.
+open_folder	إظهار ملف الإخراج
+close	إغلاق
+report_button	عرض التقرير
+favorite_error	تعذر حفظ المواقع المفضلة. تحقق من أذونات مجلد الإعدادات.
+settings_error	تعذر حفظ الإعدادات. تحقق من أذونات مجلد الإعدادات.
+folder_error	تعذر فتح هذا الموقع. تحقق من وجود المجلد وإمكانية الوصول إليه.
+folder_busy	جارٍ التحميل…
+converted	اكتمل التحويل. اجتاز الأرشيف الجديد فحص السلامة.
+recovered	اكتملت الاستعادة. راجع التقرير لمعرفة العناصر التي تم تخطيها.
+open_not_archive	الملف الذي اخترته ليس أرشيفًا.
+open_unsupported	ضغط هذا النوع من الملفات واستخراجه وإدارته غير مدعوم بعد.
+open_corrupt	هذا الأرشيف تالف ولا يمكن فتحه.
+open_missing	لم يتم العثور على الملف. ربما تم نقله أو حذفه.
+open_denied	ليس لديك إذن لقراءة هذا الملف. تحقق من أذوناته.
+open_limit	بلغ هذا الأرشيف حدًا أمنيًا، لذا تم إيقاف فتحه.
+open_failed	تعذرت قراءة الملف. تحقق من أنه غير مستخدم ثم حاول مرة أخرى.
+history	سجل المهام
+history_empty	لا توجد مهام في السجل بعد. ستظهر هنا مهام الضغط والاستخراج والاختبار عند اكتمالها.
+history_clear	مسح السجل
+history_hint	يُحتفظ بآخر 200 سجل، ولا تُسجل إلا أسماء الملفات والنتائج.
+history_reveal_result	إظهار النتيجة
+history_running	قيد التنفيذ
+history_failed	فشل
+history_succeeded	اكتمل
+history_cancelled	أُلغي
+history_new	جديد
+volume_size	حجم الجزء (MiB؛ اتركه فارغًا لعدم التقسيم)
+volume_invalid	أدخل عددًا صحيحًا موجبًا بوحدة MiB لحجم الجزء.
+preset_email_share	مشاركة بالبريد (أجزاء 20 MiB)
+preset_portable	متوافق مع الأنظمة المختلفة
+dict_size	حجم القاموس (MiB؛ فارغ = تلقائي)
+dict_invalid	أدخل حجم قاموس من 1 إلى 64 MiB.
+solid_size	حجم الكتلة الصلبة (MiB؛ فارغ = الأرشيف كله، 0 = تعطيل)
+solid_invalid	أدخل 0 أو عددًا صحيحًا موجبًا بوحدة MiB.
+hash	حساب قيم التحقق
+hash_complete	تم حساب قيم التحقق للملف
+task_resource_limit	بلغت هذه المهمة حدًا للموارد أو الأمان. راجع الإعدادات وحاول مرة أخرى.
+open_after_extract	فتح المجلد بعد الاستخراج
+open_after_extract_hint	بعد نجاح الاستخراج، اعرض مجلد الإخراج في مدير الملفات.
+task_notifications	إشعارات النظام
+task_notifications_hint	إرسال إشعار قصير عند اكتمال المهمة أو فشلها؛ لا يتضمن أسماء ملفات أو مسارات.
+notification_done	اكتملت مهمة في الخلفية
+notification_failed	فشلت مهمة في الخلفية
+duplicate_scan	فحص الملفات المكررة
+duplicate_none	لم يتم العثور على ملفات متطابقة. يمكنك متابعة الضغط.
+duplicate_found	تم العثور على {groups} مجموعات مكررة ({files} ملفات إضافية، {size}). ستبقى جميع الملفات عند المتابعة.
+duplicate_scan_limit	تم تجاوز حد الفحص، لذلك تعذر البحث عن ملفات مكررة.
+duplicate_scan_limit_title	فحص الملفات المكررة غير مكتمل
+duplicate_scan_limit_hint	يمكنك ضغط الملفات المحددة. لم يفحص هذا التشغيل التكرارات ولم يحذف أي شيء.
+duplicate_prompt_title	تم العثور على ملفات مكررة
+duplicate_prompt_lead	تتطابق قيم تجزئة المحتوى. ستبقى كل الملفات عند المتابعة، ولن يُحذف شيء.
+duplicate_continue	متابعة الضغط
+duplicate_cancel	إلغاء الضغط
+duplicate_cancelled	تم إلغاء الضغط
+duplicate_group_files	{count} ملفات
+duplicate_more	{count} مجموعات أخرى غير معروضة
+duplicate_file_more	{count} ملفات أخرى
+language	لغة الواجهة
+language_auto	اتباع لغة النظام
+language_zh_cn	الصينية المبسطة
+language_en	الإنجليزية
+language_es	الإسبانية
+language_fr	الفرنسية
+language_de	الألمانية
+language_ja	اليابانية
+language_ko	الكورية
+language_ar	العربية
+language_pt	البرتغالية
+language_ru	الروسية
+settings_title	الإعدادات
+settings_hint	تُحفظ التغييرات فورًا.
+settings_done	تم
+settings_appearance	المظهر
+theme_system	اتباع النظام
+theme_light	فاتح
+theme_dark	داكن
+settings_accent	لون التمييز
+settings_conflict	عند وجود ملف مسبقًا
+settings_keep_both	الاحتفاظ بكليهما
+settings_skip	تخطي
+settings_replace	استبدال
+settings_smart_extract	استخراج ذكي
+settings_smart_extract_hint	عند وجود عدة ملفات في جذر الأرشيف، ضعها في مجلد يحمل اسم الأرشيف.
+settings_check_updates	التحقق من التحديثات تلقائيًا
+settings_check_updates_hint	التحقق من الإصدارات الجديدة في الخلفية عند بدء التشغيل. يتم التحقق من توقيع حزم التحديث.
+settings_remember_passwords	تذكر كلمات المرور
+settings_remember_passwords_hint	بعد فتح أرشيف مشفّر، احفظ كلمة مروره في مخزن مفاتيح النظام وجرّبها في المرة التالية.
+settings_forget_passwords	مسح كلمات المرور المحفوظة
+settings_install_stats	إحصاءات تثبيت مجهولة
+settings_install_stats_hint	يتم إرسال معرّف مجهول والإصدار والنظام واللغة فقط. لا تُجمع أسماء الملفات أو أنشطة الاستخدام.
+settings_show_stats_privacy	عرض تفاصيل الإحصاءات والاختيار مجددًا…
+privacy_sent_title	ما يتم إرساله
+privacy_sent_fields	معرّف عشوائي · إصدار التطبيق · النظام وإصداره · بنية وحدة المعالجة · لغة الواجهة
+privacy_never_title	ما لا يتم جمعه مطلقًا
+privacy_never_fields	أسماء الملفات أو المسارات أو المحتوى أو نشاط الاستخدام.
+privacy_timing	يُرسل مرة عند أول استخدام، ثم مرة واحدة يوميًا كحد أقصى. يتم تجاهل الإرسال الفاشل ولا يؤثر في استخدام التطبيق. يمكنك تغيير اختيارك من الإعدادات في أي وقت.
+privacy_choice_joined	الاختيار الحالي: مشاركة
+privacy_choice_left	الاختيار الحالي: عدم المشاركة
+privacy_return	رجوع
+privacy_decline	عدم المشاركة
+privacy_participate	المشاركة
+privacy_ok	حسنًا
+privacy_title	حول الإحصاءات المجهولة
+privacy_intro	RustZIP برنامج مجاني ومفتوح المصدر. لمعرفة عدد مستخدميه، نرسل مجموعة صغيرة من المعلومات المجهولة بالكامل.
+sidebar_locations	المواقع
+sidebar_recent	الأخيرة
+sidebar_quick_actions	إجراءات سريعة

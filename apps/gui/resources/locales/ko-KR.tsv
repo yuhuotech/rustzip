@@ -1,0 +1,358 @@
+# key<TAB>한국어
+favorites	즐겨찾기
+home	홈
+current_archive	현재 압축 파일
+kind_compress	압축
+kind_extract	압축 풀기
+kind_test	검사
+kind_edit	수정
+error_password	암호가 필요하거나 올바르지 않습니다.
+error_unknown_format	알 수 없는 파일 형식입니다.
+error_unsupported	지원되지 않음: {detail}
+error_corrupt	파일이 손상되었습니다: {detail}
+error_unsafe_path	압축 파일에 안전하지 않은 경로가 있어 거부했습니다: {path}
+error_limit	보안 제한에 도달했습니다: {detail}
+error_io	읽기 또는 쓰기 오류: {detail}
+error_cancelled	취소됨
+eta_seconds	{seconds}초
+eta_minutes_seconds	{minutes}분 {seconds}초
+eta_hours_minutes	{hours}시간 {minutes}분
+task_queued	대기 중
+task_paused	일시 정지됨
+task_done	완료됨
+task_cancelled	취소됨
+task_failed	실패함
+task_remaining	{time} 남음
+task_enter_password	암호 입력
+task_continue	재개
+task_pause	일시 정지
+task_cancel	취소
+search_archive	압축 파일에서 검색
+dialog_open_archive	압축 파일 열기
+dialog_choose_sources	압축할 파일 또는 폴더 선택
+dialog_extract_to	여기에 압축 풀기
+dialog_add_to_archive	압축 파일에 추가
+notice_folder_open_failed	폴더를 열 수 없습니다: {error}
+notice_safe_run	보안을 위해 프로그램과 스크립트를 직접 열지 않습니다. 실행하기 전에 파일 관리자에서 출처를 확인하세요.
+notice_select_item	먼저 목록에서 파일 또는 폴더를 선택하세요.
+notice_select_file	먼저 목록에서 파일을 선택하세요.
+notice_copied_paths	경로 {count}개 복사됨
+notice_read_only	이 압축 형식은 읽기 전용입니다.
+notice_preview_file	파일만 미리 볼 수 있습니다.
+notice_prepare_preview	{name} 준비 중…
+notice_external_edit_writeback	시스템 앱에서 열었습니다. 저장한 변경 사항은 압축 파일에 기록됩니다.
+notice_external_read_only	시스템 앱에서 열었습니다. 이 압축 파일은 읽기 전용이므로 변경 사항이 기록되지 않습니다.
+notice_preview_too_large	파일이 너무 커서 미리 볼 수 없습니다. 압축을 풀어 확인하세요.
+task_test_passed	{task} 완료: 항목 {count}개에서 문제를 찾지 못했습니다
+task_edit_complete	{task} 완료: 압축 파일에 이제 항목 {count}개가 있습니다
+task_complete_count	{task} 완료: 파일 {count}개, {size}
+task_password_needed	{task}에 암호가 필요합니다
+task_failed_detail	{task} 실패: {reason}
+open_archive_tooltip	압축 파일 열기
+encrypted_badge	암호화됨
+archive_read_only	{format} 압축 파일은 읽기 전용입니다. 항목을 추가, 이름 변경 또는 삭제할 수 없습니다.
+toolbar_extract	압축 풀 위치…
+toolbar_add	추가
+toolbar_test	검사
+toolbar_rename	이름 변경
+toolbar_delete	삭제
+toolbar_preview	미리 보기
+settings_tooltip	설정
+welcome_drag	압축 파일이나 파일을 여기에 놓거나 아래에서 시작하세요.
+welcome_open_archive	압축 파일 열기
+welcome_new_archive	압축 파일 만들기
+welcome_recent	최근에 열었음
+selection_count	{count}개 선택됨
+selection_extract_hint	선택한 항목만 풀려면 “선택 항목 압축 풀기”를 선택하세요.
+entry_folder	폴더
+entry_link	링크
+detail_original_size	원래 크기
+detail_packed_size	압축된 크기
+detail_saved	절약됨
+detail_modified	수정됨
+detail_file_count	파일
+detail_encrypted	암호화됨
+common_yes	예
+detail_extract_item	이 항목 압축 풀기
+detail_archive_type	{format} 압축 파일
+detail_extract_all	모두 압축 풀기
+status_task	작업
+status_opening	{name} 여는 중…
+status_entry_count	항목 {count}개
+status_check_passed	확인됨
+status_check_failed	확인 실패
+status_compression_ratio	원래 크기의 {ratio}%로 압축됨
+status_ready	준비됨
+status_new_version	업데이트 사용 가능: {version}
+status_downloading	{version} 다운로드 중…
+go_up	위로
+recent_column_name	이름
+recent_column_size	크기
+recent_column_location	위치
+recent_column_created	만든 날짜
+recent_column_modified	수정한 날짜
+recent_item_open	열기
+recent_item_missing	없음
+recent_empty_folder	이 폴더는 비어 있습니다.
+recent_empty_list	최근에 연 압축 파일이 없습니다. 연 파일이 여기에 표시됩니다.
+recent_clear	최근 목록 지우기
+action_extract_here	여기에 압축 풀기
+action_extract_named	이름을 지정한 폴더에 압축 풀기
+action_reveal	폴더에서 보기
+action_rename	이름 변경
+action_remove_from_list	목록에서 제거
+action_enter	열기
+action_compress	압축
+list_separator	,
+rename_entry_title	항목 이름 변경
+rename_entry_hint	압축 파일 안의 이름을 변경하고 압축 파일을 다시 만듭니다.
+rename_archive_title	압축 파일 이름 변경
+rename_archive_hint	디스크에 있는 압축 파일 이름을 변경합니다.
+trash_folder_title	이 폴더를 삭제할까요?
+trash_file_title	이 파일을 삭제할까요?
+trash_hint	휴지통으로 이동하므로 필요하면 복원할 수 있습니다.
+password_dialog_title	암호 필요
+password_dialog_lead	이 압축 파일은 암호화되어 있습니다. 계속하려면 암호를 입력하세요.
+password_wrong	암호가 올바르지 않습니다. 다시 시도하세요.
+button_confirm	확인
+delete_archive_folder	이 폴더를 삭제할까요?
+delete_archive_file	이 파일을 삭제할까요?
+delete_archive_many	선택한 항목 {count}개를 삭제할까요?
+delete_archive_more	…외 {count}개
+delete_archive_safe	안전을 위해 원본을 교체하기 전에 옆에 새 압축 파일을 만들고 확인합니다. 실패해도 원본은 변경되지 않습니다.
+delete_archive_lead	항목이 압축 파일에서 제거됩니다. 이 작업은 취소할 수 없습니다.
+compress_name_label	파일 이름
+compress_format_label	형식
+compress_preset_label	프리셋
+preset_fast	빠름
+preset_balanced	균형
+preset_smallest	최소 크기
+compress_password_label	암호
+compress_title	압축 파일 만들기
+compress_cancel	취소
+compress_start	만들기
+compress_selection	{count}개 선택됨: {names}
+compress_name_invalid	파일 이름은 비워 둘 수 없고 / \\ : 를 포함하거나 점으로 시작할 수 없습니다.
+compress_format_unknown	압축 파일 형식을 확인할 수 없습니다.
+extract_suffix	압축 풀기
+context_add_here	여기에 파일 추가…
+context_select_all	모두 선택
+context_open_folder	폴더 열기
+context_extract_named	“{name}” 폴더에 압축 풀기
+context_copy_path	경로 복사
+context_add_to_folder	이 폴더에 파일 추가…
+accent_graphite	흑연색
+accent_teal	청록색
+accent_blue	파란색
+accent_violet	보라색
+accent_rose	장밋빛
+entry_count	항목 {count}개
+accent_custom	사용자 지정
+menu_app	RustZIP
+menu_settings	설정…
+menu_quit	RustZIP 종료
+menu_file	파일
+menu_open_archive	압축 파일 열기…
+menu_new_archive	압축 파일 만들기…
+menu_extract_all	모두 압축 풀기…
+menu_search_archive	압축 파일에서 검색
+menu_close_tab	탭 닫기
+menu_tools	도구
+close_tab	탭 닫기
+task_progress	작업 진행률: {task}
+archive_file_list	압축 파일 목록
+update_installed	버전 {version}을 다운로드하고 서명을 확인했습니다. 설치 프로그램의 안내를 따르세요.
+update_failed	업데이트 실패: {error}. 나중에 다시 시도할 수 있습니다.
+passwords_cleared	저장된 암호를 지웠습니다.
+password_placeholder	암호 입력
+password_optional_placeholder	암호화하지 않으려면 비워 두세요
+default_archive_name	압축 파일
+status_recent_missing	최근 압축 파일 {total}개 · 없음 {missing}개
+status_recent_count	최근 압축 파일 {total}개
+status_folder_count	{name} · 항목 {count}개
+rename_placeholder	새 이름
+rename_invalid	이름을 비워 둘 수 없고 / \\ : * ? " < > | 를 포함할 수 없습니다.
+rename_complete	이름을 변경했습니다
+rename_exists	이 폴더에 같은 이름의 파일이 이미 있습니다. 다른 이름을 선택하세요.
+rename_failed	이름을 변경할 수 없습니다: {error}
+trash_complete	휴지통으로 이동했습니다
+trash_failed	삭제할 수 없습니다: {error}
+view_list	목록
+view_icons	작은 아이콘
+add_location	위치 추가…
+remove_location	위치 제거
+locations_empty	열었던 압축 파일의 폴더가 여기에 자동으로 표시됩니다.
+directory_empty	표시할 항목이 없는 폴더입니다.
+location_missing	사용할 수 없음
+col_name	이름
+col_size	크기
+col_path	위치
+col_modified	수정한 날짜
+dir_desktop	데스크톱
+dir_downloads	다운로드
+dir_documents	문서
+dir_pictures	사진
+dir_music	음악
+dir_videos	비디오
+tools	도구
+processed	{bytes} 처리됨
+case_conflict	대상 볼륨에서 “{first}”와 “{second}”가 같은 이름으로 처리됩니다. 쓰기 전에 중지했습니다. 두 파일을 모두 보존하려면 대소문자를 구분하는 볼륨을 사용하세요.
+destination_exists	대상 위치에 같은 이름의 파일이 있습니다. 새 경로나 빈 폴더를 선택하거나 설정에서 압축 풀기 충돌 처리를 바꾸세요.
+convert	형식 변환
+repair	복구
+passwords	암호 보관함
+add_folder	폴더 추가…
+add_password	암호 추가
+open	열기
+remove	제거
+edit	편집
+delete	삭제
+refresh	새로 고침
+empty_favorites	빠르게 열 수 있도록 폴더를 여기에 저장하세요.
+empty_passwords	저장된 암호가 없습니다. 이 목록에는 라벨만 표시되고 암호는 표시되지 않습니다.
+memory_only	시스템 키체인을 사용할 수 없습니다. 암호는 이번 실행 동안만 보관됩니다.
+password_hint	압축 파일 이름을 라벨로 사용하세요. 설정에서 “암호 기억”을 켜면 해당 암호를 자동으로 시도합니다.
+label	라벨 / 압축 파일 이름
+secret	암호
+cancel	취소
+save	저장
+busy	처리 중…
+password_required	짧은 라벨과 암호를 입력하세요. 경로와 예약된 라벨 __labels__는 사용할 수 없습니다.
+duplicate_label	이 라벨이 이미 있습니다. 기존 항목을 편집하거나 다른 라벨을 선택하세요.
+vault_error	키체인에 접근할 수 없습니다. 잠금을 해제하고 다시 시도하세요.
+confirm_delete	저장된 이 암호를 삭제할까요?
+delete_hint	암호 보관함 항목만 삭제됩니다. 암호를 기억하고 있는지 확인하세요.
+source	원본 압축 파일
+choose_source	압축 파일 선택…
+source_current	현재 열림
+source_empty	압축 파일이 선택되지 않음
+change_source	변경…
+source_password	원본 암호(선택 사항)
+output_password	새 압축 파일 암호(비워 두면 암호화하지 않음)
+format	출력 형식
+convert_hint	스트리밍 방식으로 새 압축 파일로 변환합니다. 출력 암호화를 확인하세요. 원본은 유지됩니다.
+repair_hint	읽을 수 있는 파일을 새 압축 파일로 복구합니다. 손상된 데이터는 복구되지 않을 수 있습니다. 완료 후 복구 보고서를 확인하세요.
+unencrypted	출력은 암호화되지 않습니다. 보호하려면 ZIP / 7z를 선택하고 암호를 설정하세요.
+choose_output	새 압축 파일 저장
+start_convert	저장하고 변환…
+start_repair	저장하고 복구…
+report	복구 보고서
+report_counts	항목 {files}개 복구 · {skipped}개 건너뜀
+report_warnings	경고 / 복구 문제
+report_complete	건너뛴 항목이 없습니다. 복구된 압축 파일의 무결성 확인을 통과했습니다.
+report_truncated	처음 1000개 세부 항목만 표시됩니다.
+issue_directory	ZIP 디렉터리를 읽을 수 없어 로컬 헤더를 사용했습니다. 권한과 링크 유형이 손실될 수 있으며, 확인되지 않은 링크는 일반 파일로 처리됩니다.
+issue_local	디렉터리 없이는 암호화, ZIP64, 데이터 디스크립터 또는 잘린 항목을 안전하게 복구할 수 없습니다.
+issue_link	현재 심볼릭 링크를 보존할 수 없어 건너뛰었습니다.
+issue_path	안전하지 않은 항목 경로라 건너뛰었습니다. 원본 압축 파일을 확인하세요.
+issue_checksum	무결성 확인에 실패해 건너뛰었습니다. 원본의 다른 사본을 시도하세요.
+issue_truncated	데이터가 잘려 완전히 복구할 수 없어 건너뛰었습니다.
+issue_solid	솔리드 블록이 손상되어 이 항목을 디코딩할 수 없습니다.
+issue_conflict	파일 이름 중복 또는 폴더 충돌로 건너뛰었습니다.
+open_folder	출력 파일 표시
+close	닫기
+report_button	보고서 보기
+favorite_error	즐겨찾는 위치를 저장할 수 없습니다. 설정 폴더의 권한을 확인하세요.
+settings_error	설정을 저장할 수 없습니다. 설정 폴더의 권한을 확인하세요.
+folder_error	이 위치를 열 수 없습니다. 폴더가 있고 접근할 수 있는지 확인하세요.
+folder_busy	불러오는 중…
+converted	변환 완료. 새 압축 파일의 무결성 확인을 통과했습니다.
+recovered	복구 완료. 건너뛴 항목이 있는지 보고서를 확인하세요.
+open_not_archive	선택한 파일은 압축 파일이 아닙니다.
+open_unsupported	이 파일 형식의 압축, 압축 풀기 및 관리 기능은 아직 지원되지 않습니다.
+open_corrupt	이 압축 파일은 손상되어 열 수 없습니다.
+open_missing	파일을 찾을 수 없습니다. 이동되거나 삭제되었을 수 있습니다.
+open_denied	이 파일을 읽을 권한이 없습니다. 권한을 확인하세요.
+open_limit	압축 파일이 안전 제한에 도달해 열기를 중지했습니다.
+open_failed	파일을 읽을 수 없습니다. 사용 중이 아닌지 확인하고 다시 시도하세요.
+history	작업 기록
+history_empty	작업 기록이 없습니다. 압축, 압축 풀기, 검사 작업을 완료하면 여기에 표시됩니다.
+history_clear	기록 지우기
+history_hint	최근 200개를 보관하며 파일 이름과 결과만 기록합니다.
+history_reveal_result	결과 표시
+history_running	진행 중
+history_failed	실패
+history_succeeded	완료됨
+history_cancelled	취소됨
+history_new	새 항목
+volume_size	볼륨 크기(MiB, 비우면 분할하지 않음)
+volume_invalid	볼륨 크기에 양의 정수 MiB를 입력하세요.
+preset_email_share	이메일 공유(20 MiB 분할)
+preset_portable	다른 플랫폼과 호환
+dict_size	딕셔너리 크기(MiB, 비우면 자동)
+dict_invalid	딕셔너리 크기에 1~64 MiB를 입력하세요.
+solid_size	솔리드 블록 크기(MiB, 비우면 전체, 0이면 사용 안 함)
+solid_invalid	0 또는 양의 정수 MiB를 입력하세요.
+hash	체크섬 계산
+hash_complete	파일 체크섬을 계산했습니다
+task_resource_limit	리소스 또는 보안 제한에 도달했습니다. 설정을 확인하고 다시 시도하세요.
+open_after_extract	압축을 푼 후 폴더 열기
+open_after_extract_hint	압축 풀기가 성공하면 파일 관리자에서 출력 폴더를 표시합니다.
+task_notifications	시스템 알림
+task_notifications_hint	작업 완료 또는 실패 시 간단한 알림을 보냅니다. 파일 이름이나 경로는 포함되지 않습니다.
+notification_done	백그라운드 작업이 완료되었습니다
+notification_failed	백그라운드 작업이 실패했습니다
+duplicate_scan	중복 파일 검사
+duplicate_none	동일한 파일을 찾지 못했습니다. 압축을 계속할 수 있습니다.
+duplicate_found	중복 그룹 {groups}개를 찾았습니다(추가 파일 {files}개, {size}). 계속해도 모든 파일이 유지됩니다.
+duplicate_scan_limit	검사 한도를 초과해 중복 파일을 확인하지 못했습니다.
+duplicate_scan_limit_title	중복 검사 미완료
+duplicate_scan_limit_hint	선택한 파일을 압축할 수 있습니다. 이번에는 중복을 검사하지 않았으며 파일도 자동 삭제하지 않았습니다.
+duplicate_prompt_title	중복 파일을 찾았습니다
+duplicate_prompt_lead	내용 해시가 일치합니다. 계속해도 모든 파일이 유지되며 삭제되는 파일은 없습니다.
+duplicate_continue	압축 계속
+duplicate_cancel	압축 취소
+duplicate_cancelled	압축을 취소했습니다
+duplicate_group_files	파일 {count}개
+duplicate_more	표시되지 않은 그룹 {count}개 더 있음
+duplicate_file_more	파일 {count}개 더 있음
+language	인터페이스 언어
+language_auto	시스템 언어 사용
+language_zh_cn	중국어 간체
+language_en	영어
+language_es	스페인어
+language_fr	프랑스어
+language_de	독일어
+language_ja	일본어
+language_ko	한국어
+language_ar	아랍어
+language_pt	포르투갈어
+language_ru	러시아어
+settings_title	설정
+settings_hint	변경 사항은 즉시 저장됩니다.
+settings_done	완료
+settings_appearance	모양
+theme_system	시스템 설정 사용
+theme_light	밝게
+theme_dark	어둡게
+settings_accent	강조 색상
+settings_conflict	같은 파일이 있을 때
+settings_keep_both	둘 다 유지
+settings_skip	건너뛰기
+settings_replace	바꾸기
+settings_smart_extract	스마트 압축 풀기
+settings_smart_extract_hint	압축 파일에 루트 파일이 여러 개 있으면 압축 파일 이름의 폴더에 넣습니다.
+settings_check_updates	업데이트 자동 확인
+settings_check_updates_hint	시작할 때 백그라운드에서 새 버전을 확인합니다. 업데이트 파일의 서명을 확인합니다.
+settings_remember_passwords	암호 기억
+settings_remember_passwords_hint	암호화된 압축 파일을 열면 암호를 시스템 키체인에 저장하고 다음에 자동으로 시도합니다.
+settings_forget_passwords	저장된 암호 지우기
+settings_install_stats	익명 설치 통계
+settings_install_stats_hint	익명 ID, 버전, 운영체제, 언어만 전송합니다. 파일 이름과 사용 활동은 수집하지 않습니다.
+settings_show_stats_privacy	통계 설명을 보고 다시 선택…
+privacy_sent_title	전송 항목
+privacy_sent_fields	임의 ID · 앱 버전 · 운영체제 및 버전 · CPU 아키텍처 · 인터페이스 언어
+privacy_never_title	수집하지 않는 항목
+privacy_never_fields	파일 이름, 경로, 내용 또는 사용 활동.
+privacy_timing	처음 사용할 때 한 번, 이후에는 하루 최대 한 번 전송합니다. 전송에 실패하면 폐기되며 앱 사용에 영향을 주지 않습니다. 설정에서 언제든 선택을 변경할 수 있습니다.
+privacy_choice_joined	현재 선택: 참여
+privacy_choice_left	현재 선택: 참여하지 않음
+privacy_return	돌아가기
+privacy_decline	참여하지 않음
+privacy_participate	참여
+privacy_ok	확인
+privacy_title	익명 통계 안내
+privacy_intro	RustZIP은 무료 오픈 소스 소프트웨어입니다. 사용자 수를 파악하기 위해 소량의 완전한 익명 정보를 전송합니다.
+sidebar_locations	위치
+sidebar_recent	최근 항목
+sidebar_quick_actions	빠른 실행
