@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "alibabacloud-find-skills": {
+      "version": "0.0.10",
+      "installedAt": 1793012612434,
+      "ownerHandle": "sdk-team"
+    }
+  }
+}
