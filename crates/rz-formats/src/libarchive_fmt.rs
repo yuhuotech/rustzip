@@ -1,6 +1,6 @@
 use rz_core::{
-    ArchiveReader, CancelToken, Caps, Entry, EntryKind, Error, NoProgress, Progress, ProgressSink,
-    Result,
+    clean_path, ArchiveReader, CancelToken, Caps, Entry, EntryKind, Error, NoProgress, Progress,
+    ProgressSink, Result,
 };
 use rz_ffi::libarchive::{EntryInfo, Format as NativeFormat, Reader as NativeReader};
 use std::fs::File;
@@ -19,7 +19,12 @@ impl LibarchiveReader {
             format,
         };
         let mut probe = reader.open_native()?;
-        let _ = probe.next_entry().map_err(Error::Corrupt)?;
+        let first = probe.next_entry().map_err(Error::Corrupt)?;
+        if first.is_none() && format == NativeFormat::Rpm {
+            return Err(Error::Corrupt(
+                "RPM package has no readable CPIO payload".into(),
+            ));
+        }
         Ok(reader)
     }
 
@@ -28,10 +33,15 @@ impl LibarchiveReader {
         NativeReader::open(&self.path, &[self.format], None).map_err(Error::Corrupt)
     }
 
-    fn entry(index: usize, info: EntryInfo) -> Entry {
+    fn entry(index: usize, info: EntryInfo, format: NativeFormat) -> Entry {
+        let path = info.pathname.replace('\\', "/");
         Entry {
             index,
-            path: info.pathname.replace('\\', "/"),
+            path: if format == NativeFormat::Rpm {
+                clean_path(&path)
+            } else {
+                path
+            },
             kind: match info.kind {
                 rz_ffi::libarchive::EntryKind::File => EntryKind::File,
                 rz_ffi::libarchive::EntryKind::Directory => EntryKind::Dir,
@@ -52,6 +62,7 @@ impl LibarchiveReader {
             NativeFormat::Cpio => "cpio",
             NativeFormat::Iso9660 => "iso9660",
             NativeFormat::Lha => "lha",
+            NativeFormat::Rpm => "rpm",
             NativeFormat::Xar => "xar",
         }
     }
@@ -85,7 +96,7 @@ impl ArchiveReader for LibarchiveReader {
         let mut bytes_done = 0u64;
         while let Some(info) = reader.next_entry().map_err(Error::Corrupt)? {
             cancel.check()?;
-            let entry = Self::entry(entries.len(), info);
+            let entry = Self::entry(entries.len(), info, self.format);
             bytes_done = bytes_done.saturating_add(entry.size);
             entries.push(entry);
             progress.update(Progress {
@@ -129,7 +140,7 @@ impl ArchiveReader for LibarchiveReader {
         let mut reader = self.open_native()?;
         let mut index = 0usize;
         while let Some(info) = reader.next_entry().map_err(Error::Corrupt)? {
-            let entry = Self::entry(index, info);
+            let entry = Self::entry(index, info, self.format);
             {
                 let mut data = BorrowedEntryReader(&mut reader);
                 visit(&entry, &mut data)?;
@@ -393,7 +404,44 @@ mod tests {
     }
 
     #[test]
-    fn truncated_cab_cpio_lha_xar_and_iso_signatures_fail_cleanly() {
+    fn reads_rpm_cpio_payloads_with_only_builtin_filters() {
+        for (name, bytes) in [
+            (
+                "bzip2.rpm",
+                include_bytes!("../tests/fixtures/longtail_rpm_bzip2.rpm").as_slice(),
+            ),
+            (
+                "gzip.rpm",
+                include_bytes!("../tests/fixtures/longtail_rpm_gzip.rpm").as_slice(),
+            ),
+        ] {
+            let temp = tempfile::tempdir().unwrap();
+            let path = temp.path().join(name);
+            std::fs::write(&path, bytes).unwrap();
+
+            let mut archive = crate::open(&path).unwrap();
+            assert_eq!(archive.format_name(), "rpm");
+            let entries = archive.entries().unwrap();
+            assert_eq!(
+                entries
+                    .iter()
+                    .map(|entry| entry.path.as_str())
+                    .collect::<Vec<_>>(),
+                ["etc/file1", "etc/file2", "etc/file3"]
+            );
+            assert!(entries.iter().all(|entry| entry.size == 6));
+            assert!(!archive.caps().writable);
+
+            for entry in &entries {
+                let mut data = Vec::new();
+                archive.open(entry).unwrap().read_to_end(&mut data).unwrap();
+                assert_eq!(data, b"hello\n");
+            }
+        }
+    }
+
+    #[test]
+    fn truncated_cab_cpio_lha_rpm_xar_and_iso_signatures_fail_cleanly() {
         let temp = tempfile::tempdir().unwrap();
         let mut iso = vec![0u8; 32_774];
         iso[32_769..32_774].copy_from_slice(b"CD001");
@@ -401,6 +449,7 @@ mod tests {
             ("broken.cab", b"MSCF\0\0".to_vec()),
             ("broken.cpio", b"07070100".to_vec()),
             ("broken.lzh", b"\x14\0-lh0-".to_vec()),
+            ("broken.rpm", vec![0xed, 0xab, 0xee, 0xdb, 3, 0, 0, 0]),
             ("broken.xar", b"xar!\0".to_vec()),
             ("broken.iso", iso),
         ] {

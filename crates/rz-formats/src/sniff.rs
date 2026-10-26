@@ -8,6 +8,7 @@ pub enum Format {
     Gzip,
     SevenZip,
     Rar,
+    Rpm,
     Iso9660,
     Cab,
     Cpio,
@@ -28,6 +29,7 @@ impl Format {
             Format::Gzip => "gzip",
             Format::SevenZip => "7z",
             Format::Rar => "rar",
+            Format::Rpm => "rpm",
             Format::Iso9660 => "iso",
             Format::Cab => "cab",
             Format::Cpio => "cpio",
@@ -55,6 +57,12 @@ pub fn sniff<R: Read + Seek>(r: &mut R) -> Result<Format> {
         Some(Format::SevenZip)
     } else if head.starts_with(b"Rar!\x1a\x07") {
         Some(Format::Rar)
+    } else if head.starts_with(&[0xed, 0xab, 0xee, 0xdb])
+        && head.get(4).is_some_and(|version| matches!(*version, 3 | 4))
+        && head.get(6) == Some(&0)
+        && head.get(7).is_some_and(|kind| matches!(*kind, 0 | 1))
+    {
+        Some(Format::Rpm)
     } else if head.starts_with(&[0xfd, b'7', b'z', b'X', b'Z', 0x00]) {
         Some(Format::Xz)
     } else if head.starts_with(&[0x28, 0xb5, 0x2f, 0xfd]) {
@@ -172,6 +180,14 @@ mod tests {
         assert_eq!(
             sniff(&mut Cursor::new(b"xar!\0\x1c\0\x01".to_vec())).ok(),
             Some(Format::Xar)
+        );
+        assert_eq!(
+            sniff(&mut Cursor::new(vec![0xed, 0xab, 0xee, 0xdb, 3, 0, 0, 0])).ok(),
+            Some(Format::Rpm)
+        );
+        assert_eq!(
+            sniff(&mut Cursor::new(vec![0xed, 0xab, 0xee, 0xdb, 0, 0, 0, 0])).ok(),
+            None
         );
         let mut iso = vec![0u8; 32_774];
         iso[32_769..32_774].copy_from_slice(b"CD001");

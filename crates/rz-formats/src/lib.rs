@@ -1,5 +1,5 @@
 //! Format backends for read/write ZIP, 7z, tar and single-file streams, plus
-//! read-only RAR, ISO 9660, CAB, CPIO, AR, LHA and XAR readers.
+//! read-only RAR, ISO 9660, CAB, CPIO, AR, LHA, RPM and XAR readers.
 
 mod codec;
 mod libarchive_fmt;
@@ -141,6 +141,10 @@ pub fn open(path: &Path) -> Result<Box<dyn ArchiveReader>> {
         Format::Lha => Ok(Box::new(libarchive_fmt::LibarchiveReader::new(
             path,
             rz_ffi::libarchive::Format::Lha,
+        )?)),
+        Format::Rpm => Ok(Box::new(libarchive_fmt::LibarchiveReader::new(
+            path,
+            rz_ffi::libarchive::Format::Rpm,
         )?)),
         Format::Xar => Ok(Box::new(libarchive_fmt::LibarchiveReader::new(
             path,

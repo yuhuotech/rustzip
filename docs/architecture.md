@@ -46,7 +46,7 @@ rustzip/
 ## 3. 格式后端:三层兜底
 
 1. **纯 Rust 原生,读写**:zip、tar 系、gz、xz、zst、bz2、lz4、7z。基于 `zip`、`tar`、`flate2`(zlib-rs 后端)、`zstd`、`liblzma`、`lz4_flex`、`sevenz-rust2` 等 crate；LZ4 单文件流和 tar.lz4 容器使用标准 LZ4 Frame 格式。性能关键路径(7z 固实块、多线程 LZMA2)自己做调度,不直接套用单线程接口。
-2. **绑定成熟 C 库,只读**:RAR 用 `unrar`(做成 Cargo feature);ISO 9660、CAB、CPIO、AR 用 libarchive。安全封装放在 `rz-ffi`,只注册实际承诺的格式及无压缩滤镜，不启用 libarchive 的 RAR、ZIP 或 7z 解码器，也不调用外部解压命令。
+2. **绑定成熟 C 库,只读**:RAR 用 `unrar`(做成 Cargo feature);ISO 9660、CAB、CPIO、AR、LHA/LZH、XAR 和 RPM 用 libarchive。安全封装放在 `rz-ffi`,只注册实际验收的格式及必要的内置滤镜，不启用 libarchive 的 RAR、ZIP 或 7z 解码器，也不调用外部解压命令。
 3. **格式嗅探**:按魔数识别,不按扩展名;支持嵌套识别。
 
 统一接口(草案):

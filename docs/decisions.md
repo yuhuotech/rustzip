@@ -235,3 +235,9 @@
 - 语言菜单按钮紧邻设置按钮，菜单包含“跟随系统”和全部受支持语言；当前值使用菜单选中态表达。按钮提供可读名称，菜单可用鼠标和键盘操作。
 - 欢迎页和归档页使用相同的右侧控制顺序：语言、设置。Windows/Linux 的原生窗口标题栏保持由系统绘制，两个控件位于窗口内容区首行。
 - 固定宽度侧栏里的导航文字单行显示；空间不足时使用省略号裁切，完整语言标签仍用于辅助名称和悬停提示。
+
+## D34 RPM 使用内置 filter 与 CPIO 只读
+
+- 在 D21 隔离的 libarchive reader 中新增 RPM 支持。RPM 魔数、版本和包类型字段通过验证后，固定注册 RPM filter、gzip/bzip2/xz/zstd 内置解码器和 CPIO reader；不注册 program filter，也不调用 `rpm2cpio` 等外部命令。
+- RustZIP 仅列出、测试和提取包内普通文件；不执行包安装脚本，不保留链接等特殊文件，不提供 RPM 写入。
+- sniff 使用 RPM 包头魔数与版本 / 类型字段，不以 `.rpm` 扩展名判定。bzip2 和 gzip 测试 fixture 来自 vendored libarchive 的 BSD-2-Clause 测试数据，由三份虚构的 `hello` 文本文件组成；没有新增 Cargo 依赖。

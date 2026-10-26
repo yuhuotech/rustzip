@@ -41,6 +41,29 @@ fn round_trip_preserves_content_names_and_times() {
 }
 
 #[test]
+fn rpm_package_fixture_is_read_only_and_extracts_through_the_safe_engine() {
+    let tmp = tempfile::tempdir().unwrap();
+    let archive = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../rz-formats/tests/fixtures/longtail_rpm_bzip2.rpm");
+    let mut reader = rz_formats::open(&archive).unwrap();
+    assert_eq!(reader.format_name(), "rpm");
+    assert!(!reader.caps().writable);
+
+    let dest = tmp.path().join("out");
+    extract(
+        &mut *reader,
+        &dest,
+        &ExtractOptions::default(),
+        &CancelToken::new(),
+        &mut NoProgress,
+    )
+    .unwrap();
+    for name in ["file1", "file2", "file3"] {
+        assert_eq!(fs::read(dest.join("etc").join(name)).unwrap(), b"hello\n");
+    }
+}
+
+#[test]
 fn zip_and_sevenz_volumes_round_trip_and_reject_missing_parts() {
     for ext in ["zip", "7z"] {
         let tmp = tempfile::tempdir().unwrap();

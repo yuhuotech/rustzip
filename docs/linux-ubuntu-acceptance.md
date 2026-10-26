@@ -15,6 +15,7 @@
 
 - RustZIP 创建的分卷 ZIP 和 7z 均由 p7zip 26.00 测试并解压，内容与源目录逐文件比对一致。
 - Info-ZIP 3.0 创建的 split ZIP 和 p7zip 创建的分卷 7z 均由 RustZIP 测试、解压并逐文件比对一致；样本包含中日韩文件名和随机数据。
+- RPM 只读 fixture 经 RustZIP `rz l` / `rz t` / `rz x` 列表、完整性测试与安全引擎提取成功；bzip2、gzip 两种载荷的测试覆盖通过。p7zip 26.00 将上游 RPM fixture 识别为 RPM 并独立测试通过。
 - Linux tarball 的免 root 安装器在隔离 `PREFIX` / `XDG_DATA_HOME` 下安装了 Desktop、Nemo 项和两个 Nautilus Scripts 条目。Nautilus 解压脚本通过 Xvfb 启动 RustZIP 并完成真实提取，结果与源目录一致；压缩脚本启动 RustZIP 的创建窗口；卸载器移除了隔离安装中的文件。
 
 ## 尚未覆盖

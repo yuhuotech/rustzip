@@ -15,7 +15,7 @@ RustZIP 已有可用的归档核心和桌面主流程：ZIP、7z、tar 系列和
 | P0 | 基础压缩、解压、浏览、加密、任务队列和 CLI | 主路径已完成；CLI 提供 `a / l / x / t / c / r / h`，长操作均支持 Ctrl+C 与进度 | 保持现有安全契约，继续做平台验收与性能验收 |
 | P0 | 分卷压缩与多卷解压 | ZIP/7z 容量设置、卷切分 / 顺序读取、缺卷诊断和无覆盖发布已接入；往返、缺卷、取消、现有卷保护及发布竞态回滚测试通过。Linux arm64 容器中与 p7zip 26.02 双向验证 ZIP / 7z，Info-ZIP 3.0 创建的 split ZIP 也可由 RustZIP 测试和解压 | 扩大到 Windows/macOS 官方 7-Zip 与 WinZip 等常用工具版本；Info-ZIP `unzip` 不支持本测试的 split ZIP，不能作为读取验收 |
 | P0 | LZ4 与 tar.lz4 | 标准 LZ4 Frame 读写、魔数识别、CLI、编辑、转换和 GUI tar.lz4 入口已接入；格式及引擎往返通过，外部 `lz4 -t` 和 `tar -tf` 通过；8 MiB 基准已记录 | 扩大外部样本和性能采样，保留 Frame 格式边界 |
-| P0 | ISO、CAB、WIM、DMG、CPIO、AR、LHA、XAR、RPM、DEB、CHM、NSIS 等只读格式 | ISO 9660、CAB、CPIO、AR、LHA/LZH、XAR 已通过隔离的 libarchive 后端接入；LHA 使用上游测试样本，XAR 使用 bsdtar 3.7.4 独立生成样本；WIM、DMG、RPM、CHM、NSIS 尚未验收；DEB 按 AR 容器读取 | 扩充已支持格式的独立样本互通；评估其他格式的可靠后端与样本，保持 RAR 只读边界 |
+| P0 | ISO、CAB、WIM、DMG、CPIO、AR、LHA、XAR、RPM、DEB、CHM、NSIS 等只读格式 | ISO 9660、CAB、CPIO、AR、LHA/LZH、XAR、RPM 已通过隔离的 libarchive 后端接入；RPM 使用上游 BSD-2-Clause bzip2 / gzip fixtures，安全引擎提取测试通过；WIM、DMG、CHM、NSIS 尚未验收；DEB 按 AR 容器读取 | 评估 WIM、DMG、CHM、NSIS 的可靠后端与独立样本；保持 RAR 只读边界 |
 | P0 | 压缩参数 | ZIP 压缩级别 / 线程与 7z 字典大小 / 固实块大小已接入 CLI / GUI；7z 并行工作集受内存预算估算限制；自动字典下调、超预算拒绝及固实块结构用例通过 | 无；ZIP 的 deflate 字典不适用 |
 | P0 | 校验和 | `rz-app` 流式 SHA-256 / BLAKE3、CLI `rz h` 和最近文件 / 常用位置的 GUI 入口已接入；标准向量、分块进度、取消、非普通文件拒绝及 workspace 回归通过 | 无；保留与归档 CRC 校验的语义区分 |
 | P1 | 预览 | 详情栏支持 8 MiB 内图片和 64 KiB 内白名单 UTF-8 文本；文本仅原样显示。PDF / 音视频仍由系统程序打开；大小与二进制边界用例通过。PDF 原生渲染评估发现 Hayro 的 Flate 输出没有内存上限，PDFium 绑定需要另行提供原生库，当前均不满足直接接入条件 | 仅在渲染器能给解压后流设置硬上限或运行于有 OS 资源限制的隔离进程后，再做 PDF 预览；音视频继续评估系统集成 |
@@ -48,7 +48,7 @@ RustZIP 已有可用的归档核心和桌面主流程：ZIP、7z、tar 系列和
 2. ~~接入 LZ4 与 tar.lz4 读写、格式识别和转换。~~ 格式 / 引擎往返、外部 `lz4 -t`、workspace all-features 编译通过；8 MiB 本机基准已运行。新增依赖许可证已核对。
 3. ~~增加格式相关的字典大小、固实块等高级参数。~~ 7z 字典 / 固实块入口已接入，按格式隐藏；参数边界、固实块 / 非固实块、CLI / GUI 创建、workspace 测试和 Clippy 通过。8 MiB 基准矩阵完整运行并校验输出；受限样本仅用于运行路径验收，没有拿来作性能回归对比。
 4. ~~补齐文件 SHA-256 / BLAKE3 校验。~~ `rz-app` 单次流式读取同时计算算法、支持取消和进度；CLI `rz h` 与最近文件 / 常用位置的 GUI 操作入口已接入。标准向量、分块进度、取消、普通文件边界、workspace 测试、fmt 与 Clippy 通过；保留 `rz t` 的归档完整性测试语义。
-5. ISO 9660、CAB、CPIO、AR、LHA/LZH 与 XAR 只读实现已接入；扩大独立样本互通后，再按阶段 A 清单评估 WIM、DMG、RPM、CHM、NSIS 等格式，不一次性接入没有可靠样本或维护来源的格式。
+5. ISO 9660、CAB、CPIO、AR、LHA/LZH、XAR 与 RPM 只读实现已接入；RPM 用 bzip2/gzip CPIO 样本验证内置滤镜、CLI 列表/完整性/安全提取，并由 p7zip 26.00 独立测试。Vendored Libarchive 没有 WIM reader；WIM、DMG、CHM、NSIS 仍待可靠后端与独立样本，不一次性开放未经验证的格式。
 
 **退出条件：** 新格式和分卷操作具备往返、损坏、加密适用性、缺卷、取消与路径安全验收；新参数受全局内存预算约束；文档和界面格式列表与真实能力一致。
 

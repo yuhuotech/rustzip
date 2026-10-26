@@ -12,6 +12,7 @@ pub enum Format {
     Cpio,
     Iso9660,
     Lha,
+    Rpm,
     Xar,
 }
 
@@ -46,11 +47,25 @@ impl Reader {
         let archive =
             NonNull::new(pointer).ok_or_else(|| "libarchive allocation failed".to_string())?;
         let mut reader = Self { archive };
-        // This reader only accepts unfiltered archives, so libarchive cannot fall back
-        // to external decompressor commands while processing untrusted files.
+        // No decompressor is enabled by default. The RPM path below adds only explicit
+        // in-process filters, so untrusted input cannot invoke an external command.
         // SAFETY: `reader` uniquely owns a newly allocated libarchive handle.
         reader.check(unsafe { sys::archive_read_support_filter_none(reader.as_ptr()) })?;
         for format in formats {
+            if *format == Format::Rpm {
+                // RPM wraps a compressed CPIO payload. Only in-process filters are enabled;
+                // the command filter remains disabled for untrusted archives.
+                // SAFETY: `reader` uniquely owns a live handle in the unconfigured state.
+                unsafe {
+                    reader.check(sys::archive_read_support_filter_rpm(reader.as_ptr()))?;
+                    reader.check(sys::archive_read_support_filter_gzip(reader.as_ptr()))?;
+                    reader.check(sys::archive_read_support_filter_bzip2(reader.as_ptr()))?;
+                    reader.check(sys::archive_read_support_filter_xz(reader.as_ptr()))?;
+                    reader.check(sys::archive_read_support_filter_zstd(reader.as_ptr()))?;
+                    reader.check(sys::archive_read_support_format_cpio(reader.as_ptr()))?;
+                }
+                continue;
+            }
             // SAFETY: `reader` uniquely owns a live handle in the unconfigured state.
             let code = unsafe {
                 match format {
@@ -59,6 +74,7 @@ impl Reader {
                     Format::Cpio => sys::archive_read_support_format_cpio(reader.as_ptr()),
                     Format::Iso9660 => sys::archive_read_support_format_iso9660(reader.as_ptr()),
                     Format::Lha => sys::archive_read_support_format_lha(reader.as_ptr()),
+                    Format::Rpm => sys::archive_read_support_format_cpio(reader.as_ptr()),
                     Format::Xar => sys::archive_read_support_format_xar(reader.as_ptr()),
                 }
             };
