@@ -985,9 +985,17 @@ fn extracting_runs_a_task_and_reports_the_result(cx: &mut TestAppContext) {
         );
         assert_eq!(v.history_badges(), (0, 0, 1));
     });
-    // Looking at the history and leaving it clears the badges.
+    // A completed task can reveal its in-session result; returning clears the badges.
+    let task_id = cx.update(|cx| view.read(cx).history.records[0].task.unwrap());
     with_view(cx, handle, &view, |v, _, cx| {
-        v.show_page(rustzip_gui::view::Page::History, cx);
+        v.show_page(rustzip_gui::view::Page::History, cx)
+    });
+    draw(cx, handle);
+    cx.update_window(handle.into(), |_, window, _| {
+        assert!(window.find(("history-reveal", task_id as usize)).visible());
+    })
+    .unwrap();
+    with_view(cx, handle, &view, |v, _, cx| {
         v.show_page(rustzip_gui::view::Page::Archive, cx);
     });
     cx.update(|cx| assert_eq!(view.read(cx).history_badges(), (0, 0, 0)));

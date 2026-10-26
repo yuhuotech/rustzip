@@ -3,7 +3,7 @@
 use crate::brand::palette;
 use crate::view::{MainView, Page};
 use gpui_kit::component::button::*;
-use gpui_kit::component::{ActiveTheme, Disableable, Sizable, h_flex, v_flex};
+use gpui_kit::component::{ActiveTheme, Disableable, Icon, Sizable, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 use rz_app::history::{History, Outcome, Record};
@@ -183,6 +183,7 @@ impl MainView {
                     String::new(),
                     false,
                     None,
+                    None,
                     &mono,
                     cx,
                 )
@@ -212,6 +213,14 @@ impl MainView {
                         t.id == *id && t.summary.as_ref().is_some_and(|s| s.recovery.is_some())
                     })
                 });
+                let reveal = r.task.and_then(|id| {
+                    self.task_view
+                        .iter()
+                        .find(|t| t.id == id && t.state == TaskState::Done)
+                        .and_then(|t| t.summary.as_ref())
+                        .map(|summary| (id, summary.reveal.clone()))
+                        .filter(|(_, path)| !path.as_os_str().is_empty())
+                });
                 self.history_row(
                     mark,
                     status_fg,
@@ -223,6 +232,7 @@ impl MainView {
                     crate::local_time(r.at),
                     !r.seen,
                     report,
+                    reveal,
                     &mono,
                     cx,
                 )
@@ -262,6 +272,7 @@ impl MainView {
         when: String,
         fresh: bool,
         report: Option<rz_app::tasks::TaskId>,
+        reveal: Option<(rz_app::tasks::TaskId, PathBuf)>,
         mono: &SharedString,
         cx: &mut Context<Self>,
     ) -> AnyElement {
@@ -323,6 +334,16 @@ impl MainView {
                             this.overlay = Some(crate::view::Overlay::RecoveryReport(id));
                             cx.notify();
                         })),
+                )
+            })
+            .when_some(reveal, |d, (id, path)| {
+                d.child(
+                    Button::new(("history-reveal", id as usize))
+                        .ghost()
+                        .xsmall()
+                        .icon(Icon::new(gpui_kit::assets::IconName::ExternalLink))
+                        .label(self.tool_text("history_reveal_result"))
+                        .on_click(cx.listener(move |_, _, _, cx| cx.reveal_path(&path))),
                 )
             })
             .when(!when.is_empty(), |d| {
