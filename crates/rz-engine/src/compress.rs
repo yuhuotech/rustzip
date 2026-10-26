@@ -341,6 +341,30 @@ fn split_and_publish(request: SplitRequest<'_>, progress: &mut PhaseProgress<'_>
         }
     }
 
+    publish_volume_parts(parts, &targets, format)?;
+    progress.complete();
+    Ok(true)
+}
+
+fn publish_volume_parts(
+    parts: Vec<tempfile::NamedTempFile>,
+    targets: &[PathBuf],
+    format: OutputFormat,
+) -> Result<()> {
+    publish_volume_parts_with(parts, targets, format, |_| {})
+}
+
+fn publish_volume_parts_with(
+    parts: Vec<tempfile::NamedTempFile>,
+    targets: &[PathBuf],
+    format: OutputFormat,
+    mut after_publish: impl FnMut(usize),
+) -> Result<()> {
+    if parts.len() != targets.len() {
+        return Err(Error::Corrupt(
+            "staged volume count does not match its targets".into(),
+        ));
+    }
     let mut staged: Vec<Option<tempfile::NamedTempFile>> = parts.into_iter().map(Some).collect();
     let order: Vec<usize> = if matches!(format, OutputFormat::SevenZ) {
         (0..targets.len()).rev().collect()
@@ -350,7 +374,7 @@ fn split_and_publish(request: SplitRequest<'_>, progress: &mut PhaseProgress<'_>
     let mut published: Vec<usize> = Vec::with_capacity(order.len());
     for index in order {
         let Some(part) = staged[index].take() else {
-            rollback_volumes(&staged, &published, &targets);
+            rollback_volumes(&staged, &published, targets);
             return Err(Error::Corrupt(
                 "staged volume disappeared before publishing".into(),
             ));
@@ -359,17 +383,17 @@ fn split_and_publish(request: SplitRequest<'_>, progress: &mut PhaseProgress<'_>
             Ok(()) => {
                 staged[index] = Some(part);
                 published.push(index);
+                after_publish(index);
             }
             Err(error) => {
                 staged[index] = Some(part);
-                rollback_volumes(&staged, &published, &targets);
+                rollback_volumes(&staged, &published, targets);
                 return Err(Error::Io(error));
             }
         }
     }
     drop(staged);
-    progress.complete();
-    Ok(true)
+    Ok(())
 }
 
 fn rollback_volumes(
@@ -675,6 +699,7 @@ mod tests {
 
     use super::*;
     use rz_core::NoProgress;
+    use std::io::Write;
 
     struct FailAfterPrefix {
         fail_name: String,
@@ -859,6 +884,64 @@ mod tests {
                     .to_string_lossy()
                     .starts_with(&format!(".{name}.rz-"))),
                 "{name} left a temp file"
+            );
+        }
+    }
+
+    #[test]
+    fn a_volume_publish_race_rolls_back_our_parts_and_preserves_replacements() {
+        for (name, format) in [
+            ("race.zip", OutputFormat::Zip),
+            ("race.7z", OutputFormat::SevenZ),
+        ] {
+            let dir = tempfile::tempdir().unwrap();
+            let output = dir.path().join(name);
+            let targets = volume_targets(&output, format, 3).unwrap();
+            let order: Vec<usize> = if matches!(format, OutputFormat::SevenZ) {
+                (0..targets.len()).rev().collect()
+            } else {
+                (0..targets.len()).collect()
+            };
+            let parts = (0..targets.len())
+                .map(|index| {
+                    let mut part = tempfile::NamedTempFile::new_in(dir.path()).unwrap();
+                    writeln!(part, "staged part {index}").unwrap();
+                    part
+                })
+                .collect();
+            let mut published = Vec::new();
+
+            let result = publish_volume_parts_with(parts, &targets, format, |index| {
+                published.push(index);
+                if published.len() == 1 {
+                    fs::remove_file(&targets[index]).unwrap();
+                    fs::write(&targets[index], b"replaced concurrently").unwrap();
+                } else if published.len() == 2 {
+                    fs::write(&targets[order[2]], b"created concurrently").unwrap();
+                }
+            });
+
+            assert!(matches!(
+                result,
+                Err(Error::Io(ref error)) if error.kind() == std::io::ErrorKind::AlreadyExists
+            ));
+            assert_eq!(published.as_slice(), &order[..2]);
+            assert_eq!(
+                fs::read(&targets[order[0]]).unwrap(),
+                b"replaced concurrently"
+            );
+            assert!(
+                !targets[order[1]].exists(),
+                "an owned published volume remained"
+            );
+            assert_eq!(
+                fs::read(&targets[order[2]]).unwrap(),
+                b"created concurrently"
+            );
+            assert_eq!(
+                fs::read_dir(dir.path()).unwrap().count(),
+                2,
+                "staged volumes remained"
             );
         }
     }
