@@ -10,8 +10,10 @@ use std::fs;
 use std::path::Path;
 
 /// Every format that can hold a directory tree.
-const TREE_FORMATS: [&str; 7] = ["zip", "7z", "tar", "tar.gz", "tar.xz", "tar.zst", "tar.bz2"];
-const SINGLE_FORMATS: [&str; 4] = ["gz", "xz", "zst", "bz2"];
+const TREE_FORMATS: [&str; 8] = [
+    "zip", "7z", "tar", "tar.gz", "tar.xz", "tar.zst", "tar.bz2", "tar.lz4",
+];
+const SINGLE_FORMATS: [&str; 5] = ["gz", "xz", "zst", "bz2", "lz4"];
 
 /// Two threads keep the memory of big LZMA dictionaries modest on CI machines.
 fn opts(level: u32) -> CreateOptions {
@@ -36,6 +38,134 @@ fn round_trip_preserves_content_names_and_times() {
         unpack(&archive, &out, &ExtractOptions::default()).unwrap();
         assert_same_tree(&src, &out.join("proj"), ext);
     }
+}
+
+#[test]
+fn zip_and_sevenz_volumes_round_trip_and_reject_missing_parts() {
+    for ext in ["zip", "7z"] {
+        let tmp = tempfile::tempdir().unwrap();
+        let src = make_tree(tmp.path());
+        let archive = tmp.path().join(format!("vol.{ext}"));
+        let create = CreateOptions {
+            volume_size: Some(64 * 1024),
+            ..opts(1)
+        };
+        let mut progress = Vec::new();
+        let mut progress_sink = |value| progress.push(value);
+        compress(
+            std::slice::from_ref(&src),
+            &archive,
+            OutputFormat::from_path(&archive).unwrap(),
+            &create,
+            &CancelToken::new(),
+            &mut progress_sink,
+        )
+        .unwrap();
+        assert!(progress.windows(2).all(|pair| {
+            pair[1].bytes_done >= pair[0].bytes_done && pair[1].files_done >= pair[0].files_done
+        }));
+        assert_eq!(
+            progress.last().unwrap().bytes_done,
+            progress.last().unwrap().bytes_total
+        );
+        let open_path = if ext == "zip" {
+            assert!(archive.is_file());
+            assert!(tmp.path().join("vol.z01").is_file());
+            archive.clone()
+        } else {
+            assert!(!archive.exists());
+            assert!(tmp.path().join("vol.7z.001").is_file());
+            tmp.path().join("vol.7z.001")
+        };
+        let out = tmp.path().join("out");
+        let mut reader = rz_formats::open(&open_path).unwrap();
+        extract(
+            &mut *reader,
+            &out,
+            &ExtractOptions::default(),
+            &CancelToken::new(),
+            &mut NoProgress,
+        )
+        .unwrap();
+        assert_same_tree(&src, &out.join("proj"), &format!("{ext} volumes"));
+
+        let parts = if ext == "zip" {
+            rz_formats::volumes::zip_volume_paths(&archive)
+                .unwrap()
+                .unwrap()
+        } else {
+            rz_formats::volumes::sevenz_volume_paths(&open_path)
+                .unwrap()
+                .unwrap()
+        };
+        let before: Vec<Vec<u8>> = parts.iter().map(|part| fs::read(part).unwrap()).collect();
+        assert!(compress(
+            std::slice::from_ref(&src),
+            &archive,
+            OutputFormat::from_path(&archive).unwrap(),
+            &create,
+            &CancelToken::new(),
+            &mut NoProgress,
+        )
+        .is_err());
+        assert_eq!(
+            parts
+                .iter()
+                .map(|part| fs::read(part).unwrap())
+                .collect::<Vec<_>>(),
+            before,
+            "existing {ext} volumes changed"
+        );
+
+        let missing = if ext == "zip" {
+            tmp.path().join("vol.z01")
+        } else {
+            tmp.path().join("vol.7z.002")
+        };
+        let saved = tmp.path().join("missing-part");
+        fs::rename(&missing, &saved).unwrap();
+        assert!(
+            rz_formats::open(&open_path).is_err(),
+            "{ext} missing volume opened"
+        );
+        fs::rename(saved, missing).unwrap();
+    }
+}
+
+#[test]
+fn cancelling_volume_creation_after_packing_leaves_no_public_parts() {
+    let tmp = tempfile::tempdir().unwrap();
+    let src = make_tree(tmp.path());
+    let output = tmp.path().join("cancelled.zip");
+    let options = CreateOptions {
+        volume_size: Some(64 * 1024),
+        ..opts(1)
+    };
+    let token = CancelToken::new();
+    let cancel = token.clone();
+    let mut sink = move |progress: Progress| {
+        if progress.bytes_total > 0 && progress.bytes_done >= progress.bytes_total / 3 {
+            cancel.cancel();
+        }
+    };
+    let result = compress(
+        std::slice::from_ref(&src),
+        &output,
+        OutputFormat::Zip,
+        &options,
+        &token,
+        &mut sink,
+    );
+    assert!(matches!(result, Err(Error::Cancelled)), "{result:?}");
+    assert!(!output.exists());
+    assert!(!tmp.path().join("cancelled.z01").exists());
+    assert!(tmp.path().read_dir().unwrap().all(|entry| {
+        !entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".cancelled.zip.rz-")
+    }));
 }
 
 #[cfg(unix)]

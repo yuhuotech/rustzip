@@ -5,12 +5,13 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 /// Suffixes stripped from an archive name to get the folder name.
-const SUFFIXES: [&str; 14] = [
+const SUFFIXES: [&str; 15] = [
     ".tar.gz",
     ".tar.xz",
     ".tar.zst",
     ".tar.zstd",
     ".tar.bz2",
+    ".tar.lz4",
     ".tgz",
     ".txz",
     ".tzst",
@@ -31,7 +32,7 @@ pub fn archive_stem(archive: &Path) -> String {
     let lower = name.to_ascii_lowercase();
     let stem = SUFFIXES
         .iter()
-        .chain([".gz", ".xz", ".zst", ".bz2"].iter())
+        .chain([".gz", ".xz", ".zst", ".bz2", ".lz4"].iter())
         .find(|s| lower.ends_with(*s) && name.len() > s.len())
         .map_or(name.as_str(), |s| &name[..name.len() - s.len()]);
     let stem = stem.trim().trim_matches('.');

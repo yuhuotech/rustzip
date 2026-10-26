@@ -149,6 +149,13 @@ pub struct CreateOptions {
     pub threads: usize,
     /// Upper bound for data held in memory by parallel workers.
     pub memory_budget: u64,
+    /// Optional maximum size for ZIP or 7z volume files.
+    pub volume_size: Option<u64>,
+    /// Optional LZMA2 dictionary size in bytes; 7z only.
+    pub dictionary_size: Option<u32>,
+    /// Maximum uncompressed bytes per 7z solid block. None keeps one archive-wide block;
+    /// Some(0) disables solid compression.
+    pub solid_block_size: Option<u64>,
 }
 
 impl std::fmt::Debug for CreateOptions {
@@ -159,6 +166,9 @@ impl std::fmt::Debug for CreateOptions {
             .field("password", &self.password.as_ref().map(|_| "<redacted>"))
             .field("threads", &self.threads)
             .field("memory_budget", &self.memory_budget)
+            .field("volume_size", &self.volume_size)
+            .field("dictionary_size", &self.dictionary_size)
+            .field("solid_block_size", &self.solid_block_size)
             .finish()
     }
 }
@@ -170,6 +180,9 @@ impl Default for CreateOptions {
             password: None,
             threads: 0,
             memory_budget: 256 << 20,
+            volume_size: None,
+            dictionary_size: None,
+            solid_block_size: None,
         }
     }
 }

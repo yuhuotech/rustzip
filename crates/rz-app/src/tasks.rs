@@ -51,6 +51,10 @@ pub enum JobSpec {
         level: u32,
         encoding: Option<String>,
     },
+    Hash {
+        file: PathBuf,
+        algorithms: Vec<crate::hash::HashAlgorithm>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -61,6 +65,7 @@ pub enum JobKind {
     Extract,
     Test,
     Edit,
+    Hash,
 }
 
 impl JobSpec {
@@ -77,6 +82,7 @@ impl JobSpec {
             JobSpec::Extract { .. } => JobKind::Extract,
             JobSpec::Test { .. } => JobKind::Test,
             JobSpec::Edit { .. } => JobKind::Edit,
+            JobSpec::Hash { .. } => JobKind::Hash,
         }
     }
 
@@ -88,6 +94,7 @@ impl JobSpec {
             JobSpec::Extract { archive, .. }
             | JobSpec::Test { archive, .. }
             | JobSpec::Edit { archive, .. } => archive,
+            JobSpec::Hash { file, .. } => file,
         };
         path.file_name()
             .map(|n| n.to_string_lossy().into_owned())
@@ -131,6 +138,7 @@ impl JobSpec {
                 Some(spec)
             }
             JobSpec::Compress { .. } => None,
+            JobSpec::Hash { .. } => None,
         }
     }
 }
@@ -203,6 +211,7 @@ impl From<&Error> for TaskError {
 pub struct Summary {
     /// Recovery details remain inspectable after the completion toast disappears.
     pub recovery: Option<rz_engine::TransformReport>,
+    pub hashes: Vec<crate::hash::HashResult>,
     pub files: u64,
     pub bytes: u64,
     /// The archive that was created, or the folder files were extracted to.
@@ -698,6 +707,7 @@ fn run(
                 reveal: output.clone(),
                 elapsed: started.elapsed(),
                 recovery: (*recover).then_some(rep),
+                hashes: Vec::new(),
             })
         }
         JobSpec::Compress {
@@ -707,13 +717,38 @@ fn run(
             opts,
         } => {
             let rep = compress(sources, output, *format, opts, token, &mut sink)?;
+            let reveal =
+                if opts.volume_size.is_some() && *format == rz_formats::OutputFormat::SevenZ {
+                    let mut first = output
+                        .file_name()
+                        .ok_or_else(|| Error::UnsafePath(output.display().to_string()))?
+                        .to_os_string();
+                    first.push(".001");
+                    output.with_file_name(first)
+                } else {
+                    output.clone()
+                };
             Ok(Summary {
                 files: rep.files,
                 bytes: rep.bytes,
                 output: output.clone(),
-                reveal: output.clone(),
+                reveal,
                 elapsed: started.elapsed(),
                 recovery: None,
+                hashes: Vec::new(),
+            })
+        }
+        JobSpec::Hash { file, algorithms } => {
+            let bytes = std::fs::metadata(file)?.len();
+            let hashes = crate::hash::hash_file(file, algorithms, token, &mut sink)?;
+            Ok(Summary {
+                files: 1,
+                bytes,
+                output: file.clone(),
+                reveal: file.clone(),
+                elapsed: started.elapsed(),
+                recovery: None,
+                hashes,
             })
         }
         JobSpec::Extract {
@@ -752,6 +787,7 @@ fn run(
                 reveal,
                 elapsed: started.elapsed(),
                 recovery: None,
+                hashes: Vec::new(),
             })
         }
         JobSpec::Edit {
@@ -777,6 +813,7 @@ fn run(
                 reveal: archive.clone(),
                 elapsed: started.elapsed(),
                 recovery: None,
+                hashes: Vec::new(),
             })
         }
         JobSpec::Test {
@@ -824,6 +861,7 @@ fn run(
                 reveal: archive.clone(),
                 elapsed: started.elapsed(),
                 recovery: None,
+                hashes: Vec::new(),
             })
         }
     }

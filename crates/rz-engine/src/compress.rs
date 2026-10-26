@@ -1,6 +1,7 @@
 use crate::progress::Tracker;
 use rz_core::{
-    ArchiveWriter, CancelToken, CreateOptions, Error, FileSource, NewEntry, ProgressSink, Result,
+    ArchiveWriter, CancelToken, CreateOptions, Error, FileSource, NewEntry, Progress, ProgressSink,
+    Result,
 };
 use rz_formats::OutputFormat;
 use rz_platform::{mode_of, mtime_of, same_file};
@@ -94,6 +95,79 @@ struct WriteContext<'a> {
     writer_factory: &'a dyn ArchiveWriterFactory,
 }
 
+struct PhaseProgress<'a> {
+    inner: &'a mut dyn ProgressSink,
+    phase: u64,
+    phases: u64,
+    work_unit: u64,
+    file_unit: u64,
+}
+
+struct SplitRequest<'a> {
+    source: &'a Path,
+    output: &'a Path,
+    format: OutputFormat,
+    volume_size: u64,
+    password: Option<&'a str>,
+    cancel: &'a CancelToken,
+    report: &'a CompressReport,
+}
+
+impl<'a> PhaseProgress<'a> {
+    fn new(
+        inner: &'a mut dyn ProgressSink,
+        phase: u64,
+        phases: u64,
+        source_bytes: u64,
+        source_files: u64,
+    ) -> Self {
+        Self {
+            inner,
+            phase,
+            phases,
+            work_unit: source_bytes.max(1),
+            file_unit: source_files.max(1),
+        }
+    }
+
+    fn complete(&mut self) {
+        self.inner.update(Progress {
+            files_done: self.file_unit * self.phases,
+            files_total: self.file_unit * self.phases,
+            bytes_done: self.work_unit * self.phases,
+            bytes_total: self.work_unit * self.phases,
+        });
+    }
+}
+
+impl ProgressSink for PhaseProgress<'_> {
+    fn update(&mut self, progress: Progress) {
+        let local_bytes = if progress.bytes_total > 0 {
+            u128::from(progress.bytes_done) * u128::from(self.work_unit)
+                / u128::from(progress.bytes_total)
+        } else if progress.files_total > 0 {
+            u128::from(progress.files_done) * u128::from(self.work_unit)
+                / u128::from(progress.files_total)
+        } else {
+            0
+        }
+        .min(u128::from(self.work_unit)) as u64;
+        let local_files = if progress.files_total > 0 {
+            u128::from(progress.files_done) * u128::from(self.file_unit)
+                / u128::from(progress.files_total)
+        } else {
+            0
+        }
+        .min(u128::from(self.file_unit)) as u64;
+        self.inner.update(Progress {
+            files_done: self.phase * self.file_unit + local_files,
+            files_total: self.file_unit * self.phases,
+            bytes_done: self.phase * self.work_unit + local_bytes,
+            bytes_total: self.work_unit * self.phases,
+        });
+    }
+}
+
 fn compress_with_io(
     sources: &[PathBuf],
     output: &Path,
@@ -103,6 +177,30 @@ fn compress_with_io(
     progress: &mut dyn ProgressSink,
     io: &CompressionIo<'_>,
 ) -> Result<CompressReport> {
+    if let Some(size) = opts.volume_size {
+        if !matches!(format, OutputFormat::Zip | OutputFormat::SevenZ) {
+            return Err(Error::Unsupported(
+                "volumes are supported for ZIP and 7z only".into(),
+            ));
+        }
+        if size < 64 * 1024 {
+            return Err(Error::Unsupported(
+                "volume size must be at least 64 KiB".into(),
+            ));
+        }
+        if matches!(format, OutputFormat::Zip) && size > u64::from(u32::MAX) {
+            return Err(Error::Unsupported(
+                "ZIP volume size must be below 4 GiB".into(),
+            ));
+        }
+    }
+    if format != OutputFormat::SevenZ
+        && (opts.dictionary_size.is_some() || opts.solid_block_size.is_some())
+    {
+        return Err(Error::Unsupported(
+            "dictionary size and solid block settings are supported for 7z only".into(),
+        ));
+    }
     if output.symlink_metadata().is_ok() {
         return Err(Error::Io(std::io::Error::new(
             std::io::ErrorKind::AlreadyExists,
@@ -131,6 +229,15 @@ fn compress_with_io(
         .prefix(&temp_prefix(output))
         .suffix(".part")
         .tempfile_in(parent)?;
+    let source_bytes: u64 = items.iter().map(|item| item.meta.size).sum();
+    let source_files = items.len() as u64;
+    let mut compressed_progress = PhaseProgress::new(
+        progress,
+        0,
+        if opts.volume_size.is_some() { 3 } else { 1 },
+        source_bytes,
+        source_files,
+    );
     let result = write_all(
         &items,
         tmp.path(),
@@ -138,18 +245,41 @@ fn compress_with_io(
             format,
             opts,
             cancel,
-            progress,
+            progress: &mut compressed_progress,
             report: &mut report,
             source_opener: io.source_opener,
             writer_factory: io.writer_factory,
         },
     );
     match result {
-        Ok(()) => match tmp.persist_noclobber(output) {
-            Ok(_) => Ok(report),
-            // The error carries the temporary file; dropping it removes it.
-            Err(e) => Err(Error::Io(e.error)),
-        },
+        Ok(()) => {
+            if let Some(volume_size) = opts.volume_size {
+                compressed_progress.phase = 1;
+                if split_and_publish(
+                    SplitRequest {
+                        source: tmp.path(),
+                        output,
+                        format,
+                        volume_size,
+                        password: opts.password.as_deref(),
+                        cancel,
+                        report: &report,
+                    },
+                    &mut compressed_progress,
+                )? {
+                    return Ok(report);
+                }
+            }
+            match tmp.persist_noclobber(output) {
+                Ok(_) => {
+                    if opts.volume_size.is_some() {
+                        compressed_progress.complete();
+                    }
+                    Ok(report)
+                }
+                Err(e) => Err(Error::Io(e.error)),
+            }
+        }
         Err(e) => Err(e), // dropping `tmp` removes the half-written file
     }
 }
@@ -162,6 +292,228 @@ fn temp_prefix(output: &Path) -> String {
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
     format!(".{name}.rz-")
+}
+
+fn split_and_publish(request: SplitRequest<'_>, progress: &mut PhaseProgress<'_>) -> Result<bool> {
+    let SplitRequest {
+        source,
+        output,
+        format,
+        volume_size,
+        password,
+        cancel,
+        report,
+    } = request;
+    let parent = output
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let make_part = || tempfile::NamedTempFile::new_in(parent).map_err(Error::Io);
+    let parts = match format {
+        OutputFormat::Zip => {
+            rz_formats::volumes::split_zip(source, volume_size, cancel, progress, make_part)?
+        }
+        OutputFormat::SevenZ => {
+            rz_formats::volumes::split_sevenz(source, volume_size, cancel, progress, make_part)?
+        }
+        _ => {
+            return Err(Error::Unsupported(
+                "volumes are supported for ZIP and 7z only".into(),
+            ))
+        }
+    };
+    if parts.is_empty() {
+        return Ok(false);
+    }
+    for part in &parts {
+        part.as_file().sync_all()?;
+    }
+    let staged_paths: Vec<PathBuf> = parts.iter().map(|part| part.path().to_path_buf()).collect();
+    progress.phase = 2;
+    verify_volume_set(format, &staged_paths, password, cancel, progress, report)?;
+    let targets = volume_targets(output, format, parts.len())?;
+    for target in &targets {
+        if target.symlink_metadata().is_ok() {
+            return Err(Error::Io(std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                "one or more archive volumes already exist; RustZIP never overwrites them",
+            )));
+        }
+    }
+
+    let mut staged: Vec<Option<tempfile::NamedTempFile>> = parts.into_iter().map(Some).collect();
+    let order: Vec<usize> = if matches!(format, OutputFormat::SevenZ) {
+        (0..targets.len()).rev().collect()
+    } else {
+        (0..targets.len()).collect()
+    };
+    let mut published: Vec<usize> = Vec::with_capacity(order.len());
+    for index in order {
+        let Some(part) = staged[index].take() else {
+            rollback_volumes(&staged, &published, &targets);
+            return Err(Error::Corrupt(
+                "staged volume disappeared before publishing".into(),
+            ));
+        };
+        match fs::hard_link(part.path(), &targets[index]) {
+            Ok(()) => {
+                staged[index] = Some(part);
+                published.push(index);
+            }
+            Err(error) => {
+                staged[index] = Some(part);
+                rollback_volumes(&staged, &published, &targets);
+                return Err(Error::Io(error));
+            }
+        }
+    }
+    drop(staged);
+    progress.complete();
+    Ok(true)
+}
+
+fn rollback_volumes(
+    staged: &[Option<tempfile::NamedTempFile>],
+    published: &[usize],
+    targets: &[PathBuf],
+) {
+    for index in published.iter().rev().copied() {
+        if staged[index]
+            .as_ref()
+            .is_some_and(|part| same_file_object(part.path(), &targets[index]))
+        {
+            let _ = fs::remove_file(&targets[index]);
+        }
+    }
+}
+
+fn same_file_object(a: &Path, b: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        match (fs::metadata(a), fs::metadata(b)) {
+            (Ok(a), Ok(b)) => a.dev() == b.dev() && a.ino() == b.ino(),
+            _ => false,
+        }
+    }
+    #[cfg(windows)]
+    {
+        same_file::is_same_file(a, b).unwrap_or(false)
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = (a, b);
+        false
+    }
+}
+
+fn volume_targets(output: &Path, format: OutputFormat, count: usize) -> Result<Vec<PathBuf>> {
+    if count < 2 {
+        return Err(Error::Corrupt(
+            "split output must contain at least two volumes".into(),
+        ));
+    }
+    let mut targets = Vec::with_capacity(count);
+    match format {
+        OutputFormat::Zip => {
+            let stem = output
+                .file_stem()
+                .ok_or_else(|| Error::UnsafePath(output.display().to_string()))?;
+            for index in 0..count {
+                if index + 1 == count {
+                    targets.push(output.to_path_buf());
+                } else {
+                    let mut name = stem.to_os_string();
+                    name.push(format!(".z{:02}", index + 1));
+                    targets.push(output.with_file_name(name));
+                }
+            }
+        }
+        OutputFormat::SevenZ => {
+            let name = output
+                .file_name()
+                .ok_or_else(|| Error::UnsafePath(output.display().to_string()))?;
+            for index in 0..count {
+                let mut part = name.to_os_string();
+                part.push(format!(".{:03}", index + 1));
+                targets.push(output.with_file_name(part));
+            }
+        }
+        _ => {
+            return Err(Error::Unsupported(
+                "volumes are supported for ZIP and 7z only".into(),
+            ))
+        }
+    }
+    Ok(targets)
+}
+
+fn verify_volume_set(
+    format: OutputFormat,
+    paths: &[PathBuf],
+    password: Option<&str>,
+    cancel: &CancelToken,
+    progress: &mut dyn ProgressSink,
+    report: &CompressReport,
+) -> Result<()> {
+    let mut reader = match format {
+        OutputFormat::Zip => rz_formats::open_zip_volumes(paths)?,
+        OutputFormat::SevenZ => rz_formats::open_sevenz_volumes(paths.to_vec())?,
+        _ => {
+            return Err(Error::Unsupported(
+                "volumes are supported for ZIP and 7z only".into(),
+            ))
+        }
+    };
+    if let Some(password) = password {
+        reader.set_password(password)?;
+    }
+    let entries = reader.entries()?;
+    let files = entries
+        .iter()
+        .filter(|entry| entry.kind == rz_core::EntryKind::File)
+        .count() as u64;
+    let dirs = entries
+        .iter()
+        .filter(|entry| entry.kind == rz_core::EntryKind::Dir)
+        .count() as u64;
+    if files != report.files || dirs != report.dirs {
+        return Err(Error::Corrupt(
+            "split archive entry count did not match its source".into(),
+        ));
+    }
+    let mut buffer = vec![0; 256 * 1024];
+    let mut bytes_done = 0u64;
+    let mut files_done = 0u64;
+    reader.for_each(&mut |entry, data| {
+        cancel.check()?;
+        if entry.kind == rz_core::EntryKind::File {
+            loop {
+                cancel.check()?;
+                let n = data.read(&mut buffer)?;
+                if n == 0 {
+                    break;
+                }
+                bytes_done = bytes_done.saturating_add(n as u64);
+                progress.update(Progress {
+                    files_done,
+                    files_total: report.files + report.dirs,
+                    bytes_done,
+                    bytes_total: report.bytes,
+                });
+            }
+            files_done += 1;
+        } else {
+            files_done += 1;
+        }
+        Ok(())
+    })?;
+    if bytes_done != report.bytes {
+        return Err(Error::Corrupt(
+            "split archive byte count did not match its source".into(),
+        ));
+    }
+    Ok(())
 }
 
 /// Whether `path` is a temporary file belonging to a run compressing to `output`.
@@ -245,10 +597,9 @@ impl Read for SourceFile<'_> {
         }
         // Blocks while the task is paused; fails once it is cancelled.
         if self.tracker.check().is_err() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Interrupted,
-                "cancelled",
-            ));
+            // `std::io::copy` retries Interrupted errors, so cancellation must
+            // use an error kind that the copy loop returns to the caller.
+            return Err(std::io::Error::other("cancelled"));
         }
         if self.file.is_none() {
             self.file = Some(self.opener.open(self.path)?);
@@ -364,6 +715,28 @@ mod tests {
                 Ok(Box::new(file))
             }
         }
+    }
+
+    #[test]
+    fn cancelled_source_read_returns_an_error_that_copy_will_not_retry() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("input");
+        fs::write(&path, b"data").unwrap();
+        let cancel = CancelToken::new();
+        cancel.cancel();
+        let mut progress = NoProgress;
+        let tracker = Tracker::new(&mut progress, &cancel, 1, 4);
+        let opener = FileSourceOpener;
+        let mut source = SourceFile {
+            path: &path,
+            file: None,
+            opener: &opener,
+            done: false,
+            tracker: &tracker,
+        };
+
+        let error = source.read(&mut [0; 1]).unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::Other);
     }
 
     #[derive(Clone, Copy)]

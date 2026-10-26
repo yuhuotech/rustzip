@@ -1,7 +1,8 @@
-//! Format backends: zip, 7z, tar (plain, .gz, .xz, .zst, .bz2) and single-file
-//! compressed streams. All of them read and write.
+//! Format backends for read/write ZIP, 7z, tar and single-file streams, plus
+//! read-only RAR, ISO 9660, CAB, CPIO and AR readers.
 
 mod codec;
+mod libarchive_fmt;
 #[cfg(feature = "rar")]
 mod rar_fmt;
 pub mod recovery;
@@ -10,6 +11,7 @@ mod single;
 mod sniff;
 mod tar_fmt;
 mod timeutil;
+pub mod volumes;
 mod zip_fmt;
 mod zip_out;
 
@@ -28,7 +30,7 @@ pub enum OutputFormat {
     SevenZ,
     /// tar, optionally compressed (`Compression::None` is a plain `.tar`).
     Tar(Compression),
-    /// One compressed file: `.gz`, `.xz`, `.zst`, `.bz2`.
+    /// One compressed file: `.gz`, `.xz`, `.zst`, `.bz2`, `.lz4`.
     Single(Compression),
 }
 
@@ -49,6 +51,8 @@ impl OutputFormat {
             Self::Tar(Compression::Zstd)
         } else if ends(&[".tar.bz2", ".tbz2", ".tbz"]) {
             Self::Tar(Compression::Bzip2)
+        } else if ends(&[".tar.lz4"]) {
+            Self::Tar(Compression::Lz4)
         } else if ends(&[".tar"]) {
             Self::Tar(Compression::None)
         } else if ends(&[".gz"]) {
@@ -59,6 +63,8 @@ impl OutputFormat {
             Self::Single(Compression::Zstd)
         } else if ends(&[".bz2"]) {
             Self::Single(Compression::Bzip2)
+        } else if ends(&[".lz4"]) {
+            Self::Single(Compression::Lz4)
         } else {
             return None;
         })
@@ -76,6 +82,7 @@ fn compression_of(format: Format) -> Option<Compression> {
         Format::Xz => Some(Compression::Xz),
         Format::Zstd => Some(Compression::Zstd),
         Format::Bzip2 => Some(Compression::Bzip2),
+        Format::Lz4 => Some(Compression::Lz4),
         _ => None,
     }
 }
@@ -97,6 +104,12 @@ fn contains_tar(path: &Path, comp: Compression) -> Result<bool> {
 
 /// Opens an archive, detecting the format from its magic bytes.
 pub fn open(path: &Path) -> Result<Box<dyn ArchiveReader>> {
+    if let Some(paths) = volumes::zip_volume_paths(path)? {
+        return Ok(Box::new(zip_fmt::ZipReader::new_volumes(paths, path)?));
+    }
+    if let Some(paths) = volumes::sevenz_volume_paths(path)? {
+        return Ok(Box::new(sevenz_fmt::SevenReader::new_volumes(paths)?));
+    }
     let mut file = File::open(path)?;
     let format = sniff(&mut file)?;
     match format {
@@ -109,6 +122,22 @@ pub fn open(path: &Path) -> Result<Box<dyn ArchiveReader>> {
         Format::Rar => Err(Error::Unsupported(
             "rar (this build has no RAR support)".into(),
         )),
+        Format::Ar => Ok(Box::new(libarchive_fmt::LibarchiveReader::new(
+            path,
+            rz_ffi::libarchive::Format::Ar,
+        )?)),
+        Format::Cab => Ok(Box::new(libarchive_fmt::LibarchiveReader::new(
+            path,
+            rz_ffi::libarchive::Format::Cab,
+        )?)),
+        Format::Cpio => Ok(Box::new(libarchive_fmt::LibarchiveReader::new(
+            path,
+            rz_ffi::libarchive::Format::Cpio,
+        )?)),
+        Format::Iso9660 => Ok(Box::new(libarchive_fmt::LibarchiveReader::new(
+            path,
+            rz_ffi::libarchive::Format::Iso9660,
+        )?)),
         compressed => {
             let comp = compression_of(compressed).ok_or(Error::UnknownFormat)?;
             if contains_tar(path, comp)? {
@@ -118,6 +147,20 @@ pub fn open(path: &Path) -> Result<Box<dyn ArchiveReader>> {
             }
         }
     }
+}
+
+pub fn open_zip_volumes(paths: &[std::path::PathBuf]) -> Result<Box<dyn ArchiveReader>> {
+    let label = paths
+        .last()
+        .ok_or_else(|| Error::Corrupt("ZIP volume set is empty".into()))?;
+    Ok(Box::new(zip_fmt::ZipReader::new_volumes(
+        paths.to_vec(),
+        label,
+    )?))
+}
+
+pub fn open_sevenz_volumes(paths: Vec<std::path::PathBuf>) -> Result<Box<dyn ArchiveReader>> {
+    Ok(Box::new(sevenz_fmt::SevenReader::new_volumes(paths)?))
 }
 
 /// Creates a new archive file at `path`, replacing any existing file.
@@ -156,6 +199,7 @@ mod tests {
         assert_eq!(f("a.tgz"), Some(OutputFormat::Tar(Compression::Gzip)));
         assert_eq!(f("a.tar.xz"), Some(OutputFormat::Tar(Compression::Xz)));
         assert_eq!(f("a.tar.zst"), Some(OutputFormat::Tar(Compression::Zstd)));
+        assert_eq!(f("a.tar.lz4"), Some(OutputFormat::Tar(Compression::Lz4)));
         assert_eq!(f("a.tar.bz2"), Some(OutputFormat::Tar(Compression::Bzip2)));
         assert_eq!(
             f("notes.txt.gz"),
@@ -164,6 +208,10 @@ mod tests {
         assert_eq!(
             f("disk.img.zst"),
             Some(OutputFormat::Single(Compression::Zstd))
+        );
+        assert_eq!(
+            f("disk.img.lz4"),
+            Some(OutputFormat::Single(Compression::Lz4))
         );
         assert_eq!(f("a.rar"), None);
         assert_eq!(f("noext"), None);

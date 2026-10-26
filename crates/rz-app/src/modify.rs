@@ -59,6 +59,7 @@ pub fn edit_format(detected: &str) -> Option<OutputFormat> {
         "tar.xz" => OutputFormat::Tar(Compression::Xz),
         "tar.zst" => OutputFormat::Tar(Compression::Zstd),
         "tar.bz2" => OutputFormat::Tar(Compression::Bzip2),
+        "tar.lz4" => OutputFormat::Tar(Compression::Lz4),
         _ => return None,
     })
 }

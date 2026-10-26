@@ -7,9 +7,11 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+ctrlc.workspace = true
+rpassword.workspace = true
 rz-core.workspace = true
-rz-formats.workspace = true
-rz-engine.workspace = true
+zeroize.workspace = true
+rz-app.workspace = true
 
 [dev-dependencies]
 tempfile = "3"
@@ -17,7 +19,7 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [features]
 # Read-only RAR support; see crates/rz-formats for the license note.
-rar = ["rz-formats/rar"]
+rar = ["rz-app/rar"]
 
 [lints]
 workspace = true

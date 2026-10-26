@@ -92,7 +92,7 @@ fn main() {
         "format", "level", "threads", "pack MB/s", "unpack MB/s", "size"
     );
 
-    let cases: [(&str, u32); 8] = [
+    let cases: [(&str, u32); 9] = [
         ("zip", 6),
         ("tar.gz", 6),
         ("tar.zst", 3),
@@ -101,6 +101,7 @@ fn main() {
         ("7z", 3),
         ("7z", 6),
         ("tar.bz2", 6),
+        ("tar.lz4", 6),
     ];
     for (ext, level) in cases {
         let Some(format) = OutputFormat::from_path(Path::new(&format!("a.{ext}"))) else {
@@ -155,6 +156,53 @@ fn main() {
             let _ = fs::remove_dir_all(&out);
             let _ = fs::remove_file(&archive);
         }
+    }
+    println!("\nZIP / 7z volume creation and verification");
+    let volume_size = 64 * 1024;
+    for ext in ["zip", "7z"] {
+        let archive = root.join(format!("volumes.{ext}"));
+        let format = OutputFormat::from_path(&archive).unwrap_or_else(|| die("volume format", ext));
+        let opts = CreateOptions {
+            volume_size: Some(volume_size),
+            threads: cpus,
+            ..CreateOptions::default()
+        };
+        let t = Instant::now();
+        compress(
+            std::slice::from_ref(&src),
+            &archive,
+            format,
+            &opts,
+            &CancelToken::new(),
+            &mut NoProgress,
+        )
+        .unwrap_or_else(|e| die("volume compress", format!("{ext}: {e}")));
+        let pack = t.elapsed().as_secs_f64();
+        let open_path = if ext == "7z" {
+            root.join("volumes.7z.001")
+        } else {
+            archive.clone()
+        };
+        let out = root.join(format!("volumes-out-{ext}"));
+        let t = Instant::now();
+        let mut reader = rz_formats::open(&open_path).unwrap_or_else(|e| die("open volumes", e));
+        extract(
+            &mut *reader,
+            &out,
+            &ExtractOptions::default(),
+            &CancelToken::new(),
+            &mut NoProgress,
+        )
+        .unwrap_or_else(|e| die("extract volumes", format!("{ext}: {e}")));
+        let unpack = t.elapsed().as_secs_f64();
+        verify_extraction(&out, &src, files);
+        println!(
+            "{ext:<9} {:>5} {:>11.0} {:>13.0} MB/s, volume size {} KiB",
+            "vol",
+            mbps(total, pack),
+            mbps(total, unpack),
+            volume_size >> 10
+        );
     }
     println!("\nStreaming conversion / recovery (includes output verification)");
     let source = root.join("transform-source.zip");

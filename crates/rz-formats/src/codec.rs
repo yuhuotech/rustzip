@@ -2,6 +2,7 @@
 
 use flate2::read::MultiGzDecoder;
 use flate2::write::GzEncoder;
+use lz4_flex::frame::{FrameDecoder, FrameEncoder};
 use rz_core::{resolve_threads, Error, Result};
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Write};
@@ -13,6 +14,7 @@ pub enum Compression {
     Xz,
     Zstd,
     Bzip2,
+    Lz4,
 }
 
 impl Compression {
@@ -24,6 +26,7 @@ impl Compression {
             Compression::Xz => "xz",
             Compression::Zstd => "zst",
             Compression::Bzip2 => "bz2",
+            Compression::Lz4 => "lz4",
         }
     }
 
@@ -36,6 +39,7 @@ impl Compression {
             Compression::Xz => Box::new(liblzma::read::XzDecoder::new_parallel(buffered)),
             Compression::Zstd => Box::new(zstd::stream::read::Decoder::new(buffered)?),
             Compression::Bzip2 => Box::new(bzip2::read::MultiBzDecoder::new(buffered)),
+            Compression::Lz4 => Box::new(FrameDecoder::new(buffered)),
         })
     }
 
@@ -68,6 +72,7 @@ impl Compression {
                 out,
                 bzip2::Compression::new(level.clamp(1, 9)),
             )),
+            Compression::Lz4 => Sink::Lz4(FrameEncoder::new(out)),
         })
     }
 }
@@ -86,6 +91,7 @@ pub enum Sink {
     Xz(liblzma::write::XzEncoder<Out>),
     Zstd(Box<zstd::stream::write::Encoder<'static, Out>>),
     Bzip2(bzip2::write::BzEncoder<Out>),
+    Lz4(FrameEncoder<Out>),
 }
 
 impl Write for Sink {
@@ -96,6 +102,7 @@ impl Write for Sink {
             Sink::Xz(w) => w.write(buf),
             Sink::Zstd(w) => w.write(buf),
             Sink::Bzip2(w) => w.write(buf),
+            Sink::Lz4(w) => w.write(buf),
         }
     }
 
@@ -106,6 +113,7 @@ impl Write for Sink {
             Sink::Xz(w) => w.flush(),
             Sink::Zstd(w) => w.flush(),
             Sink::Bzip2(w) => w.flush(),
+            Sink::Lz4(w) => w.flush(),
         }
     }
 }
@@ -119,6 +127,7 @@ impl Sink {
             Sink::Xz(w) => w.finish()?,
             Sink::Zstd(w) => w.finish()?,
             Sink::Bzip2(w) => w.finish()?,
+            Sink::Lz4(w) => w.finish().map_err(std::io::Error::from)?,
         };
         out.flush()?;
         out.get_ref().sync_all()?;

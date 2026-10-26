@@ -8,9 +8,14 @@ pub enum Format {
     Gzip,
     SevenZip,
     Rar,
+    Iso9660,
+    Cab,
+    Cpio,
+    Ar,
     Xz,
     Zstd,
     Bzip2,
+    Lz4,
 }
 
 impl Format {
@@ -21,9 +26,14 @@ impl Format {
             Format::Gzip => "gzip",
             Format::SevenZip => "7z",
             Format::Rar => "rar",
+            Format::Iso9660 => "iso",
+            Format::Cab => "cab",
+            Format::Cpio => "cpio",
+            Format::Ar => "ar",
             Format::Xz => "xz",
             Format::Zstd => "zstd",
             Format::Bzip2 => "bzip2",
+            Format::Lz4 => "lz4",
         }
     }
 }
@@ -47,6 +57,19 @@ pub fn sniff<R: Read + Seek>(r: &mut R) -> Result<Format> {
         Some(Format::Zstd)
     } else if head.starts_with(b"BZh") {
         Some(Format::Bzip2)
+    } else if head.starts_with(&[0x04, 0x22, 0x4d, 0x18]) {
+        Some(Format::Lz4)
+    } else if head.starts_with(b"MSCF") {
+        Some(Format::Cab)
+    } else if head.starts_with(b"!<arch>\n") {
+        Some(Format::Ar)
+    } else if head.starts_with(b"070701")
+        || head.starts_with(b"070702")
+        || head.starts_with(b"070707")
+        || head.starts_with(&[0x71, 0xc7])
+        || head.starts_with(&[0xc7, 0x71])
+    {
+        Some(Format::Cpio)
     } else {
         None
     };
@@ -59,7 +82,14 @@ pub fn sniff<R: Read + Seek>(r: &mut R) -> Result<Format> {
     let n = read_up_to(r, &mut magic)?;
     r.seek(SeekFrom::Start(0))?;
     if &magic[..n] == b"ustar" {
-        Ok(Format::Tar)
+        return Ok(Format::Tar);
+    }
+    r.seek(SeekFrom::Start(32_769))?;
+    let mut iso_magic = [0u8; 5];
+    let iso_n = read_up_to(r, &mut iso_magic)?;
+    r.seek(SeekFrom::Start(0))?;
+    if iso_n == 5 && &iso_magic == b"CD001" {
+        Ok(Format::Iso9660)
     } else {
         Err(Error::UnknownFormat)
     }
@@ -99,5 +129,28 @@ mod tests {
         let mut data = vec![0u8; 512];
         data[257..262].copy_from_slice(b"ustar");
         assert_eq!(sniff(&mut Cursor::new(data)).ok(), Some(Format::Tar));
+    }
+
+    #[test]
+    fn detects_supported_libarchive_signatures_by_content() {
+        assert_eq!(
+            sniff(&mut Cursor::new(b"!<arch>\n".to_vec())).ok(),
+            Some(Format::Ar)
+        );
+        assert_eq!(
+            sniff(&mut Cursor::new(b"MSCF\0\0\0\0".to_vec())).ok(),
+            Some(Format::Cab)
+        );
+        assert_eq!(
+            sniff(&mut Cursor::new(b"0707010000000000".to_vec())).ok(),
+            Some(Format::Cpio)
+        );
+        assert_eq!(
+            sniff(&mut Cursor::new(vec![0x71, 0xc7, 0, 0, 0, 0, 0, 0])).ok(),
+            Some(Format::Cpio)
+        );
+        let mut iso = vec![0u8; 32_774];
+        iso[32_769..32_774].copy_from_slice(b"CD001");
+        assert_eq!(sniff(&mut Cursor::new(iso)).ok(), Some(Format::Iso9660));
     }
 }

@@ -1,7 +1,7 @@
 use crate::timeutil::{civil_to_unix, unix_to_civil};
 use rz_core::{ArchiveReader, Caps, Entry, EntryKind, Error, Result};
 use std::fs::File;
-use std::io::Read;
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use zip::result::ZipError;
 use zip::{DateTime, ZipArchive};
@@ -17,10 +17,34 @@ pub(crate) fn map_err(e: ZipError) -> Error {
 }
 
 pub struct ZipReader {
-    archive: ZipArchive<File>,
+    archive: ZipArchive<ZipSource>,
     path: PathBuf,
+    volume_paths: Option<Vec<PathBuf>>,
     password: Option<Vec<u8>>,
     encoding: Option<&'static encoding_rs::Encoding>,
+}
+
+enum ZipSource {
+    File(File),
+    Volumes(crate::volumes::MultipartReader),
+}
+
+impl Read for ZipSource {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        match self {
+            Self::File(file) => file.read(buf),
+            Self::Volumes(reader) => reader.read(buf),
+        }
+    }
+}
+
+impl Seek for ZipSource {
+    fn seek(&mut self, from: SeekFrom) -> std::io::Result<u64> {
+        match self {
+            Self::File(file) => file.seek(from),
+            Self::Volumes(reader) => reader.seek(from),
+        }
+    }
 }
 
 /// Picks the character set for entry names that are not valid UTF-8.
@@ -53,10 +77,23 @@ fn decode_name(raw: &[u8], enc: Option<&'static encoding_rs::Encoding>, forced: 
 
 impl ZipReader {
     pub fn new(file: File, path: &Path) -> Result<Self> {
-        let archive = ZipArchive::new(file).map_err(map_err)?;
+        let archive = ZipArchive::new(ZipSource::File(file)).map_err(map_err)?;
         Ok(Self {
             archive,
             path: path.to_path_buf(),
+            volume_paths: None,
+            password: None,
+            encoding: None,
+        })
+    }
+
+    pub fn new_volumes(paths: Vec<PathBuf>, path: &Path) -> Result<Self> {
+        let source = crate::volumes::MultipartReader::open_zip(&paths)?;
+        let archive = ZipArchive::new(ZipSource::Volumes(source)).map_err(map_err)?;
+        Ok(Self {
+            archive,
+            path: path.to_path_buf(),
+            volume_paths: Some(paths),
             password: None,
             encoding: None,
         })
@@ -143,7 +180,10 @@ impl ArchiveReader for ZipReader {
 
     fn reopen(&self) -> Option<Result<Box<dyn ArchiveReader>>> {
         let open = || -> Result<Box<dyn ArchiveReader>> {
-            let mut r = ZipReader::new(File::open(&self.path)?, &self.path)?;
+            let mut r = match &self.volume_paths {
+                Some(paths) => ZipReader::new_volumes(paths.clone(), &self.path)?,
+                None => ZipReader::new(File::open(&self.path)?, &self.path)?,
+            };
             r.password.clone_from(&self.password);
             r.encoding = self.encoding;
             Ok(Box::new(r))

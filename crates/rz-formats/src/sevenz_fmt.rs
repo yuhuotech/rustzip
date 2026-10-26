@@ -92,14 +92,14 @@ pub(crate) fn describe(index: usize, f: &ArchiveEntry) -> Entry {
 }
 
 pub struct SevenReader {
-    path: PathBuf,
+    paths: Vec<PathBuf>,
     password: Option<String>,
 }
 
 impl SevenReader {
     pub fn new(path: &Path) -> Result<Self> {
         let r = Self {
-            path: path.to_path_buf(),
+            paths: vec![path.to_path_buf()],
             password: None,
         };
         // Fail early on a broken signature or header; an encrypted header is
@@ -110,9 +110,26 @@ impl SevenReader {
         }
     }
 
-    fn archive(&self) -> Result<SzReader<File>> {
+    pub fn new_volumes(paths: Vec<PathBuf>) -> Result<Self> {
+        if paths.len() < 2 {
+            return Err(Error::Corrupt(
+                "7z volume set has fewer than two parts".into(),
+            ));
+        }
+        let r = Self {
+            paths,
+            password: None,
+        };
+        match r.archive() {
+            Ok(_) | Err(Error::Password) => Ok(r),
+            Err(e) => Err(e),
+        }
+    }
+
+    fn archive(&self) -> Result<SzReader<crate::volumes::MultipartReader>> {
         let pw = Password::new(self.password.as_deref().unwrap_or(""));
-        SzReader::open(&self.path, pw).map_err(map_err)
+        let source = crate::volumes::MultipartReader::open(&self.paths, 0, Default::default())?;
+        SzReader::new(source, pw).map_err(map_err)
     }
 }
 
@@ -201,6 +218,7 @@ impl ArchiveReader for SevenReader {
 
 pub struct SevenOut {
     writer: SzWriter<BufWriter<File>>,
+    solid_block_size: Option<u64>,
 }
 
 impl SevenOut {
@@ -214,17 +232,24 @@ impl SevenOut {
             // Hides file names too, like `7z a -mhe`.
             writer.set_encrypt_header(true);
         }
-        let threads = resolve_threads(opts.threads) as u32;
+        let threads = resolve_threads(opts.threads).clamp(1, 256) as u32;
         let level = opts.level.min(9);
-        methods.push(if level == 0 {
-            EncoderConfiguration::new(EncoderMethod::COPY)
-        } else if threads > 1 {
-            Lzma2Options::from_level_mt(level, threads, MT_CHUNK).into()
+        if level == 0 {
+            if opts.dictionary_size.is_some() {
+                return Err(Error::Unsupported(
+                    "a 7z dictionary is not used when compression level is 0".into(),
+                ));
+            }
+            methods.push(EncoderConfiguration::new(EncoderMethod::COPY));
         } else {
-            Lzma2Options::from_level(level).into()
-        });
+            let (lzma, _, _) = lzma_options(opts, level, threads)?;
+            methods.push(lzma.into());
+        }
         writer.set_content_methods(methods);
-        Ok(Self { writer })
+        Ok(Self {
+            writer,
+            solid_block_size: opts.solid_block_size,
+        })
     }
 
     fn entry(e: &NewEntry, dir: bool) -> ArchiveEntry {
@@ -245,6 +270,121 @@ impl SevenOut {
         }
         a
     }
+
+    fn flush_solid<R: Read>(
+        &mut self,
+        entries: &mut Vec<ArchiveEntry>,
+        readers: &mut Vec<SourceReader<R>>,
+    ) -> Result<()> {
+        if !entries.is_empty() {
+            self.writer
+                .push_archive_entries(std::mem::take(entries), std::mem::take(readers))
+                .map_err(map_err)?;
+        }
+        Ok(())
+    }
+}
+
+const MIN_DICTIONARY_SIZE: u32 = 4 * 1024;
+const MAX_DICTIONARY_SIZE: u32 = 64 << 20;
+const DEFAULT_DICTIONARY_SIZE: u32 = 8 << 20;
+const DICTIONARY_MEMORY_FACTOR: u64 = 6;
+const SINGLE_THREAD_OVERHEAD: u64 = 1 << 20;
+const MAX_SOLID_BLOCK_ENTRIES: usize = 4096;
+
+fn lzma_options(
+    opts: &CreateOptions,
+    level: u32,
+    requested_threads: u32,
+) -> Result<(Lzma2Options, u32, u32)> {
+    let preset = Lzma2Options::from_level(level);
+    let preset_config: EncoderConfiguration = preset.into();
+    let preset_dictionary = preset_config
+        .options
+        .as_ref()
+        .map_or(DEFAULT_DICTIONARY_SIZE, |o| o.get_lzma_dict_size());
+    let mut dictionary = opts.dictionary_size.unwrap_or(preset_dictionary);
+    if !(MIN_DICTIONARY_SIZE..=MAX_DICTIONARY_SIZE).contains(&dictionary) {
+        return Err(Error::Unsupported(format!(
+            "7z dictionary size must be between 4 KiB and 64 MiB, got {dictionary} bytes"
+        )));
+    }
+    let dictionary_was_selected = opts.dictionary_size.is_some();
+    let budget = opts.memory_budget;
+    let mut selected_threads = None;
+
+    loop {
+        for threads in (1..=requested_threads).rev() {
+            if lzma_memory_estimate(dictionary, preset_dictionary, threads, budget)
+                .is_some_and(|needed| needed <= budget)
+            {
+                selected_threads = Some(threads);
+                break;
+            }
+        }
+        if selected_threads.is_some()
+            || dictionary_was_selected
+            || dictionary == MIN_DICTIONARY_SIZE
+        {
+            break;
+        }
+        dictionary = (dictionary / 2).max(MIN_DICTIONARY_SIZE);
+    }
+
+    let Some(threads) = selected_threads else {
+        return Err(Error::LimitExceeded(
+            "7z compression settings exceed the estimated memory budget; lower the dictionary size or thread count".into(),
+        ));
+    };
+    let lzma = if threads > 1 {
+        let chunk_size = lzma_chunk_size(dictionary, preset_dictionary, threads, budget)
+            .ok_or_else(|| {
+                Error::LimitExceeded(
+                    "7z compression settings exceed the estimated memory budget".into(),
+                )
+            })?;
+        Lzma2Options::from_level_mt(level, threads, chunk_size)
+    } else {
+        Lzma2Options::from_level(level)
+    };
+    let mut lzma = lzma;
+    lzma.set_dictionary_size(dictionary);
+    Ok((lzma, threads, dictionary))
+}
+
+fn lzma_memory_estimate(
+    dictionary: u32,
+    preset_dictionary: u32,
+    threads: u32,
+    budget: u64,
+) -> Option<u64> {
+    let dict = u64::from(dictionary);
+    if threads <= 1 {
+        return dict
+            .checked_mul(DICTIONARY_MEMORY_FACTOR)?
+            .checked_add(SINGLE_THREAD_OVERHEAD);
+    }
+    let chunk = lzma_chunk_size(dictionary, preset_dictionary, threads, budget)?;
+    let thread_count = u64::from(threads);
+    let dict_memory = dict.checked_mul(DICTIONARY_MEMORY_FACTOR)?;
+    let worker_memory = dict_memory.checked_add(chunk.checked_mul(2)?)?;
+    chunk.checked_add(worker_memory.checked_mul(thread_count)?)
+}
+
+fn lzma_chunk_size(
+    dictionary: u32,
+    preset_dictionary: u32,
+    threads: u32,
+    budget: u64,
+) -> Option<u64> {
+    let thread_count = u64::from(threads);
+    let dict_memory = u64::from(dictionary).checked_mul(DICTIONARY_MEMORY_FACTOR)?;
+    let available_for_dictionary = dict_memory.checked_mul(thread_count)?;
+    let per_chunk_buffers = thread_count.checked_mul(2)?.checked_add(1)?;
+    let available = budget.checked_sub(available_for_dictionary)? / per_chunk_buffers;
+    let minimum_chunk = u64::from(dictionary.max(preset_dictionary));
+    let chunk = available.min(MT_CHUNK.max(minimum_chunk));
+    (chunk >= minimum_chunk).then_some(chunk)
 }
 
 impl ArchiveWriter for SevenOut {
@@ -269,18 +409,35 @@ impl ArchiveWriter for SevenOut {
     ) -> Result<()> {
         let mut entries = Vec::new();
         let mut readers = Vec::new();
+        let mut block_bytes = 0u64;
         for item in files {
             let (meta, src) = item?;
+            if self.solid_block_size == Some(0) {
+                self.writer
+                    .push_archive_entry(Self::entry(&meta, false), Some(src))
+                    .map_err(map_err)?;
+                continue;
+            }
+            if let Some(limit) = self.solid_block_size {
+                if !entries.is_empty()
+                    && (block_bytes.saturating_add(meta.size) > limit
+                        || entries.len() >= MAX_SOLID_BLOCK_ENTRIES)
+                {
+                    self.flush_solid(&mut entries, &mut readers)?;
+                    block_bytes = 0;
+                }
+            }
             entries.push(Self::entry(&meta, false));
             readers.push(SourceReader::new(src));
+            block_bytes = block_bytes.saturating_add(meta.size);
+            if self.solid_block_size.is_some_and(|limit| {
+                limit > 0 && (block_bytes >= limit || entries.len() >= MAX_SOLID_BLOCK_ENTRIES)
+            }) {
+                self.flush_solid(&mut entries, &mut readers)?;
+                block_bytes = 0;
+            }
         }
-        if entries.is_empty() {
-            return Ok(());
-        }
-        self.writer
-            .push_archive_entries(entries, readers)
-            .map_err(map_err)?;
-        Ok(())
+        self.flush_solid(&mut entries, &mut readers)
     }
 
     fn finish(self: Box<Self>) -> Result<()> {
@@ -293,7 +450,10 @@ impl ArchiveWriter for SevenOut {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
     use super::*;
+    use std::io::Cursor;
 
     #[test]
     fn nt_time_round_trips_unix_seconds() {
@@ -314,5 +474,79 @@ mod tests {
         let d = describe(0, &a);
         assert_eq!(d.unix_mode, Some(0o755));
         assert_eq!(d.kind, EntryKind::File);
+    }
+
+    #[test]
+    fn dictionary_size_is_applied_and_thread_count_is_limited_by_memory_budget() {
+        let options = CreateOptions {
+            level: 6,
+            dictionary_size: Some(2 << 20),
+            memory_budget: 256 << 20,
+            ..CreateOptions::default()
+        };
+        let (lzma, threads, dictionary) = lzma_options(&options, 6, 16).unwrap();
+        let config: EncoderConfiguration = lzma.into();
+        assert_eq!(config.options.unwrap().get_lzma_dict_size(), 2 << 20);
+        assert!(threads > 0 && threads < 16);
+        assert_eq!(dictionary, 2 << 20);
+        assert!(
+            lzma_memory_estimate(dictionary, 8 << 20, threads, 256 << 20).unwrap() <= 256 << 20
+        );
+    }
+
+    #[test]
+    fn selected_dictionary_that_exceeds_the_memory_budget_is_rejected() {
+        let options = CreateOptions {
+            level: 9,
+            dictionary_size: Some(64 << 20),
+            memory_budget: 256 << 20,
+            ..CreateOptions::default()
+        };
+        assert!(matches!(
+            lzma_options(&options, 9, 1),
+            Err(Error::LimitExceeded(_))
+        ));
+    }
+
+    fn write_test_archive(path: &Path, block_size: Option<u64>) {
+        let options = CreateOptions {
+            level: 1,
+            threads: 1,
+            solid_block_size: block_size,
+            ..CreateOptions::default()
+        };
+        let mut writer = SevenOut::new(File::create(path).unwrap(), &options).unwrap();
+        let files = ["a.txt", "b.txt"].map(|name| {
+            Ok((
+                NewEntry {
+                    name: name.into(),
+                    size: 2,
+                    unix_mode: None,
+                    modified: None,
+                },
+                Box::new(Cursor::new(b"ab".to_vec())) as Box<dyn Read + Send>,
+            ))
+        });
+        let mut files = files.into_iter();
+        writer.add_files(&mut files).unwrap();
+        Box::new(writer).finish().unwrap();
+    }
+
+    #[test]
+    fn solid_block_size_splits_7z_blocks_and_zero_disables_solid_mode() {
+        let dir = tempfile::tempdir().unwrap();
+        let solid = dir.path().join("solid.7z");
+        let limited = dir.path().join("limited.7z");
+        let non_solid = dir.path().join("non-solid.7z");
+        write_test_archive(&solid, None);
+        write_test_archive(&limited, Some(2));
+        write_test_archive(&non_solid, Some(0));
+
+        let solid = SevenReader::new(&solid).unwrap().archive().unwrap();
+        let limited = SevenReader::new(&limited).unwrap().archive().unwrap();
+        let non_solid = SevenReader::new(&non_solid).unwrap().archive().unwrap();
+        assert!(solid.archive().is_solid);
+        assert!(!limited.archive().is_solid);
+        assert!(!non_solid.archive().is_solid);
     }
 }

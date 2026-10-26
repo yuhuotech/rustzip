@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/rz-core",
     "crates/rz-platform",
+    "crates/rz-ffi",
     "crates/rz-formats",
     "crates/rz-engine",
     "crates/rz-app",
@@ -22,6 +23,7 @@ rust-version = "1.93"
 [workspace.dependencies]
 rz-core = { path = "crates/rz-core" }
 rz-platform = { path = "crates/rz-platform" }
+rz-ffi = { path = "crates/rz-ffi" }
 rz-formats = { path = "crates/rz-formats" }
 rz-engine = { path = "crates/rz-engine" }
 rz-app = { path = "crates/rz-app" }
@@ -29,6 +31,12 @@ rz-services = { path = "crates/rz-services" }
 tempfile = "3"
 zeroize = "1"
 dirs = "6"
+lz4_flex = "0.14.0"
+blake3 = "1.8.7"
+ctrlc = "3.5.2"
+libarchive2-sys = "0.2.0"
+notify-rust = "4.18.2"
+rpassword = "7.5.4"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

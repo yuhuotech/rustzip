@@ -64,6 +64,7 @@ impl ArchiveReader for TarReader {
             Compression::Xz => "tar.xz",
             Compression::Zstd => "tar.zst",
             Compression::Bzip2 => "tar.bz2",
+            Compression::Lz4 => "tar.lz4",
         }
     }
 

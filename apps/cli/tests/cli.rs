@@ -30,6 +30,12 @@ fn sample(root: &Path) {
     fs::write(root.join("proj/empty.bin"), "").unwrap();
 }
 
+fn password_file(root: &Path, name: &str, password: &str) -> String {
+    let path = root.join(name);
+    fs::write(&path, format!("{password}\n")).unwrap();
+    format!("@{}", p(&path))
+}
+
 #[test]
 fn no_args_prints_usage_and_succeeds() {
     let o = rz(&[]);
@@ -78,9 +84,11 @@ fn add_list_test_extract_round_trip_for_every_format() {
 fn encrypted_zip_needs_the_right_password() {
     let tmp = tempfile::tempdir().unwrap();
     sample(tmp.path());
+    let password = password_file(tmp.path(), "secret.txt", "s3cret");
+    let wrong_password = password_file(tmp.path(), "wrong.txt", "wrong");
     let archive = tmp.path().join("secret.zip");
     let src = tmp.path().join("proj");
-    let o = rz(&["a", p(&archive), p(&src), "-p", "s3cret"]);
+    let o = rz(&["a", p(&archive), p(&src), "-p", &password]);
     assert!(o.status.success(), "{:?}", s(&o));
 
     let out = tmp.path().join("o1");
@@ -88,11 +96,11 @@ fn encrypted_zip_needs_the_right_password() {
     assert!(!o.status.success());
     assert!(s(&o).1.to_lowercase().contains("password"));
 
-    let o = rz(&["x", p(&archive), "-o", p(&out), "-p", "wrong"]);
+    let o = rz(&["x", p(&archive), "-o", p(&out), "-p", &wrong_password]);
     assert!(!o.status.success());
 
     let out = tmp.path().join("o2");
-    let o = rz(&["x", p(&archive), "-o", p(&out), "-p", "s3cret"]);
+    let o = rz(&["x", p(&archive), "-o", p(&out), "-p", &password]);
     assert!(o.status.success(), "{:?}", s(&o));
     assert_eq!(
         fs::read_to_string(out.join("proj/readme.txt")).unwrap(),
@@ -183,13 +191,14 @@ fn single_file_formats_round_trip_through_the_cli() {
 fn encrypted_7z_lists_only_with_the_password() {
     let tmp = tempfile::tempdir().unwrap();
     sample(tmp.path());
+    let password = password_file(tmp.path(), "secret.txt", "pw");
     let archive = tmp.path().join("secret.7z");
     let o = rz(&[
         "a",
         p(&archive),
         p(&tmp.path().join("proj")),
         "-p",
-        "pw",
+        &password,
         "-t",
         "2",
     ]);
@@ -199,12 +208,44 @@ fn encrypted_7z_lists_only_with_the_password() {
     assert!(!o.status.success());
     assert!(s(&o).1.to_lowercase().contains("password"));
 
-    let o = rz(&["l", p(&archive), "-p", "pw"]);
+    let o = rz(&["l", p(&archive), "-p", &password]);
     assert!(o.status.success(), "{:?}", s(&o));
     assert!(s(&o).0.contains("proj/readme.txt"));
 
-    let o = rz(&["t", p(&archive), "-p", "pw"]);
+    let o = rz(&["t", p(&archive), "-p", &password]);
     assert!(o.status.success(), "{:?}", s(&o));
+}
+
+#[test]
+fn sevenz_dictionary_and_solid_block_flags_create_readable_archives() {
+    let tmp = tempfile::tempdir().unwrap();
+    sample(tmp.path());
+    let archive = tmp.path().join("advanced.7z");
+    let o = rz(&[
+        "a",
+        p(&archive),
+        p(&tmp.path().join("proj")),
+        "-d",
+        "2M",
+        "-s",
+        "1",
+    ]);
+    assert!(o.status.success(), "{:?}", s(&o));
+    assert!(rz(&["t", p(&archive)]).status.success());
+
+    let out = tmp.path().join("out");
+    let o = rz(&["x", p(&archive), "-o", p(&out)]);
+    assert!(o.status.success(), "{:?}", s(&o));
+    assert_eq!(
+        fs::read_to_string(out.join("proj/docs/说明.md")).unwrap(),
+        "# 中文文件名"
+    );
+
+    let refused = tmp.path().join("over-budget.7z");
+    let o = rz(&["a", p(&refused), p(&tmp.path().join("proj")), "-d", "64M"]);
+    assert!(!o.status.success());
+    assert!(s(&o).1.contains("memory budget"));
+    assert!(!refused.exists());
 }
 
 #[test]
@@ -233,6 +274,7 @@ fn thread_count_does_not_change_the_result() {
 fn single_file_formats_reject_folders_and_passwords_clearly() {
     let tmp = tempfile::tempdir().unwrap();
     sample(tmp.path());
+    let password = password_file(tmp.path(), "secret.txt", "pw");
     let o = rz(&[
         "a",
         p(&tmp.path().join("x.gz")),
@@ -247,7 +289,7 @@ fn single_file_formats_reject_folders_and_passwords_clearly() {
         p(&tmp.path().join("y.tar.gz")),
         p(&tmp.path().join("proj")),
         "-p",
-        "pw",
+        &password,
     ]);
     assert!(!o.status.success());
     assert!(s(&o).1.contains("cannot be encrypted"));
@@ -309,7 +351,11 @@ fn reports_clear_errors() {
     fs::write(&junk, "this is not an archive").unwrap();
     let o = rz(&["l", p(&junk)]);
     assert!(!o.status.success());
-    assert!(s(&o).1.contains("unrecognized archive format"));
+    assert!(
+        s(&o).1.contains("unrecognized archive format"),
+        "unexpected archive error: {:?}",
+        s(&o)
+    );
 
     let o = rz(&["l", p(&tmp.path().join("missing.zip"))]);
     assert!(!o.status.success());
@@ -325,6 +371,26 @@ fn reports_clear_errors() {
 
     let o = rz(&["a", p(&tmp.path().join("y.zip"))]);
     assert!(!o.status.success());
+}
+
+#[test]
+fn hashes_files_with_sha256_and_blake3_or_a_selected_algorithm() {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("sample.bin");
+    fs::write(&path, b"abc").unwrap();
+
+    let both = rz(&["h", p(&path)]);
+    assert!(both.status.success(), "{:?}", s(&both));
+    let output = s(&both).0;
+    assert!(output.contains("SHA-256"));
+    assert!(output.contains("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"));
+    assert!(output.contains("BLAKE3"));
+    assert!(output.contains("6437b3ac38465133ffb63b75273a8db548c558465d79db03fd359c6cd5bd9d85"));
+
+    let selected = rz(&["h", p(&path), "-a", "sha256"]);
+    assert!(selected.status.success(), "{:?}", s(&selected));
+    assert!(s(&selected).0.contains("SHA-256"));
+    assert!(!s(&selected).0.contains("BLAKE3"));
 }
 
 #[test]

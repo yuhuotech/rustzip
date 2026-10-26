@@ -1,5 +1,3 @@
-# Test fixtures
+# Long-tail format fixtures
 
-- `container.rar`: 87-byte RAR 4 archive with one file, `container` ("#!/bin/sh\nexit 0\n").
-  Copied from the Homebrew test suite (`Library/Homebrew/test/support/fixtures/cask/container.rar`),
-  BSD-2-Clause. It is the only RAR sample in the repository because RustZIP cannot create RAR files.
+- `longtail_iso9660.iso.gz` is a gzip-compressed ISO 9660/Joliet image generated with macOS `hdiutil makehybrid` from the text file `HELLO.TXT` containing `RustZIP ISO fixture`. The image is generated test data with no third-party payload.

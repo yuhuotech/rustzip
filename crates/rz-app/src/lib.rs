@@ -6,6 +6,8 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
 pub mod browse;
+pub mod cli;
+pub mod hash;
 pub mod history;
 pub mod locations;
 pub mod modify;

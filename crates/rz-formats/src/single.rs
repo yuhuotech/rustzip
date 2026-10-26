@@ -87,6 +87,7 @@ impl ArchiveReader for SingleReader {
             Compression::Xz => "xz",
             Compression::Zstd => "zstd",
             Compression::Bzip2 => "bzip2",
+            Compression::Lz4 => "lz4",
             Compression::None => "raw",
         }
     }
@@ -141,7 +142,8 @@ impl SingleOut {
 impl ArchiveWriter for SingleOut {
     fn add_dir(&mut self, _: &NewEntry) -> Result<()> {
         Err(Error::Unsupported(
-            "this format holds one file, not a folder; use .tar.gz, .tar.xz or .tar.zst".into(),
+            "this format holds one file, not a folder; use .tar.gz, .tar.xz, .tar.zst or .tar.lz4"
+                .into(),
         ))
     }
 
