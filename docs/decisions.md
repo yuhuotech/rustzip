@@ -208,3 +208,10 @@
 
 - 成功任务在本次运行内由任务摘要提供结果路径；任务记录页可通过“显示结果”调用系统文件管理器定位结果。覆盖压缩、解压、转换、修复、编辑、哈希和完整性测试。
 - 结果路径仅留在当前进程的任务摘要中，不写入 `history.json`；重启后保留记录文本，但不显示定位操作。任务被用户清除后相应定位入口也消失。
+
+## D30 PDF 内置预览的资源安全边界
+
+- PDF 内容与归档内容一样是不可信输入。内置 PDF 渲染必须限制解压后数据量和栅格像素数；只限制源 PDF 文件大小与最终位图大小不足以防止压缩数据放大耗尽内存。
+- 当前评估的纯 Rust Hayro renderer 使用 Apache-2.0 OR MIT，且禁止 unsafe，但默认 Flate fallback 将解码输出不断追加到 `Vec`，没有输出上限；可选的标准解码路径也调用无上限的 `read_to_end`。仅限制源文件字节数和最终像素数不足以防止解压炸弹，所以在渲染器实现可执行的解压输出硬上限前不接入。依据：[Hayro 渲染说明与许可证](https://github.com/LaurenzV/hayro)、[Flate 解码实现](https://github.com/LaurenzV/hayro/blob/main/hayro-syntax/src/filter/lzw_flate.rs)。
+- `pdfium-render` 的 Rust 绑定许可证为 MIT OR Apache-2.0，但不包含 PDFium 动态库，需额外下载、构建和跨平台打包原生二进制；因此本轮不选用。PDFium 的归档样本、运行时限制和包体成本需要单独评估。
+- 达到资源边界后，内置预览需清楚提示用户改用系统 PDF 阅读器；在满足上述限制之前继续由系统程序打开 PDF。
