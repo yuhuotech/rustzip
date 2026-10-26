@@ -40,6 +40,7 @@ use std::time::Duration;
 /// Whether the tabs share the title bar row with the window buttons (macOS only).
 pub const TABS_IN_TITLEBAR: bool = cfg!(target_os = "macos");
 const TITLEBAR_HEIGHT: f32 = 38.;
+const EMAIL_SHARE_VOLUME_SIZE: u64 = 20 << 20;
 
 /// One archive shown in a tab.
 pub struct OpenArchive {
@@ -173,6 +174,8 @@ pub enum Preset {
     Fast,
     Balanced,
     Smallest,
+    EmailShare,
+    Portable,
 }
 
 impl Preset {
@@ -181,6 +184,7 @@ impl Preset {
             Preset::Fast => 1,
             Preset::Balanced => 6,
             Preset::Smallest => 9,
+            Preset::EmailShare | Preset::Portable => 6,
         }
     }
 }
@@ -2172,6 +2176,9 @@ impl MainView {
     pub fn set_format(&mut self, format: Format, cx: &mut Context<Self>) {
         if let Some(Overlay::Compress(f)) = &mut self.overlay {
             f.format = format;
+            if f.preset == Preset::EmailShare && !format.supports_volumes() {
+                f.preset = Preset::Balanced;
+            }
         }
         cx.notify();
     }
@@ -2200,6 +2207,14 @@ impl MainView {
             );
             return;
         }
+        let volume_text = if volume_text.is_empty()
+            && f.preset == Preset::EmailShare
+            && f.format.supports_volumes()
+        {
+            (EMAIL_SHARE_VOLUME_SIZE >> 20).to_string()
+        } else {
+            volume_text
+        };
         let volume_size = if f.format.supports_volumes() && !volume_text.is_empty() {
             let bytes = volume_text
                 .parse::<u64>()
@@ -2269,6 +2284,7 @@ impl MainView {
                 volume_size,
                 dictionary_size,
                 solid_block_size,
+                portable: f.preset == Preset::Portable,
                 ..CreateOptions::default()
             },
         };
@@ -4704,6 +4720,26 @@ impl MainView {
                             }),
                         ),
                     ),
+            )
+            .when(form.format.supports_volumes(), |d| {
+                d.child(
+                    segment(
+                        "preset-email-share",
+                        self.tool_text("preset_email_share"),
+                        form.preset == Preset::EmailShare,
+                    )
+                    .on_click(
+                        cx.listener(|this, _, _, cx| this.set_preset(Preset::EmailShare, cx)),
+                    ),
+                )
+            })
+            .child(
+                segment(
+                    "preset-portable",
+                    self.tool_text("preset_portable"),
+                    form.preset == Preset::Portable,
+                )
+                .on_click(cx.listener(|this, _, _, cx| this.set_preset(Preset::Portable, cx))),
             )
             .when(form.format.supports_password(), |d| {
                 d.child(

@@ -219,6 +219,7 @@ impl ArchiveReader for SevenReader {
 pub struct SevenOut {
     writer: SzWriter<BufWriter<File>>,
     solid_block_size: Option<u64>,
+    portable: bool,
 }
 
 impl SevenOut {
@@ -249,10 +250,11 @@ impl SevenOut {
         Ok(Self {
             writer,
             solid_block_size: opts.solid_block_size,
+            portable: opts.portable,
         })
     }
 
-    fn entry(e: &NewEntry, dir: bool) -> ArchiveEntry {
+    fn entry(e: &NewEntry, dir: bool, portable: bool) -> ArchiveEntry {
         let name = e.name.trim_end_matches('/');
         let mut a = if dir {
             ArchiveEntry::new_directory(name)
@@ -263,10 +265,12 @@ impl SevenOut {
             a.has_last_modified_date = true;
             a.last_modified_date = nt;
         }
-        a.has_windows_attributes = true;
-        a.windows_attributes = if dir { ATTR_DIRECTORY } else { ATTR_ARCHIVE };
-        if let Some(mode) = e.unix_mode {
-            a.windows_attributes |= ATTR_UNIX_EXTENSION | ((mode & 0o7777) << 16);
+        if !portable {
+            a.has_windows_attributes = true;
+            a.windows_attributes = if dir { ATTR_DIRECTORY } else { ATTR_ARCHIVE };
+            if let Some(mode) = e.unix_mode {
+                a.windows_attributes |= ATTR_UNIX_EXTENSION | ((mode & 0o7777) << 16);
+            }
         }
         a
     }
@@ -390,14 +394,14 @@ fn lzma_chunk_size(
 impl ArchiveWriter for SevenOut {
     fn add_dir(&mut self, e: &NewEntry) -> Result<()> {
         self.writer
-            .push_archive_entry::<&[u8]>(Self::entry(e, true), None)
+            .push_archive_entry::<&[u8]>(Self::entry(e, true, self.portable), None)
             .map_err(map_err)?;
         Ok(())
     }
 
     fn add_file(&mut self, e: &NewEntry, src: &mut dyn Read) -> Result<()> {
         self.writer
-            .push_archive_entry(Self::entry(e, false), Some(src))
+            .push_archive_entry(Self::entry(e, false, self.portable), Some(src))
             .map_err(map_err)?;
         Ok(())
     }
@@ -414,7 +418,7 @@ impl ArchiveWriter for SevenOut {
             let (meta, src) = item?;
             if self.solid_block_size == Some(0) {
                 self.writer
-                    .push_archive_entry(Self::entry(&meta, false), Some(src))
+                    .push_archive_entry(Self::entry(&meta, false, self.portable), Some(src))
                     .map_err(map_err)?;
                 continue;
             }
@@ -427,7 +431,7 @@ impl ArchiveWriter for SevenOut {
                     block_bytes = 0;
                 }
             }
-            entries.push(Self::entry(&meta, false));
+            entries.push(Self::entry(&meta, false, self.portable));
             readers.push(SourceReader::new(src));
             block_bytes = block_bytes.saturating_add(meta.size);
             if self.solid_block_size.is_some_and(|limit| {
@@ -470,10 +474,23 @@ mod tests {
             unix_mode: Some(0o755),
             modified: None,
         };
-        let a = SevenOut::entry(&e, false);
+        let a = SevenOut::entry(&e, false, false);
         let d = describe(0, &a);
         assert_eq!(d.unix_mode, Some(0o755));
         assert_eq!(d.kind, EntryKind::File);
+    }
+
+    #[test]
+    fn portable_entries_omit_platform_specific_attributes() {
+        let e = NewEntry {
+            name: "x".into(),
+            size: 0,
+            unix_mode: Some(0o755),
+            modified: None,
+        };
+        let a = SevenOut::entry(&e, false, true);
+        assert!(!a.has_windows_attributes);
+        assert_eq!(a.windows_attributes, 0);
     }
 
     #[test]

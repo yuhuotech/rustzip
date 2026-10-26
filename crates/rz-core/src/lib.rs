@@ -156,6 +156,8 @@ pub struct CreateOptions {
     /// Maximum uncompressed bytes per 7z solid block. None keeps one archive-wide block;
     /// Some(0) disables solid compression.
     pub solid_block_size: Option<u64>,
+    /// Uses backend default permissions instead of source-specific permissions.
+    pub portable: bool,
 }
 
 impl std::fmt::Debug for CreateOptions {
@@ -169,6 +171,7 @@ impl std::fmt::Debug for CreateOptions {
             .field("volume_size", &self.volume_size)
             .field("dictionary_size", &self.dictionary_size)
             .field("solid_block_size", &self.solid_block_size)
+            .field("portable", &self.portable)
             .finish()
     }
 }
@@ -183,6 +186,7 @@ impl Default for CreateOptions {
             volume_size: None,
             dictionary_size: None,
             solid_block_size: None,
+            portable: false,
         }
     }
 }

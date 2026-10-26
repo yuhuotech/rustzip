@@ -18,6 +18,7 @@ const LARGE_FILE: u64 = 32 << 20;
 struct Settings {
     level: u32,
     password: Option<String>,
+    portable: bool,
 }
 
 impl Settings {
@@ -29,8 +30,10 @@ impl Settings {
             o.compression_method(CompressionMethod::Deflated)
                 .compression_level(Some(i64::from(self.level)))
         };
-        if let Some(mode) = e.unix_mode {
-            o = o.unix_permissions(mode & 0o777);
+        if !self.portable {
+            if let Some(mode) = e.unix_mode {
+                o = o.unix_permissions(mode & 0o777);
+            }
         }
         if let Some(dt) = e.modified.and_then(unix_to_dos) {
             o = o.last_modified_time(dt);
@@ -65,6 +68,7 @@ impl ZipOut {
             settings: Settings {
                 level: opts.level.min(9),
                 password: opts.password.clone().filter(|p| !p.is_empty()),
+                portable: opts.portable,
             },
             threads: resolve_threads(opts.threads),
             memory_budget: opts.memory_budget,
@@ -282,5 +286,30 @@ mod tests {
         );
         worker.join().unwrap();
         drop(job_tx);
+    }
+
+    #[test]
+    fn portable_zip_uses_default_permissions_instead_of_source_permissions() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("portable.zip");
+        let mut writer = ZipOut::new(
+            File::create(&path).unwrap(),
+            &CreateOptions {
+                threads: 1,
+                portable: true,
+                ..CreateOptions::default()
+            },
+        );
+        let entry = NewEntry {
+            name: "run.sh".into(),
+            size: 4,
+            unix_mode: Some(0o755),
+            modified: None,
+        };
+        writer.add_file(&entry, &mut Cursor::new(b"test")).unwrap();
+        Box::new(writer).finish().unwrap();
+
+        let mut reader = crate::open(&path).unwrap();
+        assert_eq!(reader.entries().unwrap()[0].unix_mode, Some(0o100644));
     }
 }

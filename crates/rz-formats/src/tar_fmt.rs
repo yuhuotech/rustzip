@@ -114,6 +114,7 @@ impl ArchiveReader for TarReader {
 
 pub struct TarOut {
     builder: tar::Builder<Sink>,
+    portable: bool,
 }
 
 impl TarOut {
@@ -126,10 +127,11 @@ impl TarOut {
         let sink = comp.writer(file, opts.level, opts.threads)?;
         Ok(Self {
             builder: tar::Builder::new(sink),
+            portable: opts.portable,
         })
     }
 
-    fn header(e: &NewEntry, dir: bool) -> tar::Header {
+    fn header(e: &NewEntry, dir: bool, portable: bool) -> tar::Header {
         let mut h = tar::Header::new_gnu();
         h.set_entry_type(if dir {
             tar::EntryType::Directory
@@ -137,7 +139,16 @@ impl TarOut {
             tar::EntryType::Regular
         });
         h.set_size(if dir { 0 } else { e.size });
-        h.set_mode(e.unix_mode.unwrap_or(if dir { 0o755 } else { 0o644 }) & 0o777);
+        let mode = if portable {
+            if dir {
+                0o755
+            } else {
+                0o644
+            }
+        } else {
+            e.unix_mode.unwrap_or(if dir { 0o755 } else { 0o644 })
+        };
+        h.set_mode(mode & 0o777);
         h.set_mtime(e.modified.and_then(|t| u64::try_from(t).ok()).unwrap_or(0));
         h
     }
@@ -145,7 +156,7 @@ impl TarOut {
 
 impl ArchiveWriter for TarOut {
     fn add_dir(&mut self, e: &NewEntry) -> Result<()> {
-        let mut h = Self::header(e, true);
+        let mut h = Self::header(e, true, self.portable);
         let name = format!("{}/", e.name.trim_end_matches('/'));
         self.builder
             .append_data(&mut h, name, std::io::empty())
@@ -153,7 +164,7 @@ impl ArchiveWriter for TarOut {
     }
 
     fn add_file(&mut self, e: &NewEntry, src: &mut dyn Read) -> Result<()> {
-        let mut h = Self::header(e, false);
+        let mut h = Self::header(e, false, self.portable);
         self.builder
             .append_data(&mut h, &e.name, src)
             .map_err(Error::Io)
@@ -161,5 +172,22 @@ impl ArchiveWriter for TarOut {
 
     fn finish(self: Box<Self>) -> Result<()> {
         self.builder.into_inner()?.finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rz_core::NewEntry;
+
+    #[test]
+    fn portable_headers_use_default_permissions_instead_of_source_permissions() {
+        let entry = NewEntry {
+            name: "run.sh".into(),
+            size: 0,
+            unix_mode: Some(0o755),
+            modified: None,
+        };
+        let header = super::TarOut::header(&entry, false, true);
+        assert_eq!(header.mode().unwrap_or_default(), 0o644);
     }
 }

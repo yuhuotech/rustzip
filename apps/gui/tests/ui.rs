@@ -1269,6 +1269,80 @@ fn the_compress_form_builds_the_right_job(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn email_share_preset_uses_adjustable_twenty_mib_zip_parts(cx: &mut TestAppContext) {
+    let tmp = tempfile::tempdir().unwrap();
+    let src = tmp.path().join("data");
+    fs::create_dir_all(&src).unwrap();
+    let mut seed = 0x1234_5678_9abc_def0u64;
+    let mut bytes = Vec::with_capacity(21 << 20);
+    for _ in 0..(21 << 20) {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        bytes.push(seed as u8);
+    }
+    fs::write(src.join("random.bin"), bytes).unwrap();
+    let (handle, view) = open_window(cx, None);
+    with_view(cx, handle, &view, |v, window, cx| {
+        v.open_compress(vec![src.clone()], window, cx);
+        v.set_preset(Preset::EmailShare, cx);
+    });
+    cx.update(|cx| {
+        let Some(Overlay::Compress(form)) = &view.read(cx).overlay else {
+            panic!("no compress form");
+        };
+        assert_eq!(form.preset, Preset::EmailShare);
+        assert_eq!(form.format, Format::Zip);
+    });
+
+    with_view(cx, handle, &view, |v, _, cx| {
+        v.set_format(Format::TarZst, cx);
+    });
+    cx.update(|cx| {
+        let Some(Overlay::Compress(form)) = &view.read(cx).overlay else {
+            panic!("no compress form");
+        };
+        assert_eq!(form.preset, Preset::Balanced);
+    });
+    with_view(cx, handle, &view, |v, _, cx| {
+        v.set_preset(Preset::Portable, cx);
+    });
+    cx.update(|cx| {
+        let Some(Overlay::Compress(form)) = &view.read(cx).overlay else {
+            panic!("no compress form");
+        };
+        assert_eq!(form.preset, Preset::Portable);
+    });
+    with_view(cx, handle, &view, |v, _, cx| {
+        v.set_format(Format::Zip, cx);
+        v.set_preset(Preset::EmailShare, cx);
+        v.submit_compress(cx);
+    });
+    wait_for_tasks(cx, handle, &view);
+    assert!(tmp.path().join("data.z01").is_file());
+    assert!(tmp.path().join("data.zip").is_file());
+    assert!(load_archive(&tmp.path().join("data.zip"), None).is_ok());
+
+    with_view(cx, handle, &view, |v, window, cx| {
+        v.open_compress(vec![src.clone()], window, cx);
+        v.set_preset(Preset::EmailShare, cx);
+    });
+    let (name, volume_size) = cx.update(|cx| match &view.read(cx).overlay {
+        Some(Overlay::Compress(form)) => (form.name.clone(), form.volume_size.clone()),
+        _ => panic!("no compress form"),
+    });
+    cx.update_window(handle.into(), |_, window, cx| {
+        name.update(cx, |input, cx| input.set_value("custom", window, cx));
+        volume_size.update(cx, |input, cx| input.set_value("25", window, cx));
+    })
+    .unwrap();
+    with_view(cx, handle, &view, |v, _, cx| v.submit_compress(cx));
+    wait_for_tasks(cx, handle, &view);
+    assert!(tmp.path().join("custom.zip").is_file());
+    assert!(!tmp.path().join("custom.z01").exists());
+}
+
+#[gpui_kit::test]
 fn the_compress_form_refuses_bad_names_and_numbers_taken_ones(cx: &mut TestAppContext) {
     let tmp = tempfile::tempdir().unwrap();
     let src = tmp.path().join("data");

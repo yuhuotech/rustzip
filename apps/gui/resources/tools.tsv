@@ -100,6 +100,8 @@ history_cancelled	已取消	Cancelled
 history_new	新	New
 volume_size	分卷大小（MiB，留空则不分卷）	Volume size (MiB; empty means no split)
 volume_invalid	分卷大小请输入正整数 MiB。	Enter a positive whole number of MiB for the volume size.
+preset_email_share	邮件分享（20 MiB 分卷）	Email share (20 MiB parts)
+preset_portable	跨平台兼容	Cross-platform compatible
 dict_size	字典大小（MiB，留空自动）	Dictionary size (MiB; empty means automatic)
 dict_invalid	字典大小请输入 1 到 64 MiB。	Enter a dictionary size from 1 to 64 MiB.
 solid_size	固实块大小（MiB，留空整包，0 不固实）	Solid block size (MiB; empty means whole archive, 0 disables solid mode)
