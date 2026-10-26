@@ -1,4 +1,4 @@
-//! `rz` command line. Mirrors the 7z verbs: `a` add, `l` list, `x` extract, `t` test.
+//! `rz` command line. Mirrors the 7z verbs and adds convert, repair and hash.
 
 use rz_app::cli as archive_ops;
 use rz_app::hash::HashAlgorithm;
@@ -16,11 +16,15 @@ Usage:\n  \
 rz a <archive> <path>... [-l 0-9] [-p -|@file] [-t threads] [-v size] [-d size] [-s size|off] create\n  \
 rz l <archive> [-p -|@file] [-e charset]                        list contents\n  \
 rz x <archive> [-o dir] [-p -|@file] [-t threads] [-e charset] [-y|-n]\n                                                                  extract (-y replace, -n skip existing)\n  \
-rz t <archive> [-p -|@file] [-e charset]                        test integrity\n\n\
+rz t <archive> [-p -|@file] [-e charset]                        test integrity\n  \
+rz c|convert <archive> <output> [-p -|@file] [-q -|@file] [-e charset] [-l 0-9] [-t threads] [-d size] [-s size|off]\n                                                                  convert to output format\n  \
+rz r|repair <archive> <output> [-p -|@file] [-q -|@file] [-e charset] [-l 0-9] [-t threads] [-d size] [-s size|off]\n                                                                  repair ZIP / 7z into a new archive\n\n\
 rz h <file>... [-a sha256|blake3]                             calculate hashes\n\n\
 -e names the character set of old zip file names (gbk, shift_jis, euc-kr, ...); it is guessed by default.\n\
 -a selects SHA-256 or BLAKE3; omitting it prints both.\n\n\
--p - prompts for a password without echoing it; -p @file reads its first line from a file.\n\n\
+-p - prompts for a password without echoing it; -p @file reads its first line from a file.\n\
+-p is the source password for c / r; -q is the output password for c / r.\n\
+-q accepts '-' for a hidden prompt or '@file' for the first line of a password file.\n\n\
 -v sets the maximum volume size, e.g. 700M or 2G (ZIP / 7z only).\n\n\
 -d sets the LZMA2 dictionary size, e.g. 8M (7z only; bounded by the memory budget).\n\
 -s sets the maximum 7z solid block size, e.g. 256M; use 0 for non-solid blocks.\n\n\
@@ -36,6 +40,8 @@ struct Args {
     out: Option<PathBuf>,
     password: Option<Zeroizing<String>>,
     password_source: Option<PasswordSource>,
+    output_password: Option<Zeroizing<String>>,
+    output_password_source: Option<PasswordSource>,
     level: Option<u32>,
     threads: Option<usize>,
     encoding: Option<String>,
@@ -54,13 +60,14 @@ enum PasswordSource {
 
 fn resolve_password(
     source: Option<PasswordSource>,
+    prompt: &str,
 ) -> std::result::Result<Option<Zeroizing<String>>, String> {
     let Some(source) = source else {
         return Ok(None);
     };
     let password = match source {
         PasswordSource::Prompt => Zeroizing::new(
-            rpassword::prompt_password("Password: ")
+            rpassword::prompt_password(prompt)
                 .map_err(|error| format!("could not read password: {error}"))?,
         ),
         PasswordSource::File(path) => {
@@ -167,6 +174,19 @@ fn parse(args: &[String]) -> std::result::Result<Args, String> {
                     return Err("-p accepts '-' for a hidden prompt or '@file' for a password file; literal passwords are not accepted".into());
                 });
             }
+            "-q" => {
+                let value = value("-q")?;
+                a.output_password_source = Some(if value == "-" {
+                    PasswordSource::Prompt
+                } else if let Some(path) = value.strip_prefix('@').filter(|path| !path.is_empty()) {
+                    PasswordSource::File(PathBuf::from(path))
+                } else {
+                    return Err(
+                        "-q accepts '-' for a hidden prompt or '@file' for an output password file"
+                            .into(),
+                    );
+                });
+            }
             "-e" => a.encoding = Some(value("-e")?),
             "-l" => {
                 let v = value("-l")?;
@@ -259,10 +279,35 @@ fn run(args: &[String]) -> std::result::Result<(), String> {
     }
     let mut a = parse(rest)?;
     if cmd == "h" {
-        if a.password_source.is_some() {
+        if a.password_source.is_some() || a.output_password_source.is_some() {
             return Err("hashing does not use an archive password".into());
         }
         return hash_cmd(&a);
+    }
+    let recover = match cmd.as_str() {
+        "c" | "convert" => Some(false),
+        "r" | "repair" => Some(true),
+        _ => None,
+    };
+    if let Some(recover) = recover {
+        if a.out.is_some() || a.overwrite.is_some() {
+            return Err("-o, -y and -n do not apply to conversion or repair".into());
+        }
+        if a.volume_size.is_some() {
+            return Err("volume output is not supported for conversion or repair".into());
+        }
+        if a.positional.len() != 2 {
+            return Err(format!(
+                "{} requires a source archive and a new output path\n\n{USAGE}",
+                if recover { "repair" } else { "convert" }
+            ));
+        }
+        a.password = resolve_password(a.password_source.take(), "Source password: ")?;
+        a.output_password = resolve_password(a.output_password_source.take(), "Output password: ")?;
+        return transform_cmd(&a, recover).map_err(|error| error.to_string());
+    }
+    if a.output_password_source.is_some() {
+        return Err("-q is only used by convert and repair".into());
     }
     if !matches!(cmd.as_str(), "a" | "l" | "x" | "t") {
         return Err(format!("unknown command {cmd}\n\n{USAGE}"));
@@ -273,7 +318,7 @@ fn run(args: &[String]) -> std::result::Result<(), String> {
     if cmd == "a" && a.positional.len() == 1 {
         return Err(Error::Unsupported("nothing to add".into()).to_string());
     }
-    a.password = resolve_password(a.password_source.take())?;
+    a.password = resolve_password(a.password_source.take(), "Password: ")?;
     let result = match cmd.as_str() {
         "a" => add(&archive, &a),
         "l" => list(&archive, &a),
@@ -407,6 +452,55 @@ fn test(path: &Path, a: &Args) -> Result<()> {
     Ok(())
 }
 
+fn transform_cmd(a: &Args, recover: bool) -> Result<()> {
+    let source = Path::new(&a.positional[0]);
+    let output = Path::new(&a.positional[1]);
+    let cancel = cancel_token().map_err(|error| Error::Io(std::io::Error::other(error)))?;
+    let mut progress = TerminalProgress::default();
+    let report = archive_ops::transform_archive(
+        source,
+        output,
+        archive_ops::CliTransformOptions {
+            input_password: a
+                .password
+                .as_ref()
+                .map(|password| Zeroizing::new(password.as_str().to_owned())),
+            output_password: a
+                .output_password
+                .as_ref()
+                .map(|password| Zeroizing::new(password.as_str().to_owned())),
+            encoding: a.encoding.clone(),
+            threads: a.threads.unwrap_or(0),
+            level: a.level.unwrap_or(6),
+            dictionary_size: a.dictionary_size,
+            solid_block_size: a.solid_block_size,
+        },
+        recover,
+        &cancel,
+        &mut progress,
+    )?;
+    if recover {
+        println!(
+            "Recovered {} items, {} bytes; skipped {} -> {}",
+            report.files,
+            report.bytes,
+            report.skipped,
+            output.display()
+        );
+        for issue in report.issues {
+            eprintln!("warning: {issue}");
+        }
+    } else {
+        println!(
+            "Converted {} items, {} bytes -> {}",
+            report.files,
+            report.bytes,
+            output.display()
+        );
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -423,6 +517,8 @@ mod tests {
             "out",
             "-p",
             "@password",
+            "-q",
+            "@output-password",
             "-l",
             "9",
             "-t",
@@ -441,6 +537,10 @@ mod tests {
         assert_eq!(
             a.password_source,
             Some(PasswordSource::File(PathBuf::from("password")))
+        );
+        assert_eq!(
+            a.output_password_source,
+            Some(PasswordSource::File(PathBuf::from("output-password")))
         );
         assert_eq!(a.level, Some(9));
         assert_eq!(a.threads, Some(4));
@@ -467,6 +567,7 @@ mod tests {
         );
         assert!(parse(&s(&["-a", "md5"])).is_err());
         assert!(parse(&s(&["-p", "literal-secret"])).is_err());
+        assert!(parse(&s(&["-q", "literal-secret"])).is_err());
         assert_eq!(
             parse(&s(&["-p", "-"])).unwrap_or_default().password_source,
             Some(PasswordSource::Prompt)

@@ -408,3 +408,97 @@ fn failed_add_leaves_no_partial_archive() {
         .collect();
     assert!(leftovers.is_empty(), "{leftovers:?}");
 }
+
+#[test]
+fn convert_command_streams_to_a_new_archive_and_keeps_the_source() {
+    let tmp = tempfile::tempdir().unwrap();
+    sample(tmp.path());
+    let source = tmp.path().join("source.zip");
+    let output = tmp.path().join("converted.tar.zst");
+    assert!(rz(&["a", p(&source), p(&tmp.path().join("proj"))])
+        .status
+        .success());
+    let original = fs::read(&source).unwrap();
+
+    let converted = rz(&["c", p(&source), p(&output)]);
+    assert!(converted.status.success(), "{:?}", s(&converted));
+    assert!(s(&converted).0.contains("Converted"));
+    assert_eq!(fs::read(&source).unwrap(), original);
+
+    let listing = rz(&["l", p(&output)]);
+    assert!(listing.status.success(), "{:?}", s(&listing));
+    assert!(s(&listing).0.contains("proj/docs/说明.md"));
+    assert!(rz(&["t", p(&output)]).status.success());
+}
+
+#[test]
+fn conversion_uses_separate_source_and_output_passwords() {
+    let tmp = tempfile::tempdir().unwrap();
+    sample(tmp.path());
+    let source = tmp.path().join("source.zip");
+    let output = tmp.path().join("converted.7z");
+    let source_password = password_file(tmp.path(), "source-password.txt", "source-secret");
+    let output_password = password_file(tmp.path(), "output-password.txt", "output-secret");
+    assert!(rz(&[
+        "a",
+        p(&source),
+        p(&tmp.path().join("proj")),
+        "-p",
+        &source_password,
+    ])
+    .status
+    .success());
+
+    let converted = rz(&[
+        "convert",
+        p(&source),
+        p(&output),
+        "-p",
+        &source_password,
+        "-q",
+        &output_password,
+    ]);
+    assert!(converted.status.success(), "{:?}", s(&converted));
+    let verified = rz(&["t", p(&output), "-p", &output_password]);
+    assert!(verified.status.success(), "{:?}", s(&verified));
+    assert!(!s(&verified).1.contains("output-secret"));
+}
+
+#[test]
+fn repair_command_reports_and_skips_a_corrupt_entry() {
+    let tmp = tempfile::tempdir().unwrap();
+    let source = tmp.path().join("damaged.zip");
+    let output = tmp.path().join("repaired.zip");
+    let mut writer = zip::ZipWriter::new(fs::File::create(&source).unwrap());
+    let stored =
+        zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+    writer.start_file("damaged.txt", stored).unwrap();
+    writer.write_all(b"BROKEN-PAYLOAD").unwrap();
+    writer.start_file("healthy.txt", stored).unwrap();
+    writer.write_all(b"SAFE-PAYLOAD").unwrap();
+    writer.finish().unwrap();
+    let mut bytes = fs::read(&source).unwrap();
+    let offset = bytes
+        .windows(14)
+        .position(|chunk| chunk == b"BROKEN-PAYLOAD")
+        .unwrap();
+    bytes[offset] ^= 0xff;
+    fs::write(&source, &bytes).unwrap();
+    let damaged_bytes = fs::read(&source).unwrap();
+
+    let repaired = rz(&["r", p(&source), p(&output)]);
+    assert!(repaired.status.success(), "{:?}", s(&repaired));
+    assert!(s(&repaired).0.contains("skipped 1"));
+    assert!(s(&repaired).1.contains("damaged.txt"));
+    assert_eq!(fs::read(&source).unwrap(), damaged_bytes);
+    assert!(rz(&["t", p(&output)]).status.success());
+
+    let extracted = tmp.path().join("extracted");
+    let extraction = rz(&["x", p(&output), "-o", p(&extracted)]);
+    assert!(extraction.status.success(), "{:?}", s(&extraction));
+    assert_eq!(
+        fs::read(extracted.join("healthy.txt")).unwrap(),
+        b"SAFE-PAYLOAD"
+    );
+    assert!(!extracted.join("damaged.txt").exists());
+}

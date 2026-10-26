@@ -4,9 +4,11 @@ use crate::settings::{OnConflict, Settings};
 use rz_core::{
     CancelToken, CreateOptions, Entry, EntryKind, Error, Progress, ProgressSink, Result,
 };
+use rz_engine::TransformOptions;
 use rz_engine::{compress, extract};
 use rz_formats::OutputFormat;
 use std::path::{Path, PathBuf};
+use zeroize::Zeroizing;
 
 #[derive(Debug)]
 pub struct ArchiveListing {
@@ -33,6 +35,24 @@ pub struct CliExtractOptions {
 pub struct ArchiveTestReport {
     pub entries: u64,
     pub bytes: u64,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ArchiveTransformReport {
+    pub files: u64,
+    pub bytes: u64,
+    pub skipped: u64,
+    pub issues: Vec<String>,
+}
+
+pub struct CliTransformOptions {
+    pub input_password: Option<Zeroizing<String>>,
+    pub output_password: Option<Zeroizing<String>>,
+    pub encoding: Option<String>,
+    pub threads: usize,
+    pub level: u32,
+    pub dictionary_size: Option<u32>,
+    pub solid_block_size: Option<u64>,
 }
 
 /// Creates an archive while keeping format selection and engine access in `rz-app`.
@@ -159,5 +179,63 @@ pub fn test_archive(
     Ok(ArchiveTestReport {
         entries: entries_done,
         bytes: bytes_done,
+    })
+}
+
+/// Converts or repairs an archive using the same bounded streaming engine as the GUI.
+/// Repair mode keeps readable entries and reports entries it had to skip.
+pub fn transform_archive(
+    source: &Path,
+    output: &Path,
+    options: CliTransformOptions,
+    recover: bool,
+    cancel: &CancelToken,
+    progress: &mut dyn ProgressSink,
+) -> Result<ArchiveTransformReport> {
+    let format = OutputFormat::from_path(output)
+        .ok_or_else(|| Error::Unsupported("unsupported output archive extension".into()))?;
+    if matches!(format, OutputFormat::Single(_)) {
+        return Err(Error::Unsupported(
+            "conversion and repair require a ZIP, 7z or tar archive output".into(),
+        ));
+    }
+    let settings = Settings {
+        threads: options.threads,
+        ..Settings::default()
+    };
+    let transform_options = TransformOptions {
+        format,
+        create: CreateOptions {
+            level: options.level,
+            threads: options.threads,
+            password: options
+                .output_password
+                .as_ref()
+                .map(|password| password.as_str().to_owned()),
+            dictionary_size: options.dictionary_size,
+            solid_block_size: options.solid_block_size,
+            ..CreateOptions::default()
+        },
+        limits: settings.extract_options(
+            options
+                .input_password
+                .as_ref()
+                .map(|password| password.as_str().to_owned()),
+        ),
+        encoding: options.encoding,
+    };
+    let report = rz_engine::transform(
+        source,
+        output,
+        &transform_options,
+        recover,
+        cancel,
+        progress,
+    )?;
+    Ok(ArchiveTransformReport {
+        files: report.files,
+        bytes: report.bytes,
+        skipped: report.skipped,
+        issues: report.issues,
     })
 }
