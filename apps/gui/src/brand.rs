@@ -119,7 +119,6 @@ impl Palette {
 #[derive(Clone, Copy)]
 struct Preset {
     id: &'static str,
-    label: &'static str,
     light: u32,
     dark: u32,
     /// `(soft, ink)` to use as they are instead of deriving them.
@@ -134,7 +133,6 @@ const PRESETS: [Preset; 5] = [
     // Near black in light mode and near white in dark mode: the quietest choice.
     Preset {
         id: "graphite",
-        label: "石墨",
         light: 0x2b3640,
         dark: 0xe3e9ee,
         stock_light: None,
@@ -142,7 +140,6 @@ const PRESETS: [Preset; 5] = [
     },
     Preset {
         id: "teal",
-        label: "墨绿",
         light: 0x0d9b82,
         dark: 0x2fd3a7,
         stock_light: Some((0xdff4ee, 0xffffff)),
@@ -150,7 +147,6 @@ const PRESETS: [Preset; 5] = [
     },
     Preset {
         id: "blue",
-        label: "深蓝",
         light: 0x2457c5,
         dark: 0x6f9bff,
         stock_light: None,
@@ -158,7 +154,6 @@ const PRESETS: [Preset; 5] = [
     },
     Preset {
         id: "violet",
-        label: "紫罗兰",
         light: 0x6a45c9,
         dark: 0xa98bff,
         stock_light: None,
@@ -166,7 +161,6 @@ const PRESETS: [Preset; 5] = [
     },
     Preset {
         id: "rose",
-        label: "玫红",
         light: 0xc43e66,
         dark: 0xff86a5,
         stock_light: None,
@@ -187,7 +181,6 @@ fn resolve(spec: &str) -> Option<Preset> {
     let v = u32::from_str_radix(digits, 16).ok()?;
     Some(Preset {
         id: "custom",
-        label: "自定义",
         light: v,
         dark: v,
         stock_light: None,
@@ -196,10 +189,24 @@ fn resolve(spec: &str) -> Option<Preset> {
 }
 
 /// `(name, label, colour)` of every preset as it looks in the given theme.
-pub fn accents(dark: bool) -> Vec<(&'static str, &'static str, Hsla)> {
+pub fn accents(dark: bool, language: &str) -> Vec<(&'static str, &'static str, Hsla)> {
     PRESETS
         .iter()
-        .map(|p| (p.id, p.label, hex(if dark { p.dark } else { p.light })))
+        .map(|p| {
+            let key = match p.id {
+                "graphite" => "accent_graphite",
+                "teal" => "accent_teal",
+                "blue" => "accent_blue",
+                "violet" => "accent_violet",
+                "rose" => "accent_rose",
+                _ => "accent_custom",
+            };
+            (
+                p.id,
+                crate::text::tr(language, key),
+                hex(if dark { p.dark } else { p.light }),
+            )
+        })
         .collect()
 }
 

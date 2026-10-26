@@ -102,6 +102,67 @@ action_rename	重命名	Rename
 action_remove_from_list	从列表移除	Remove from list
 action_enter	进入	Enter
 action_compress	压缩	Compress
+list_separator	、	,
+rename_entry_title	重命名	Rename item
+rename_entry_hint	改的是压缩包里的名字，会重新生成压缩包。	This changes the name inside the archive and rebuilds it.
+rename_archive_title	重命名压缩包	Rename archive
+rename_archive_hint	改的是这个压缩包文件在磁盘上的名字。	This changes the archive file name on disk.
+trash_folder_title	删除这个文件夹？	Delete this folder?
+trash_file_title	删除这个文件？	Delete this file?
+trash_hint	会移到废纸篓（Windows 为回收站），需要时还能恢复。	It will be moved to Trash / Recycle Bin, where you can restore it.
+password_dialog_title	需要密码	Password required
+password_dialog_lead	这个压缩包已加密，输入密码才能继续。	This archive is encrypted. Enter its password to continue.
+password_wrong	密码不正确，请再试一次。	Incorrect password. Try again.
+button_confirm	确定	Confirm
+delete_archive_folder	删除这个文件夹？	Delete this folder?
+delete_archive_file	删除这个文件？	Delete this file?
+delete_archive_many	删除选中的 {count} 项？	Delete {count} selected items?
+delete_archive_more	…以及另外 {count} 项	… and {count} more
+delete_archive_safe	为了安全，会先在旁边生成一个新的压缩包，检查无误后才替换原文件；中途出错时原文件不受影响。	For safety, a new archive is built and checked beside the original before replacing it. If anything fails, the original remains untouched.
+delete_archive_lead	会从压缩包里移除，删除后无法撤销。	Items will be removed from the archive. This cannot be undone.
+compress_name_label	文件名	File name
+compress_format_label	格式	Format
+compress_preset_label	预设	Preset
+preset_fast	极速	Fast
+preset_balanced	均衡	Balanced
+preset_smallest	最小体积	Smallest
+compress_password_label	密码	Password
+compress_title	新建压缩	Create archive
+compress_cancel	取消	Cancel
+compress_start	开始压缩	Create
+compress_selection	已选 {count} 项：{names}	{count} selected: {names}
+compress_name_invalid	文件名不能为空，也不能含有 / \\ : 或以点开头。	The file name cannot be empty, contain / \\ :, or start with a dot.
+compress_format_unknown	无法确定压缩格式。	Could not determine the archive format.
+extract_suffix	解压	extract
+context_add_here	添加文件到此处…	Add files here…
+context_select_all	全选	Select all
+context_open_folder	打开文件夹	Open folder
+context_extract_named	解压到“{name}”文件夹	Extract to “{name}”
+context_copy_path	复制路径	Copy path
+context_add_to_folder	添加文件到此文件夹…	Add files to this folder…
+accent_graphite	石墨	Graphite
+accent_teal	墨绿	Teal
+accent_blue	深蓝	Blue
+accent_violet	紫罗兰	Violet
+accent_rose	玫红	Rose
+entry_count	{count} 项	{count} items
+accent_custom	自定义	Custom
+menu_app	RustZIP	RustZIP
+menu_settings	设置…	Settings…
+menu_quit	退出 RustZIP	Quit RustZIP
+menu_file	文件	File
+menu_open_archive	打开压缩包…	Open archive…
+menu_new_archive	新建压缩…	Create archive…
+menu_extract_all	解压全部…	Extract all…
+menu_search_archive	在压缩包内搜索	Search in archive
+menu_close_tab	关闭标签页	Close tab
+menu_tools	工具	Tools
+update_installed	新版本 {version} 已下载并通过签名验证，请按安装程序提示完成更新。	Version {version} was downloaded and signature-checked. Follow the installer instructions.
+update_failed	更新没有成功：{error}。可以稍后再试。	Update failed: {error}. You can try again later.
+passwords_cleared	已清除保存的密码。	Saved passwords cleared.
+password_placeholder	输入密码	Enter password
+password_optional_placeholder	留空则不加密	Leave empty for no encryption
+default_archive_name	归档	Archive
 status_recent_missing	{total} 个最近的压缩包 · {missing} 个已移走	{total} recent archives · {missing} missing
 status_recent_count	{total} 个最近的压缩包	{total} recent archives
 status_folder_count	{name} · {count} 项	{name} · {count} items

@@ -4,7 +4,7 @@
 //! real archives. They check what the user could observe through state and layout;
 //! pixels and the operating system's input methods need a person.
 
-use gpui_kit::component::table::TableEvent;
+use gpui_kit::component::table::{TableDelegate, TableEvent};
 use gpui_kit::component::{ActiveTheme, Theme, ThemeMode};
 use gpui_kit::test::TestWindowExt;
 use gpui_kit::{AppContext, Entity, TestAppContext, WindowHandle, base::Root};
@@ -2228,6 +2228,9 @@ fn interface_language_can_be_changed_and_is_saved(cx: &mut TestAppContext) {
         assert_eq!(view.tool_text("toolbar_extract"), "Extract to…");
         assert_eq!(view.tool_text("recent_column_name"), "Name");
     });
+    let table = cx.update(|cx| view.read(cx).table.clone());
+    let name_column = cx.update(|cx| table.read(cx).delegate().column(0, cx).name);
+    assert_eq!(name_column.as_ref(), "Name");
 
     cx.update_window(handle.into(), |_, window, cx| {
         window.click("language-zh-cn", cx)
@@ -2241,6 +2244,8 @@ fn interface_language_can_be_changed_and_is_saved(cx: &mut TestAppContext) {
         assert_eq!(view.tool_text("toolbar_extract"), "解压到…");
         assert_eq!(view.tool_text("recent_column_name"), "名称");
     });
+    let name_column = cx.update(|cx| table.read(cx).delegate().column(0, cx).name);
+    assert_eq!(name_column.as_ref(), "名称");
     assert_eq!(Settings::load(&path).language, "zh-CN");
 }
 

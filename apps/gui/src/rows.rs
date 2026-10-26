@@ -33,15 +33,16 @@ pub struct FileRows {
     /// same name"; both only shape the right-click menu.
     editable: bool,
     stem: String,
+    language: String,
     /// The format the archive really is, to say why it cannot be changed.
     format: String,
 }
 
 impl Default for FileRows {
     fn default() -> Self {
-        let mut size = Column::new("size", "大小").width(px(84.)).sortable();
+        let mut size = Column::new("size", "Size").width(px(84.)).sortable();
         size.align = TextAlign::Right;
-        let mut packed = Column::new("packed", "压缩后").width(px(84.));
+        let mut packed = Column::new("packed", "Compressed").width(px(84.));
         packed.align = TextAlign::Right;
         Self {
             tree: None,
@@ -53,12 +54,13 @@ impl Default for FileRows {
             marked: BTreeSet::new(),
             editable: false,
             stem: String::new(),
+            language: "auto".into(),
             format: String::new(),
             columns: vec![
-                Column::new("name", "名称").width(px(340.)).sortable(),
+                Column::new("name", "Name").width(px(340.)).sortable(),
                 size,
                 packed,
-                Column::new("time", "修改时间").width(px(128.)).sortable(),
+                Column::new("time", "Modified").width(px(128.)).sortable(),
             ],
         }
     }
@@ -75,15 +77,25 @@ impl FileRows {
     }
 
     /// What the right-click menu needs to know about the archive.
-    pub fn set_menu_context(&mut self, editable: bool, stem: &str, format: &str) {
+    pub fn set_menu_context(&mut self, editable: bool, stem: &str, format: &str, language: &str) {
         self.editable = editable;
         self.stem = stem.to_string();
         self.format = format.to_uppercase();
+        self.language = language.to_string();
+        self.set_language(language);
+    }
+
+    pub fn set_language(&mut self, language: &str) {
+        self.language = language.to_string();
+        self.columns[0].name = crate::text::tr(language, "recent_column_name").into();
+        self.columns[1].name = crate::text::tr(language, "recent_column_size").into();
+        self.columns[2].name = crate::text::tr(language, "detail_packed_size").into();
+        self.columns[3].name = crate::text::tr(language, "recent_column_modified").into();
     }
 
     /// A line for the top of a menu that says why adding, renaming and deleting are off.
     fn read_only_note(&self) -> String {
-        format!("{} 压缩包只读,不能添加、重命名或删除", self.format)
+        crate::text::tr(&self.language, "archive_read_only").replace("{format}", &self.format)
     }
 
     /// Lets go of everything picked.
@@ -267,14 +279,14 @@ impl TableDelegate for FileRows {
                 menu.label(self.read_only_note())
             };
             let mut menu = menu.menu_with_icon_and_disabled(
-                "添加文件到此处…",
+                crate::text::tr(&self.language, "context_add_here"),
                 IconName::Plus,
                 Box::new(BlankAdd),
                 !self.editable,
             );
             if !self.rows.is_empty() {
                 menu = menu.separator().menu_with_icon(
-                    "全选",
+                    crate::text::tr(&self.language, "context_select_all"),
                     IconName::Check,
                     Box::new(SelectAllRows),
                 );
@@ -295,7 +307,7 @@ impl TableDelegate for FileRows {
         let one = (picked.len() == 1).then(|| picked[0]);
         let editable = self.editable;
         let stem = if self.stem.is_empty() {
-            "同名".to_string()
+            crate::text::tr(&self.language, "default_archive_name").to_string()
         } else {
             self.stem.clone()
         };
@@ -304,55 +316,66 @@ impl TableDelegate for FileRows {
             menu = menu.label(self.read_only_note());
         }
         if picked.len() > 1 {
-            menu = menu.label(format!("已选 {} 项", picked.len()));
+            menu = menu.label(
+                crate::text::tr(&self.language, "selection_count")
+                    .replace("{count}", &picked.len().to_string()),
+            );
         }
         // Opening is for one thing at a time.
         menu = match one.map(|r| r.kind) {
-            Some(RowKind::Dir) => {
-                menu.menu_with_icon("打开文件夹", IconName::FolderOpen, Box::new(RowOpen))
-            }
-            Some(RowKind::File) => {
-                menu.menu_with_icon("打开", IconName::ExternalLink, Box::new(RowOpen))
-            }
+            Some(RowKind::Dir) => menu.menu_with_icon(
+                crate::text::tr(&self.language, "context_open_folder"),
+                IconName::FolderOpen,
+                Box::new(RowOpen),
+            ),
+            Some(RowKind::File) => menu.menu_with_icon(
+                crate::text::tr(&self.language, "open"),
+                IconName::ExternalLink,
+                Box::new(RowOpen),
+            ),
             _ => menu,
         };
         menu = menu
             .separator()
             .menu_with_icon(
-                "解压到…",
+                crate::text::tr(&self.language, "toolbar_extract"),
                 gpui_kit::assets::IconName::ArrowDownToLine,
                 Box::new(RowExtractTo),
             )
             .menu_with_icon(
-                "解压到当前文件夹",
+                crate::text::tr(&self.language, "action_extract_here"),
                 IconName::Folder,
                 Box::new(RowExtractHere),
             )
             .menu_with_icon(
-                format!("解压到“{stem}”文件夹"),
+                crate::text::tr(&self.language, "context_extract_named").replace("{name}", &stem),
                 IconName::FolderOpen,
                 Box::new(RowExtractNamed),
             )
             .separator()
-            .menu_with_icon("复制路径", IconName::Copy, Box::new(RowCopyPath));
+            .menu_with_icon(
+                crate::text::tr(&self.language, "context_copy_path"),
+                IconName::Copy,
+                Box::new(RowCopyPath),
+            );
         // Changing the archive needs a format that can be rewritten.
         menu = menu.separator();
         if one.is_some_and(|r| r.kind == RowKind::Dir) {
             menu = menu.menu_with_icon_and_disabled(
-                "添加文件到此文件夹…",
+                crate::text::tr(&self.language, "context_add_to_folder"),
                 IconName::Plus,
                 Box::new(RowAddHere),
                 !editable,
             );
         }
         menu.menu_with_icon_and_disabled(
-            "重命名",
+            crate::text::tr(&self.language, "action_rename"),
             IconName::Replace,
             Box::new(RowRename),
             !editable || one.is_none(),
         )
         .menu_with_icon_and_disabled(
-            "删除",
+            crate::text::tr(&self.language, "delete"),
             Icon::new(gpui_kit::assets::IconName::Trash),
             Box::new(RowDelete),
             !editable,
@@ -455,7 +478,8 @@ impl TableDelegate for FileRows {
             }
             COL_SIZE => {
                 let text = match row.kind {
-                    RowKind::Dir => format!("{} 项", row.items),
+                    RowKind::Dir => crate::text::tr(&self.language, "entry_count")
+                        .replace("{count}", &row.items.to_string()),
                     _ => format_size(row.size),
                 };
                 mono(text, p.fg2, cx)

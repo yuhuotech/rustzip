@@ -71,48 +71,53 @@ pub fn install_app_actions(cx: &mut App) {
         // In the window's own context, so a text box keeps its own select-all.
         KeyBinding::new("secondary-a", SelectAllRows, Some("RustZip")),
     ]);
-    cx.set_menus(vec![
-        Menu {
-            name: "RustZIP".into(),
-            items: vec![
-                MenuItem::action("设置…", OpenSettings),
-                MenuItem::separator(),
-                MenuItem::action("退出 RustZIP", Quit),
-            ],
-            disabled: false,
-        },
-        Menu {
-            name: "文件".into(),
-            items: vec![
-                MenuItem::action("打开压缩包…", OpenArchiveDialog),
-                MenuItem::action("新建压缩…", NewArchiveDialog),
-                MenuItem::separator(),
-                MenuItem::action("解压全部…", ExtractAll),
-                MenuItem::action("在压缩包内搜索", FocusSearch),
-                MenuItem::separator(),
-                MenuItem::action("关闭标签页", CloseTab),
-            ],
-            disabled: false,
-        },
-        Menu {
-            name: text::tr("auto", "tools").into(),
-            items: vec![
-                MenuItem::action(text::tr("auto", "favorites"), OpenFavorites),
-                MenuItem::action(text::tr("auto", "passwords"), OpenPasswordBook),
-                MenuItem::separator(),
-                MenuItem::action(text::tr("auto", "convert"), ConvertArchive),
-                MenuItem::action(text::tr("auto", "repair"), RepairArchive),
-            ],
-            disabled: false,
-        },
-    ]);
-    // Closing the last window ends the program, as users expect from a tool window.
+    set_app_language("auto", cx);
     cx.on_window_closed(|cx, _| {
         if cx.windows().is_empty() {
             cx.quit();
         }
     })
     .detach();
+}
+
+/// Refreshes native application menu labels after a language selection changes.
+pub fn set_app_language(language: &str, cx: &mut App) {
+    let tr = |key| text::tr(language, key);
+    cx.set_menus(vec![
+        Menu {
+            name: tr("menu_app").into(),
+            items: vec![
+                MenuItem::action(tr("menu_settings"), OpenSettings),
+                MenuItem::separator(),
+                MenuItem::action(tr("menu_quit"), Quit),
+            ],
+            disabled: false,
+        },
+        Menu {
+            name: tr("menu_file").into(),
+            items: vec![
+                MenuItem::action(tr("menu_open_archive"), OpenArchiveDialog),
+                MenuItem::action(tr("menu_new_archive"), NewArchiveDialog),
+                MenuItem::separator(),
+                MenuItem::action(tr("menu_extract_all"), ExtractAll),
+                MenuItem::action(tr("menu_search_archive"), FocusSearch),
+                MenuItem::separator(),
+                MenuItem::action(tr("menu_close_tab"), CloseTab),
+            ],
+            disabled: false,
+        },
+        Menu {
+            name: tr("menu_tools").into(),
+            items: vec![
+                MenuItem::action(tr("favorites"), OpenFavorites),
+                MenuItem::action(tr("passwords"), OpenPasswordBook),
+                MenuItem::separator(),
+                MenuItem::action(tr("convert"), ConvertArchive),
+                MenuItem::action(tr("repair"), RepairArchive),
+            ],
+            disabled: false,
+        },
+    ]);
 }
 
 /// A modification time as the user's clock would show it.

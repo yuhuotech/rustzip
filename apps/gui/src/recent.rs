@@ -206,6 +206,10 @@ pub fn looks_like_archive(name: &str) -> bool {
 /// The folder name for "extract to a folder of the same name": the file name without its
 /// archive extension, `data.tar.gz` giving `data`.
 pub fn archive_stem(path: &Path) -> String {
+    archive_stem_for_language(path, "zh-CN")
+}
+
+pub fn archive_stem_for_language(path: &Path, language: &str) -> String {
     let name = path
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
@@ -237,7 +241,7 @@ pub fn archive_stem(path: &Path) -> String {
     }
     match name.rsplit_once('.') {
         Some((stem, _)) if !stem.is_empty() => stem.to_string(),
-        _ => format!("{name}-解压"),
+        _ => format!("{name}-{}", crate::text::tr(language, "extract_suffix")),
     }
 }
 
@@ -331,6 +335,10 @@ mod tests {
         assert_eq!(archive_stem(Path::new("/a/photos.7z.001")), "photos");
         assert_eq!(archive_stem(Path::new("/a/backup.z01")), "backup");
         assert_eq!(archive_stem(Path::new("/a/noext")), "noext-解压");
+        assert_eq!(
+            archive_stem_for_language(Path::new("/a/noext"), "en-US"),
+            "noext-extract"
+        );
         assert!(looks_like_archive("photos.7z.001"));
         assert!(looks_like_archive("backup.z01"));
     }

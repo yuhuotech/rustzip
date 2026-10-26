@@ -403,7 +403,7 @@ impl MainView {
         };
         let name = format!(
             "{}-{}.{}",
-            crate::recent::archive_stem(&source),
+            crate::recent::archive_stem_for_language(&source, &self.settings.language),
             if recover { "recovered" } else { "converted" },
             f.format
         );

@@ -529,11 +529,13 @@ impl MainView {
         let editable = self.can_edit();
         let stem = self
             .current()
-            .map(|a| recent::archive_stem(&a.path))
+            .map(|a| recent::archive_stem_for_language(&a.path, &self.settings.language))
             .unwrap_or_default();
         let format = self.current().map(|a| a.format.clone()).unwrap_or_default();
+        let language = self.settings.language.clone();
         self.table.update(cx, |t, cx| {
-            t.delegate_mut().set_menu_context(editable, &stem, &format);
+            t.delegate_mut()
+                .set_menu_context(editable, &stem, &format, &language);
             t.delegate_mut().show(tree, &cwd, &filter);
             t.refresh(cx);
         });
@@ -1277,7 +1279,10 @@ impl MainView {
         let Some(parent) = a.path.parent() else {
             return;
         };
-        let dir = parent.join(recent::archive_stem(&a.path));
+        let dir = parent.join(recent::archive_stem_for_language(
+            &a.path,
+            &self.settings.language,
+        ));
         self.extract_picked_to(dir, cx);
     }
 
@@ -1610,7 +1615,10 @@ impl MainView {
             return;
         };
         let dest = if into_named_folder {
-            parent.join(recent::archive_stem(&archive))
+            parent.join(recent::archive_stem_for_language(
+                &archive,
+                &self.settings.language,
+            ))
         } else {
             parent.to_path_buf()
         };
@@ -2232,7 +2240,7 @@ impl MainView {
     ) {
         let input = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder("输入密码")
+                .placeholder(self.tool_text("password_placeholder"))
                 .masked(true)
         });
         self.overlay = Some(Overlay::Password(PasswordPrompt {
@@ -2295,14 +2303,14 @@ impl MainView {
                 .unwrap_or_default()
         };
         let stem = if stem.is_empty() {
-            "归档".to_string()
+            self.tool_text("default_archive_name").to_string()
         } else {
             stem
         };
         let name = cx.new(|cx| InputState::new(window, cx).default_value(stem));
         let password = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder("留空则不加密")
+                .placeholder(self.tool_text("password_optional_placeholder"))
                 .masked(true)
         });
         let volume_size = cx.new(|cx| InputState::new(window, cx));
@@ -2359,7 +2367,7 @@ impl MainView {
         let solid_text = f.solid_block_size.read(cx).value().trim().to_string();
         if name.is_empty() || name.contains(['/', '\\', ':']) || name.starts_with('.') {
             self.say(
-                Notice::Error("文件名不能为空,也不能含有 / \\ : 或以点开头".into()),
+                Notice::Error(self.tool_text("compress_name_invalid").into()),
                 cx,
             );
             return;
@@ -2426,7 +2434,10 @@ impl MainView {
         // A name that is taken gets a number instead of failing.
         let output = rz_engine::unused_path(&dir.join(format!("{name}.{}", f.format.extension())));
         let Some(format) = OutputFormat::from_path(&output) else {
-            self.say(Notice::Error("无法确定压缩格式".into()), cx);
+            self.say(
+                Notice::Error(self.tool_text("compress_format_unknown").into()),
+                cx,
+            );
             return;
         };
         let password = (f.format.supports_password() && !pw.is_empty()).then_some(pw);
@@ -2496,8 +2507,20 @@ impl MainView {
 
     /// Changes one setting, stores it, and redraws.
     pub fn change_settings(&mut self, f: impl FnOnce(&mut Settings), cx: &mut Context<Self>) {
+        let old_language = self.settings.language.clone();
         f(&mut self.settings);
+        let language = self.settings.language.clone();
         self.save_settings(cx);
+        if language != old_language {
+            self.table.update(cx, |table, cx| {
+                table.delegate_mut().set_language(&language);
+                table.refresh(cx);
+            });
+            cx.spawn(async move |_, cx| {
+                cx.update(|app| crate::set_app_language(&language, app));
+            })
+            .detach();
+        }
         cx.notify();
     }
 
@@ -3594,8 +3617,14 @@ impl MainView {
     fn rename_card(&self, prompt: &RenamePrompt, cx: &mut Context<Self>) -> AnyElement {
         let p = palette(cx);
         let (title, lead) = match prompt.target {
-            RenameTarget::Entry(_) => ("重命名", "改的是压缩包里的名字,会重新生成压缩包。"),
-            RenameTarget::File(_) => ("重命名压缩包", "改的是这个压缩包文件在磁盘上的名字。"),
+            RenameTarget::Entry(_) => (
+                self.tool_text("rename_entry_title"),
+                self.tool_text("rename_entry_hint"),
+            ),
+            RenameTarget::File(_) => (
+                self.tool_text("rename_archive_title"),
+                self.tool_text("rename_archive_hint"),
+            ),
         };
         Dialog {
             tone: Tone::Neutral,
@@ -3615,13 +3644,13 @@ impl MainView {
                 Button::new("rename-cancel")
                     .outline()
                     .icon(IconName::Close)
-                    .label("取消")
+                    .label(self.tool_text("cancel"))
                     .on_click(cx.listener(|this, _, _, cx| this.close_overlay(cx)))
                     .into_any_element(),
                 Button::new("rename-ok")
                     .primary()
                     .icon(IconName::Check)
-                    .label("重命名")
+                    .label(self.tool_text("action_rename"))
                     .on_click(cx.listener(|this, _, window, cx| this.submit_rename(window, cx)))
                     .into_any_element(),
             ],
@@ -3639,11 +3668,11 @@ impl MainView {
             tone: Tone::Danger,
             icon: Icon::new(gpui_kit::assets::IconName::Trash),
             title: if path.is_dir() {
-                "删除这个文件夹?".into()
+                self.tool_text("trash_folder_title").into()
             } else {
-                "删除这个文件?".into()
+                self.tool_text("trash_file_title").into()
             },
-            lead: Some("会移到废纸篓(Windows 为回收站),需要时还能恢复。".into()),
+            lead: Some(self.tool_text("trash_hint").into()),
             body: Some(
                 div()
                     .px_3()
@@ -3663,7 +3692,7 @@ impl MainView {
                 Button::new("trash-cancel")
                     .outline()
                     .icon(IconName::Close)
-                    .label("取消")
+                    .label(self.tool_text("cancel"))
                     .on_click(cx.listener(|this, _, _, cx| this.close_overlay(cx)))
                     .into_any_element(),
                 Button::new("trash-ok")
@@ -3671,7 +3700,7 @@ impl MainView {
                     .bg(p.danger)
                     .text_color(hsla(0., 0., 1., 1.))
                     .icon(Icon::new(gpui_kit::assets::IconName::Trash))
-                    .label("删除")
+                    .label(self.tool_text("delete"))
                     .on_click(cx.listener(|this, _, _, cx| this.confirm_trash(cx)))
                     .into_any_element(),
             ],
@@ -4536,13 +4565,17 @@ impl MainView {
         Dialog {
             tone: Tone::Neutral,
             icon: Icon::new(gpui_kit::assets::IconName::Lock),
-            title: "需要密码".into(),
-            lead: Some("这个压缩包已加密,输入密码才能继续。".into()),
+            title: self.tool_text("password_dialog_title").into(),
+            lead: Some(self.tool_text("password_dialog_lead").into()),
             body: Some(
                 v_flex()
                     .gap_2()
                     .when(prompt.wrong, |d| {
-                        d.child(div().text_color(p.danger).child("密码不正确,请再试一次"))
+                        d.child(
+                            div()
+                                .text_color(p.danger)
+                                .child(self.tool_text("password_wrong")),
+                        )
                     })
                     .child(Input::new(&prompt.input).mask_toggle())
                     .into_any_element(),
@@ -4551,13 +4584,13 @@ impl MainView {
                 Button::new("pw-cancel")
                     .outline()
                     .icon(IconName::Close)
-                    .label("取消")
+                    .label(self.tool_text("cancel"))
                     .on_click(cx.listener(|this, _, _, cx| this.close_overlay(cx)))
                     .into_any_element(),
                 Button::new("pw-ok")
                     .primary()
                     .icon(IconName::Check)
-                    .label("确定")
+                    .label(self.tool_text("button_confirm"))
                     .on_click(cx.listener(|this, _, window, cx| this.submit_password(window, cx)))
                     .into_any_element(),
             ],
@@ -4574,9 +4607,13 @@ impl MainView {
         };
         // What is being deleted, in words, and the names under it.
         let title = match paths {
-            [one] if kind_of(one) == Some(RowKind::Dir) => "删除这个文件夹?".to_string(),
-            [_] => "删除这个文件?".to_string(),
-            many => format!("删除选中的 {} 项?", many.len()),
+            [one] if kind_of(one) == Some(RowKind::Dir) => {
+                self.tool_text("delete_archive_folder").to_string()
+            }
+            [_] => self.tool_text("delete_archive_file").to_string(),
+            many => self
+                .tool_text("delete_archive_many")
+                .replace("{count}", &many.len().to_string()),
         };
         let shown = paths.iter().take(3).map(|path| {
             div()
@@ -4598,29 +4635,28 @@ impl MainView {
             .children(shown)
             .when(more > 0, |d| {
                 d.child(
-                    div()
-                        .text_color(p.fg3)
-                        .child(format!("…以及另外 {more} 项")),
+                    div().text_color(p.fg3).child(
+                        self.tool_text("delete_archive_more")
+                            .replace("{count}", &more.to_string()),
+                    ),
                 )
             });
         let note = div()
             .text_size(px(12.))
             .line_height(px(18.))
             .text_color(p.fg3)
-            .child(
-                "为了安全,会先在旁边生成一个新的压缩包,检查无误后才替换原文件;中途出错时原文件不受影响。",
-            );
+            .child(self.tool_text("delete_archive_safe"));
         Dialog {
             tone: Tone::Danger,
             icon: Icon::new(gpui_kit::assets::IconName::Trash),
             title,
-            lead: Some("会从压缩包里移除,删除后无法撤销。".into()),
+            lead: Some(self.tool_text("delete_archive_lead").into()),
             body: Some(v_flex().gap_3().child(names).child(note).into_any_element()),
             buttons: vec![
                 Button::new("delete-cancel")
                     .outline()
                     .icon(IconName::Close)
-                    .label("取消")
+                    .label(self.tool_text("cancel"))
                     .on_click(cx.listener(|this, _, _, cx| this.close_overlay(cx)))
                     .into_any_element(),
                 Button::new("delete-ok")
@@ -4628,7 +4664,7 @@ impl MainView {
                     .bg(p.danger)
                     .text_color(hsla(0., 0., 1., 1.))
                     .icon(Icon::new(gpui_kit::assets::IconName::Trash))
-                    .label("删除")
+                    .label(self.tool_text("delete"))
                     .on_click(cx.listener(|this, _, _, cx| this.confirm_delete(cx)))
                     .into_any_element(),
             ],
@@ -4721,7 +4757,7 @@ impl MainView {
                     h_flex()
                         .gap_2()
                         .children(
-                            brand::accents(p.win.l < 0.5)
+                            brand::accents(p.win.l < 0.5, &s.language)
                                 .into_iter()
                                 .enumerate()
                                 .map(|(ix, (id, _, colour))| {
@@ -5101,19 +5137,32 @@ impl MainView {
             let b = Button::new(id).label(label).small();
             if on { b.primary() } else { b.outline() }
         };
-        let lead = format!("已选 {} 项:{}", names.len(), names.join("、"));
+        let lead = self
+            .tool_text("compress_selection")
+            .replace("{count}", &names.len().to_string())
+            .replace("{names}", &names.join(self.tool_text("list_separator")));
         let body = v_flex()
             .gap_4()
             .child(
                 v_flex()
                     .gap_1()
-                    .child(div().text_color(p.fg3).text_size(px(12.)).child("文件名"))
+                    .child(
+                        div()
+                            .text_color(p.fg3)
+                            .text_size(px(12.))
+                            .child(self.tool_text("compress_name_label")),
+                    )
                     .child(Input::new(&form.name)),
             )
             .child(
                 v_flex()
                     .gap_1()
-                    .child(div().text_color(p.fg3).text_size(px(12.)).child("格式"))
+                    .child(
+                        div()
+                            .text_color(p.fg3)
+                            .text_size(px(12.))
+                            .child(self.tool_text("compress_format_label")),
+                    )
                     .child(h_flex().gap_1().children(Format::ALL.into_iter().map(|f| {
                         let id: &'static str = match f {
                             Format::Zip => "fmt-zip",
@@ -5131,17 +5180,22 @@ impl MainView {
             .child(
                 v_flex()
                     .gap_1()
-                    .child(div().text_color(p.fg3).text_size(px(12.)).child("预设"))
+                    .child(
+                        div()
+                            .text_color(p.fg3)
+                            .text_size(px(12.))
+                            .child(self.tool_text("compress_preset_label")),
+                    )
                     .child(
                         h_flex().gap_1().children(
                             [
-                                ("preset-fast", "极速", Preset::Fast),
-                                ("preset-balanced", "均衡", Preset::Balanced),
-                                ("preset-smallest", "最小体积", Preset::Smallest),
+                                ("preset-fast", "preset_fast", Preset::Fast),
+                                ("preset-balanced", "preset_balanced", Preset::Balanced),
+                                ("preset-smallest", "preset_smallest", Preset::Smallest),
                             ]
                             .into_iter()
-                            .map(|(id, label, preset)| {
-                                segment(id, label, form.preset == preset).on_click(
+                            .map(|(id, key, preset)| {
+                                segment(id, self.tool_text(key), form.preset == preset).on_click(
                                     cx.listener(move |this, _, _, cx| this.set_preset(preset, cx)),
                                 )
                             }),
@@ -5172,7 +5226,12 @@ impl MainView {
                 d.child(
                     v_flex()
                         .gap_1()
-                        .child(div().text_color(p.fg3).text_size(px(12.)).child("密码"))
+                        .child(
+                            div()
+                                .text_color(p.fg3)
+                                .text_size(px(12.))
+                                .child(self.tool_text("compress_password_label")),
+                        )
                         .child(Input::new(&form.password).mask_toggle()),
                 )
             })
@@ -5222,20 +5281,20 @@ impl MainView {
         Dialog {
             tone: Tone::Neutral,
             icon: Icon::new(gpui_kit::assets::IconName::FileArchive),
-            title: "新建压缩".into(),
+            title: self.tool_text("compress_title").into(),
             lead: Some(lead),
             body: Some(body.into_any_element()),
             buttons: vec![
                 Button::new("compress-cancel")
                     .outline()
                     .icon(IconName::Close)
-                    .label("取消")
+                    .label(self.tool_text("compress_cancel"))
                     .on_click(cx.listener(|this, _, _, cx| this.close_overlay(cx)))
                     .into_any_element(),
                 Button::new("compress-go")
                     .primary()
                     .icon(IconName::Check)
-                    .label("开始压缩")
+                    .label(self.tool_text("compress_start"))
                     .on_click(cx.listener(|this, _, _, cx| this.submit_compress(cx)))
                     .into_any_element(),
             ],

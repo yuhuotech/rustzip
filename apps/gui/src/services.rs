@@ -226,16 +226,19 @@ impl MainView {
                     this.update = None;
                     open_with_system(&file);
                     this.say(
-                        Notice::Info(format!(
-                            "新版本 {} 已下载并通过签名验证,请按安装程序提示完成更新",
-                            update.version
-                        )),
+                        Notice::Info(
+                            this.tool_text("update_installed")
+                                .replace("{version}", &update.version.to_string()),
+                        ),
                         cx,
                     );
                 }
                 Err(e) => {
                     this.update = Some(UpdateState::Available(update));
-                    this.say(Notice::Error(format!("更新没有成功:{e}。可以稍后再试")), cx);
+                    this.say(
+                        Notice::Error(this.tool_text("update_failed").replace("{error}", &e)),
+                        cx,
+                    );
                 }
             });
         })
@@ -322,7 +325,7 @@ impl MainView {
                 }
             })
             .detach();
-        self.say(Notice::Info("已清除保存的密码".into()), cx);
+        self.say(Notice::Info(self.tool_text("passwords_cleared").into()), cx);
     }
 }
 
