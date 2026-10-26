@@ -354,5 +354,12 @@ privacy_ok	확인
 privacy_title	익명 통계 안내
 privacy_intro	RustZIP은 무료 오픈 소스 소프트웨어입니다. 사용자 수를 파악하기 위해 소량의 완전한 익명 정보를 전송합니다.
 sidebar_locations	위치
-sidebar_recent	최근 항목
-sidebar_quick_actions	빠른 실행
+sidebar_recent	최근
+sidebar_quick_actions	도구
+sidebar_home	홈
+sidebar_current_archive	압축 파일
+sidebar_favorites	즐겨찾기
+sidebar_convert	변환
+sidebar_repair	복구
+sidebar_passwords	비밀번호
+sidebar_history	작업

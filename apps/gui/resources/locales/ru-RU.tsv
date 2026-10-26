@@ -353,6 +353,13 @@ privacy_participate	Участвовать
 privacy_ok	ОК
 privacy_title	Об анонимной статистике
 privacy_intro	RustZIP — бесплатное ПО с открытым исходным кодом. Чтобы понимать, сколько людей им пользуется, мы отправляем небольшой набор полностью анонимных данных.
-sidebar_locations	Расположения
+sidebar_locations	Места
 sidebar_recent	Недавние
-sidebar_quick_actions	Быстрые действия
+sidebar_quick_actions	Инструменты
+sidebar_home	Главная
+sidebar_current_archive	Архив
+sidebar_favorites	Избранное
+sidebar_convert	Конвертация
+sidebar_repair	Восстановить
+sidebar_passwords	Пароли
+sidebar_history	Задачи

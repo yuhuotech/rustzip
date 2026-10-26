@@ -353,6 +353,13 @@ privacy_participate	Participar
 privacy_ok	Aceptar
 privacy_title	Acerca de las estadísticas anónimas
 privacy_intro	RustZIP es un programa gratuito y de código abierto. Para saber cuántas personas lo usan, enviamos un pequeño conjunto de datos anónimos.
-sidebar_locations	Ubicaciones
+sidebar_locations	Lugares
 sidebar_recent	Recientes
-sidebar_quick_actions	Acciones
+sidebar_quick_actions	Herramientas
+sidebar_home	Inicio
+sidebar_current_archive	Archivo
+sidebar_favorites	Favoritos
+sidebar_convert	Convertir
+sidebar_repair	Reparar
+sidebar_passwords	Contraseñas
+sidebar_history	Tareas

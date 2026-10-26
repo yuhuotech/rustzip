@@ -355,4 +355,11 @@ privacy_title	匿名統計について
 privacy_intro	RustZIPは無料のオープンソースソフトウェアです。利用者数を把握するため、完全に匿名の基本情報を少量送信します。
 sidebar_locations	場所
 sidebar_recent	最近
-sidebar_quick_actions	クイック操作
+sidebar_quick_actions	ツール
+sidebar_home	ホーム
+sidebar_current_archive	圧縮ファイル
+sidebar_favorites	お気に入り
+sidebar_convert	変換
+sidebar_repair	修復
+sidebar_passwords	パスワード
+sidebar_history	タスク

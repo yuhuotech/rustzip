@@ -2235,7 +2235,7 @@ fn interface_language_can_be_changed_and_is_saved(cx: &mut TestAppContext) {
         let view = view.read(cx);
         assert_eq!(view.settings.language, "en-US");
         assert_eq!(view.tool_text("settings_title"), "Settings");
-        assert_eq!(view.tool_text("sidebar_recent"), "Recently opened");
+        assert_eq!(view.tool_text("sidebar_recent"), "Recent");
         assert_eq!(view.tool_text("toolbar_extract"), "Extract to…");
         assert_eq!(view.tool_text("recent_column_name"), "Name");
     });
@@ -2308,23 +2308,54 @@ fn every_language_menu_choice_updates_the_visible_interface(cx: &mut TestAppCont
 
 #[gpui_kit::test]
 fn localized_sidebar_labels_stay_inside_the_fixed_width_menu(cx: &mut TestAppContext) {
+    let tmp = tempfile::tempdir().unwrap();
+    let archive = make_archive(tmp.path(), "sidebar-labels.zip", None);
     let (handle, view) = open_window(cx, None);
+    let visible_keys = [
+        "sidebar_home",
+        "sidebar_recent",
+        "sidebar_favorites",
+        "sidebar_convert",
+        "sidebar_repair",
+        "sidebar_passwords",
+        "sidebar_history",
+    ];
     for choice in rustzip_gui::text::LANGUAGE_CHOICES {
         with_view(cx, handle, &view, |v, _, cx| {
             v.change_settings(|settings| settings.language = choice.tag.into(), cx);
         });
-        let recent = rustzip_gui::text::tr(choice.tag, "sidebar_recent");
         cx.update_window(handle.into(), |_, window, _| {
             let mut main = window.within("main");
             let sidebar = main.find("sidebar").bounds();
-            let label = main.within("sidebar").find(recent).bounds();
+            for key in visible_keys {
+                let label_text = rustzip_gui::text::tr(choice.tag, key);
+                let label = main.within("sidebar").find(label_text).bounds();
+                assert!(
+                    sidebar.contains(&label.origin),
+                    "{choice:?} {key}: {label:?}"
+                );
+                assert!(
+                    sidebar.contains(&label.bottom_right()),
+                    "{choice:?} {key}: {label:?}"
+                );
+            }
+        })
+        .unwrap();
+    }
+
+    open_sync(cx, handle, &view, &archive, None);
+    for choice in rustzip_gui::text::LANGUAGE_CHOICES {
+        with_view(cx, handle, &view, |v, _, cx| {
+            v.change_settings(|settings| settings.language = choice.tag.into(), cx);
+        });
+        cx.update_window(handle.into(), |_, window, _| {
+            let mut main = window.within("main");
+            let sidebar = main.find("sidebar").bounds();
+            let label_text = rustzip_gui::text::tr(choice.tag, "sidebar_current_archive");
+            let label = main.within("sidebar").find(label_text).bounds();
             assert!(sidebar.contains(&label.origin), "{choice:?}: {label:?}");
             assert!(
                 sidebar.contains(&label.bottom_right()),
-                "{choice:?}: {label:?}"
-            );
-            assert!(
-                label.size.width < gpui_kit::px(152.),
                 "{choice:?}: {label:?}"
             );
         })

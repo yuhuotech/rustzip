@@ -3772,6 +3772,11 @@ impl MainView {
         let p = palette(cx);
         let has_archive = self.current().is_some();
         let primary_label = self.tool_text(if has_archive {
+            "sidebar_current_archive"
+        } else {
+            "sidebar_home"
+        });
+        let primary_accessible_label = self.tool_text(if has_archive {
             "current_archive"
         } else {
             "home"
@@ -3791,7 +3796,11 @@ impl MainView {
         // One row: icon, label and, on the right, a count or "coming soon".
         let mono = cx.theme().mono_font_family.clone();
         let on_recent = self.page == Page::Recent;
-        let nav = |icon: Icon, label: &'static str, count: Option<String>, state: Nav| {
+        let nav = |icon: Icon,
+                   label: &'static str,
+                   full_label: &'static str,
+                   count: Option<String>,
+                   state: Nav| {
             let (fg, icon_fg) = match state {
                 Nav::Current => (p.accent, p.accent),
                 Nav::Live => (p.fg, p.fg2),
@@ -3808,6 +3817,7 @@ impl MainView {
                     div()
                         .id(label)
                         .test_support()
+                        .aria_label(full_label)
                         .flex_1()
                         .min_w_0()
                         .overflow_hidden()
@@ -3843,6 +3853,7 @@ impl MainView {
                         Icon::new(gpui_kit::assets::IconName::House)
                     },
                     primary_label,
+                    primary_accessible_label,
                     None,
                     if self.page == Page::Archive {
                         Nav::Current
@@ -3851,7 +3862,7 @@ impl MainView {
                     },
                 )
                 .id("nav-current")
-                .aria_label(primary_label)
+                .aria_label(primary_accessible_label)
                 .cursor_pointer()
                 .on_click(cx.listener(|this, _, _, cx| this.show_page(Page::Archive, cx)))
                 .test_support(),
@@ -3861,6 +3872,7 @@ impl MainView {
                 nav(
                     Icon::new(gpui_kit::assets::IconName::Clock),
                     self.tool_text("sidebar_recent"),
+                    self.tool_text("welcome_recent"),
                     Some(self.settings.recent.len().to_string()),
                     if on_recent { Nav::Current } else { Nav::Live },
                 )
@@ -3871,6 +3883,7 @@ impl MainView {
             .child(
                 nav(
                     Icon::new(IconName::Star),
+                    self.tool_text("sidebar_favorites"),
                     self.tool_text("favorites"),
                     None,
                     if self.page == Page::Favorites {
@@ -3887,6 +3900,7 @@ impl MainView {
             .child(
                 nav(
                     Icon::new(gpui_kit::assets::IconName::ArrowLeftRight),
+                    self.tool_text("sidebar_convert"),
                     self.tool_text("convert"),
                     None,
                     Nav::Live,
@@ -3900,6 +3914,7 @@ impl MainView {
             .child(
                 nav(
                     Icon::new(gpui_kit::assets::IconName::Wrench),
+                    self.tool_text("sidebar_repair"),
                     self.tool_text("repair"),
                     None,
                     Nav::Live,
@@ -3911,6 +3926,7 @@ impl MainView {
             .child(
                 nav(
                     Icon::new(gpui_kit::assets::IconName::KeyRound),
+                    self.tool_text("sidebar_passwords"),
                     self.tool_text("passwords"),
                     None,
                     if self.page == Page::Passwords {
@@ -3926,6 +3942,7 @@ impl MainView {
             .child(
                 nav(
                     Icon::new(gpui_kit::assets::IconName::ListChecks),
+                    self.tool_text("sidebar_history"),
                     self.tool_text("history"),
                     None,
                     if self.page == Page::History {

@@ -355,4 +355,11 @@ privacy_title	Über anonyme Statistiken
 privacy_intro	RustZIP ist kostenlose Open-Source-Software. Um zu erfahren, wie viele Menschen sie verwenden, senden wir wenige vollständig anonyme Angaben.
 sidebar_locations	Orte
 sidebar_recent	Zuletzt
-sidebar_quick_actions	Schnellzugriff
+sidebar_quick_actions	Werkzeuge
+sidebar_home	Start
+sidebar_current_archive	Archiv
+sidebar_favorites	Favoriten
+sidebar_convert	Umwandeln
+sidebar_repair	Reparieren
+sidebar_passwords	Passwörter
+sidebar_history	Aufgaben

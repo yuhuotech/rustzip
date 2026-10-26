@@ -355,4 +355,11 @@ privacy_title	حول الإحصاءات المجهولة
 privacy_intro	RustZIP برنامج مجاني ومفتوح المصدر. لمعرفة عدد مستخدميه، نرسل مجموعة صغيرة من المعلومات المجهولة بالكامل.
 sidebar_locations	المواقع
 sidebar_recent	الأخيرة
-sidebar_quick_actions	إجراءات سريعة
+sidebar_quick_actions	أدوات
+sidebar_home	الرئيسية
+sidebar_current_archive	الأرشيف
+sidebar_favorites	المفضلة
+sidebar_convert	تحويل
+sidebar_repair	إصلاح
+sidebar_passwords	كلمات المرور
+sidebar_history	المهام

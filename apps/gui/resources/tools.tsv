@@ -353,5 +353,12 @@ privacy_ok	好的	OK
 privacy_title	关于匿名统计	About anonymous statistics
 privacy_intro	RustZIP 是免费开源软件。为了了解有多少人在用，会上报一份完全匿名的基本信息。	RustZIP is free and open source. To understand how many people use it, we send a small set of fully anonymous details.
 sidebar_locations	位置	Locations
-sidebar_recent	最近打开	Recently opened
-sidebar_quick_actions	快速操作	Quick actions
+sidebar_recent	最近	Recent
+sidebar_quick_actions	工具	Tools
+sidebar_home	启动页	Home
+sidebar_current_archive	当前压缩包	Archive
+sidebar_favorites	常用位置	Favorites
+sidebar_convert	转换	Convert
+sidebar_repair	修复	Repair
+sidebar_passwords	密码本	Passwords
+sidebar_history	任务记录	Tasks
