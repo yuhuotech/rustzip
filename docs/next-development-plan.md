@@ -25,7 +25,7 @@ RustZIP 已有可用的归档核心和桌面主流程：ZIP、7z、tar 系列和
 | P1 | 重复文件检测 | GUI 压缩前按内容 BLAKE3 检查同大小普通文件，任务可取消并报告进度；发现重复后可继续压缩或取消，不自动删除；超过 100,000 个文件时可明确选择继续 | 扩充大目录压力样本；自动去重另行评估 |
 | P1 | 多语言和无障碍 | 应用内用户文案、虚拟表格、右键菜单和原生菜单均从双语资源读取；设置可选择跟随系统 / 简中 / English，切换即时生效并保存。文件表键盘焦点环、容器名称、主题色键盘操作、压缩/密码输入名称、任务进度与图标按钮辅助标签已补；屏幕阅读器验收仍未完成，系统语言目前由 locale 环境变量推断 | 执行键盘和辅助技术验收；用 Windows/macOS/Linux 原生语言设置验证自动语言选择 |
 | P1 | 文件关联与系统菜单 | macOS 支持“打开方式”；Windows 注册表、Linux Dolphin / Nemo 菜单已有实现；Linux Nautilus 已增加免 root 包内 Scripts 子菜单操作；Windows / Linux 及 Nautilus 安装行为均未实机验证；Finder 右键未做，三平台 Quick Look / 预览集成未做 | 在 Nautilus / Dolphin / Nemo 和 Windows 设备验证操作与安装 / 卸载；再评估 Finder 右键及 Quick Look |
-| P1 | 跨平台桌面与打包 | macOS 有本机运行和打包证据；Windows / Linux 的原生 GUI、钥匙串、安装与升级流程证据不完整。CI GUI job 暂不包含 Linux，Linux release job 仍是实验项 | 通过 GPUI 的 Windows / Linux 输入法、渲染、启动和安装验收；补齐 Linux GUI CI 与三平台发布演练 |
+| P1 | 跨平台桌面与打包 | macOS 当前改动已构建 `.app` / DMG，Info.plist、arm64 ad-hoc 签名、DMG 校验和及欢迎页启动通过；未公证。Windows / Linux 的原生 GUI、钥匙串、安装与升级流程仍缺证据。CI GUI job 暂不包含 Linux，Linux release job 仍是实验项 | 通过 GPUI 的 Windows / Linux 输入法、渲染、启动和安装验收；补齐 Linux GUI CI 与三平台发布演练 |
 | P1 | 自动更新 | 有签名清单校验、更新发现和下载后交给系统安装器的流程 | 产品需求写“下次启动应用”和失败回滚，决策 D8 写“交给系统安装、不静默替换”；先统一承诺与决策，再决定实现，不直接按冲突规格开发 |
 | P2 | 压缩包对比、虚拟磁盘挂载、云端按需解压、WASM 插件、自解压包 | 均未开始，属于远期需求 | 暂缓；根据用户需求和安全 / 平台成本分别立项 |
 
