@@ -52,6 +52,7 @@ impl LibarchiveReader {
             NativeFormat::Cpio => "cpio",
             NativeFormat::Iso9660 => "iso9660",
             NativeFormat::Lha => "lha",
+            NativeFormat::Xar => "xar",
         }
     }
 }
@@ -372,7 +373,27 @@ mod tests {
     }
 
     #[test]
-    fn truncated_cab_cpio_lha_and_iso_signatures_fail_cleanly() {
+    fn reads_xar_members_from_an_independently_generated_fixture() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("sample.xar");
+        std::fs::write(&path, include_bytes!("../tests/fixtures/longtail_xar.xar")).unwrap();
+
+        let mut archive = crate::open(&path).unwrap();
+        assert_eq!(archive.format_name(), "xar");
+        let entries = archive.entries().unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].path, "hello.txt");
+        let mut data = Vec::new();
+        archive
+            .open(&entries[0])
+            .unwrap()
+            .read_to_end(&mut data)
+            .unwrap();
+        assert_eq!(data, b"RustZIP XAR fixture\n");
+    }
+
+    #[test]
+    fn truncated_cab_cpio_lha_xar_and_iso_signatures_fail_cleanly() {
         let temp = tempfile::tempdir().unwrap();
         let mut iso = vec![0u8; 32_774];
         iso[32_769..32_774].copy_from_slice(b"CD001");
@@ -380,6 +401,7 @@ mod tests {
             ("broken.cab", b"MSCF\0\0".to_vec()),
             ("broken.cpio", b"07070100".to_vec()),
             ("broken.lzh", b"\x14\0-lh0-".to_vec()),
+            ("broken.xar", b"xar!\0".to_vec()),
             ("broken.iso", iso),
         ] {
             let path = temp.path().join(name);

@@ -221,3 +221,9 @@
 - 在 D21 隔离的 libarchive reader 中新增 LHA/LZH 注册；只注册 LHA reader，不注册 7z、ZIP、RAR 或外部命令滤镜。
 - 格式嗅探检查头部方法字段 `-lh?- / -lz?- `，之后仍由 libarchive 验证实际结构。LHA 只读，链接条目仍交由通用安全策略跳过。
 - 回归 fixture 取自上游 libarchive 的 BSD-2-Clause LHA `-lh0-` 测试数据，覆盖目录、相对链接和普通文件；来源与内容记录在 `crates/rz-formats/tests/fixtures/README.md`。
+
+## D32 XAR 只读后端
+
+- 在 D21 隔离的 libarchive reader 中新增 XAR 注册；只注册 XAR reader，不注册 7z、ZIP、RAR 或外部命令滤镜。
+- 通过 `xar!` 文件头识别格式，XAR 归档内部压缩由其格式 reader 解码；条目仍经通用路径和特殊文件安全策略处理。
+- 测试 fixture 由 bsdtar 3.7.4 生成，只含虚构文本文件；不引入新的依赖或测试数据许可证。

@@ -13,6 +13,7 @@ pub enum Format {
     Cpio,
     Ar,
     Lha,
+    Xar,
     Xz,
     Zstd,
     Bzip2,
@@ -32,6 +33,7 @@ impl Format {
             Format::Cpio => "cpio",
             Format::Ar => "ar",
             Format::Lha => "lha",
+            Format::Xar => "xar",
             Format::Xz => "xz",
             Format::Zstd => "zstd",
             Format::Bzip2 => "bzip2",
@@ -65,6 +67,8 @@ pub fn sniff<R: Read + Seek>(r: &mut R) -> Result<Format> {
         Some(Format::Cab)
     } else if head.starts_with(b"!<arch>\n") {
         Some(Format::Ar)
+    } else if head.starts_with(b"xar!") {
+        Some(Format::Xar)
     } else if head.len() >= 7
         && head[2] == b'-'
         && matches!(head[3], b'l')
@@ -164,6 +168,10 @@ mod tests {
             ))
             .ok(),
             Some(Format::Lha)
+        );
+        assert_eq!(
+            sniff(&mut Cursor::new(b"xar!\0\x1c\0\x01".to_vec())).ok(),
+            Some(Format::Xar)
         );
         let mut iso = vec![0u8; 32_774];
         iso[32_769..32_774].copy_from_slice(b"CD001");

@@ -4,4 +4,4 @@ Comment=Extract the selected archives next to themselves
 Exec=rustzip --extract-here %F
 Icon-Name=rustzip
 Selection=any
-Mimetypes=application/zip;application/x-7z-compressed;application/vnd.rar;application/x-tar;application/gzip;application/x-compressed-tar;application/x-xz;application/zstd;application/x-bzip2;
+Mimetypes=application/zip;application/x-7z-compressed;application/vnd.rar;application/x-tar;application/gzip;application/x-compressed-tar;application/x-xz;application/zstd;application/x-bzip2;application/x-lha;application/x-lzh-compressed;application/x-xar;

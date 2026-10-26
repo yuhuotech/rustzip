@@ -124,7 +124,7 @@ rz r <archive> <output> [-p -|@file] [-q -|@file]               修复 ZIP / 7z
 - 转换和修复中，`-p` 指输入包密码，`-q` 指输出包密码；两者也可用隐藏提示或密码文件提供。
 - `-v` 为 ZIP / 7z 设置最大分卷大小，如 `700M` 或 `2G`；留空时创建单文件归档。
 - `-d` 为 7z 指定 LZMA2 字典大小；`-s` 指定固实块最大解压大小，`-s 0` 或 `-s off` 为每个文件分别编码。
-- 只读长尾格式包括 ISO 9660、CAB、CPIO、AR（DEB 容器）和 LHA / LZH；RAR 仅在启用可选 `rar` feature 的构建中可读。
+- 只读长尾格式包括 ISO 9660、CAB、CPIO、AR（DEB 容器）、LHA / LZH 和 XAR；RAR 仅在启用可选 `rar` feature 的构建中可读。
 
 ### 桌面应用
 
@@ -211,7 +211,7 @@ RZ_SHOT_DIR=/某个文件夹 cargo run --release -p rustzip-gui --example screen
 | 压缩预设 | 极速 / 均衡 / 最小体积 / 邮件分享 / 跨平台兼容已接入；邮件分享默认 20 MiB ZIP / 7z 分卷 |
 | 重复文件检测 | GUI 压缩前按内容哈希提示重复，可取消或继续；不自动删除文件 |
 | 应用内预览 | 图片与 64 KiB 内白名单 UTF-8 纯文本已接入；PDF / 音视频仍用系统程序打开 |
-| 只读长尾格式 | ISO 9660、CAB、CPIO、AR、LHA / LZH 已接入；WIM、DMG、CHM、NSIS 等仍待实现 |
+| 只读长尾格式 | ISO 9660、CAB、CPIO、AR、LHA / LZH、XAR 已接入；WIM、DMG、CHM、NSIS 等仍待实现 |
 | 任务完成动作 | 可选择解压完成后显示目录；系统通知默认关闭，可在设置中启用 |
 
 ## 参与贡献

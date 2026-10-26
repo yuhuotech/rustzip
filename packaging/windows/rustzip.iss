@@ -64,6 +64,9 @@ Root: HKCU; Subkey: "Software\Classes\.tgz\OpenWithProgids"; ValueType: string; 
 Root: HKCU; Subkey: "Software\Classes\.xz\OpenWithProgids"; ValueType: string; ValueName: "RustZIP.Archive"; ValueData: ""; Tasks: openwith; Flags: uninsdeletevalue
 Root: HKCU; Subkey: "Software\Classes\.zst\OpenWithProgids"; ValueType: string; ValueName: "RustZIP.Archive"; ValueData: ""; Tasks: openwith; Flags: uninsdeletevalue
 Root: HKCU; Subkey: "Software\Classes\.bz2\OpenWithProgids"; ValueType: string; ValueName: "RustZIP.Archive"; ValueData: ""; Tasks: openwith; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Classes\.lha\OpenWithProgids"; ValueType: string; ValueName: "RustZIP.Archive"; ValueData: ""; Tasks: openwith; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Classes\.lzh\OpenWithProgids"; ValueType: string; ValueName: "RustZIP.Archive"; ValueData: ""; Tasks: openwith; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Classes\.xar\OpenWithProgids"; ValueType: string; ValueName: "RustZIP.Archive"; ValueData: ""; Tasks: openwith; Flags: uninsdeletevalue
 Root: HKCU; Subkey: "Software\Classes\RustZIP.Archive"; ValueType: string; ValueData: "压缩文件"; Tasks: openwith; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Classes\RustZIP.Archive\DefaultIcon"; ValueType: string; ValueData: "{app}\rustzip.exe,0"; Tasks: openwith
 Root: HKCU; Subkey: "Software\Classes\RustZIP.Archive\shell\open\command"; ValueType: string; ValueData: """{app}\rustzip.exe"" ""%1"""; Tasks: openwith
@@ -95,6 +98,12 @@ Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.zst\shell\RustZIP.
 Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.zst\shell\RustZIP.Extract\command"; ValueType: string; ValueData: """{app}\rustzip.exe"" --extract-here ""%1"""; Tasks: contextmenu
 Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.bz2\shell\RustZIP.Extract"; ValueType: string; ValueData: "用 RustZIP 解压到此处"; Tasks: contextmenu; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.bz2\shell\RustZIP.Extract\command"; ValueType: string; ValueData: """{app}\rustzip.exe"" --extract-here ""%1"""; Tasks: contextmenu
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.lha\shell\RustZIP.Extract"; ValueType: string; ValueData: "用 RustZIP 解压到此处"; Tasks: contextmenu; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.lha\shell\RustZIP.Extract\command"; ValueType: string; ValueData: """{app}\rustzip.exe"" --extract-here ""%1"""; Tasks: contextmenu
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.lzh\shell\RustZIP.Extract"; ValueType: string; ValueData: "用 RustZIP 解压到此处"; Tasks: contextmenu; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.lzh\shell\RustZIP.Extract\command"; ValueType: string; ValueData: """{app}\rustzip.exe"" --extract-here ""%1"""; Tasks: contextmenu
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.xar\shell\RustZIP.Extract"; ValueType: string; ValueData: "用 RustZIP 解压到此处"; Tasks: contextmenu; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.xar\shell\RustZIP.Extract\command"; ValueType: string; ValueData: """{app}\rustzip.exe"" --extract-here ""%1"""; Tasks: contextmenu
 
 [Run]
 Filename: "{app}\rustzip.exe"; Description: "启动 RustZIP"; Flags: nowait postinstall skipifsilent
