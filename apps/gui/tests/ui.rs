@@ -2210,6 +2210,37 @@ fn settings_changes_are_saved_and_the_theme_follows_the_choice(cx: &mut TestAppC
 }
 
 #[gpui_kit::test]
+fn interface_language_can_be_changed_and_is_saved(cx: &mut TestAppContext) {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("cfg/settings.json");
+    let (handle, view) = open_window(cx, Some(path.clone()));
+    with_view(cx, handle, &view, |v, _, cx| v.open_settings(cx));
+
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.click("language-en", cx)
+    })
+    .unwrap();
+    cx.update(|cx| {
+        let view = view.read(cx);
+        assert_eq!(view.settings.language, "en-US");
+        assert_eq!(view.tool_text("settings_title"), "Settings");
+        assert_eq!(view.tool_text("sidebar_recent"), "Recently opened");
+    });
+
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.click("language-zh-cn", cx)
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update(|cx| {
+        let view = view.read(cx);
+        assert_eq!(view.settings.language, "zh-CN");
+        assert_eq!(view.tool_text("settings_title"), "设置");
+    });
+    assert_eq!(Settings::load(&path).language, "zh-CN");
+}
+
+#[gpui_kit::test]
 fn the_accent_colour_is_saved_and_repaints_the_theme(cx: &mut TestAppContext) {
     let tmp = tempfile::tempdir().unwrap();
     let path = tmp.path().join("cfg/settings.json");

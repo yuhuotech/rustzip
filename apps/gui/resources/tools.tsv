@@ -1,6 +1,27 @@
 favorites	常用位置	Favorite locations
 home	启动页	Home
 current_archive	当前压缩包	Current archive
+kind_compress	压缩	Compress
+kind_extract	解压	Extract
+kind_test	测试	Test
+kind_edit	修改	Modify
+error_password	需要密码，或密码不正确	A password is required or incorrect.
+error_unknown_format	无法识别这个文件的格式	Unknown file format.
+error_unsupported	暂不支持：{detail}	Not supported: {detail}
+error_corrupt	文件已损坏：{detail}	The file is damaged: {detail}
+error_unsafe_path	压缩包里有不安全的路径，已拒绝：{path}	The archive contains an unsafe path, which was rejected: {path}
+error_limit	超出安全限制，已停止：{detail}	A safety limit was reached: {detail}
+error_io	读写出错：{detail}	Read or write error: {detail}
+error_cancelled	已取消	Cancelled
+eta_seconds	{seconds} 秒	{seconds}s
+eta_minutes_seconds	{minutes} 分 {seconds} 秒	{minutes}m {seconds}s
+eta_hours_minutes	{hours} 小时 {minutes} 分	{hours}h {minutes}m
+task_queued	等待中	Queued
+task_paused	已暂停	Paused
+task_done	完成	Finished
+task_cancelled	已取消	Cancelled
+task_failed	失败	Failed
+task_remaining	剩余 {time}	{time} remaining
 view_list	列表	List
 view_icons	小图标	Small icons
 add_location	添加位置…	Add location…
@@ -129,3 +150,45 @@ duplicate_cancelled	已取消压缩	Compression cancelled
 duplicate_group_files	{count} 个文件	{count} files
 duplicate_more	还有 {count} 组未显示	{count} more groups not shown
 duplicate_file_more	还有 {count} 个文件	{count} more files
+language	界面语言	Interface language
+language_auto	跟随系统	Follow system
+language_zh_cn	简体中文	Simplified Chinese
+language_en	English	English
+settings_title	设置	Settings
+settings_hint	改动会立即保存。	Changes are saved immediately.
+settings_done	完成	Done
+settings_appearance	外观	Appearance
+theme_system	跟随系统	Follow system
+theme_light	浅色	Light
+theme_dark	深色	Dark
+settings_accent	主色	Accent colour
+settings_conflict	文件已存在时	When a file already exists
+settings_keep_both	保留两者	Keep both
+settings_skip	跳过	Skip
+settings_replace	覆盖	Replace
+settings_smart_extract	智能解压	Smart extraction
+settings_smart_extract_hint	压缩包里有多个散文件时，自动放进以压缩包命名的文件夹。	When an archive has several loose files, put them in a folder named after the archive.
+settings_check_updates	自动检查更新	Check for updates automatically
+settings_check_updates_hint	启动时在后台检查新版本；更新包会验证签名。	Check for new versions in the background at startup. Update packages are signature-checked.
+settings_remember_passwords	记住密码	Remember passwords
+settings_remember_passwords_hint	打开加密压缩包成功后，把密码存进系统钥匙串，下次自动尝试。	After opening an encrypted archive, save its password in the system keychain and try it next time.
+settings_forget_passwords	清除已保存的密码	Forget saved passwords
+settings_install_stats	匿名安装统计	Anonymous installation statistics
+settings_install_stats_hint	只上报随机编号、版本、系统和语言，不含文件名或使用行为。	Only an anonymous ID, version, system and language are reported. File names and usage are not collected.
+settings_show_stats_privacy	查看统计说明并重新选择…	View statistics details and choose again…
+privacy_sent_title	会上报	What is sent
+privacy_sent_fields	随机编号 · 软件版本 · 系统及版本 · CPU 架构 · 界面语言	Random ID · app version · OS and version · CPU architecture · interface language
+privacy_never_title	不会收集	Never collected
+privacy_never_fields	文件名、路径、文件内容，以及任何使用行为。	File names, paths, contents or usage activity.
+privacy_timing	首次使用时上报一次，之后每天最多一次。发送失败时直接丢弃，不影响使用。你随时可以在设置里改变选择。	Sent once on first use, then at most once a day. Failed sends are discarded and do not affect the app. You can change your choice in Settings at any time.
+privacy_choice_joined	当前选择：参与	Current choice: on
+privacy_choice_left	当前选择：不参与	Current choice: off
+privacy_return	返回	Back
+privacy_decline	不参与	Don't participate
+privacy_participate	参与	Participate
+privacy_ok	好的	OK
+privacy_title	关于匿名统计	About anonymous statistics
+privacy_intro	RustZIP 是免费开源软件。为了了解有多少人在用，会上报一份完全匿名的基本信息。	RustZIP is free and open source. To understand how many people use it, we send a small set of fully anonymous details.
+sidebar_locations	位置	Locations
+sidebar_recent	最近打开	Recently opened
+sidebar_quick_actions	快速操作	Quick actions

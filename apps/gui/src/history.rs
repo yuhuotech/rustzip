@@ -290,7 +290,7 @@ impl MainView {
                     .flex_none()
                     .text_size(px(11.))
                     .text_color(p.fg3)
-                    .child(crate::view::kind_label(kind)),
+                    .child(crate::view::kind_label(kind, &self.settings.language)),
             )
             .child(
                 div()

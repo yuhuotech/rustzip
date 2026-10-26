@@ -1,8 +1,35 @@
-//! Text resources for the sidebar tools; existing screens migrate separately.
+//! Text resources for desktop surfaces migrated to the shared catalog.
 
-/// Resolves the configured language; `auto` keeps the application's established Chinese default.
+use std::sync::OnceLock;
+
+fn prefers_english(language: &str, system_locale: Option<&str>) -> bool {
+    if language.eq_ignore_ascii_case("auto") {
+        system_locale
+            .map(|locale| locale.to_ascii_lowercase().starts_with("en"))
+            .unwrap_or(false)
+    } else {
+        language.to_ascii_lowercase().starts_with("en")
+    }
+}
+
+fn system_locale() -> Option<&'static str> {
+    static LOCALE: OnceLock<Option<String>> = OnceLock::new();
+    LOCALE
+        .get_or_init(|| {
+            ["LC_ALL", "LC_MESSAGES", "LANG"]
+                .into_iter()
+                .find_map(|name| {
+                    std::env::var(name)
+                        .ok()
+                        .filter(|value| !value.trim().is_empty())
+                })
+        })
+        .as_deref()
+}
+
+/// Resolves the configured language; automatic mode follows the process locale when available.
 pub fn tr(language: &str, key: &str) -> &'static str {
-    let english = language.to_ascii_lowercase().starts_with("en");
+    let english = prefers_english(language, system_locale());
     include_str!("../resources/tools.tsv")
         .lines()
         .find_map(|line| {
@@ -86,5 +113,27 @@ mod tests {
             open_error("en", Path::new("a.zip"), &Error::Corrupt("x".into())),
             tr("en", "open_corrupt")
         );
+    }
+
+    #[test]
+    fn explicit_language_overrides_system_locale_and_auto_uses_it() {
+        assert!(prefers_english("en-GB", Some("zh_CN.UTF-8")));
+        assert!(!prefers_english("zh-CN", Some("en_US.UTF-8")));
+        assert!(prefers_english("auto", Some("en_US.UTF-8")));
+        assert!(!prefers_english("auto", Some("zh_CN.UTF-8")));
+        assert!(!prefers_english("auto", None));
+    }
+
+    #[test]
+    fn resource_keys_are_unique_and_have_both_languages() {
+        let mut keys = std::collections::HashSet::new();
+        for line in include_str!("../resources/tools.tsv").lines() {
+            let columns: Vec<_> = line.split('\t').collect();
+            assert_eq!(columns.len(), 3);
+            assert!(!columns[0].is_empty());
+            assert!(keys.insert(columns[0]));
+            assert!(!columns[1].is_empty());
+            assert!(!columns[2].is_empty());
+        }
     }
 }

@@ -324,40 +324,54 @@ fn format_speed(bps: u64) -> String {
     format!("{}/s", format_size(bps))
 }
 
-fn format_eta(secs: u64) -> String {
+fn format_eta(secs: u64, language: &str) -> String {
     match secs {
-        0..=59 => format!("{secs} 秒"),
-        60..=3599 => format!("{} 分 {} 秒", secs / 60, secs % 60),
-        _ => format!("{} 小时 {} 分", secs / 3600, secs % 3600 / 60),
+        0..=59 => crate::text::tr(language, "eta_seconds").replace("{seconds}", &secs.to_string()),
+        60..=3599 => crate::text::tr(language, "eta_minutes_seconds")
+            .replace("{minutes}", &(secs / 60).to_string())
+            .replace("{seconds}", &(secs % 60).to_string()),
+        _ => crate::text::tr(language, "eta_hours_minutes")
+            .replace("{hours}", &(secs / 3600).to_string())
+            .replace("{minutes}", &(secs % 3600 / 60).to_string()),
     }
 }
 
-pub(crate) fn kind_label(kind: JobKind) -> &'static str {
+pub(crate) fn kind_label(kind: JobKind, language: &str) -> &'static str {
     match kind {
-        JobKind::Compress => "压缩",
-        JobKind::Extract => "解压",
-        JobKind::Test => "测试",
-        JobKind::Edit => "修改",
-        JobKind::Convert => crate::text::tr("auto", "convert"),
-        JobKind::Repair => crate::text::tr("auto", "repair"),
-        JobKind::Hash => crate::text::tr("auto", "hash"),
-        JobKind::DuplicateScan => crate::text::tr("auto", "duplicate_scan"),
+        JobKind::Compress => crate::text::tr(language, "kind_compress"),
+        JobKind::Extract => crate::text::tr(language, "kind_extract"),
+        JobKind::Test => crate::text::tr(language, "kind_test"),
+        JobKind::Edit => crate::text::tr(language, "kind_edit"),
+        JobKind::Convert => crate::text::tr(language, "convert"),
+        JobKind::Repair => crate::text::tr(language, "repair"),
+        JobKind::Hash => crate::text::tr(language, "hash"),
+        JobKind::DuplicateScan => crate::text::tr(language, "duplicate_scan"),
     }
 }
 
-fn explain(e: &Error) -> String {
+fn explain(language: &str, e: &Error) -> String {
     match e {
-        Error::Password => "需要密码,或密码不正确".into(),
-        Error::UnknownFormat => "无法识别这个文件的格式".into(),
-        Error::Unsupported(m) => format!("暂不支持:{m}"),
-        Error::Corrupt(m) => format!("文件已损坏:{m}"),
-        Error::UnsafePath(p) => format!("压缩包里有不安全的路径,已拒绝:{p}"),
-        Error::NameConflict { .. } => {
-            crate::text::task_error("auto", &rz_app::tasks::TaskError::from(e))
+        Error::Password => crate::text::tr(language, "error_password").into(),
+        Error::UnknownFormat => crate::text::tr(language, "error_unknown_format").into(),
+        Error::Unsupported(detail) => {
+            crate::text::tr(language, "error_unsupported").replace("{detail}", detail)
         }
-        Error::LimitExceeded(m) => format!("超出安全限制,已停止:{m}"),
-        Error::Io(e) => format!("读写出错:{e}"),
-        Error::Cancelled => "已取消".into(),
+        Error::Corrupt(detail) => {
+            crate::text::tr(language, "error_corrupt").replace("{detail}", detail)
+        }
+        Error::UnsafePath(path) => {
+            crate::text::tr(language, "error_unsafe_path").replace("{path}", path)
+        }
+        Error::NameConflict { .. } => {
+            crate::text::task_error(language, &rz_app::tasks::TaskError::from(e))
+        }
+        Error::LimitExceeded(detail) => {
+            crate::text::tr(language, "error_limit").replace("{detail}", detail)
+        }
+        Error::Io(error) => {
+            crate::text::tr(language, "error_io").replace("{detail}", &error.to_string())
+        }
+        Error::Cancelled => crate::text::tr(language, "error_cancelled").into(),
     }
 }
 
@@ -1747,7 +1761,7 @@ impl MainView {
                         this.preview = None;
                         this.apply_view(cx);
                     }
-                    Err(e) => this.say(Notice::Error(explain(&e)), cx),
+                    Err(e) => this.say(Notice::Error(explain(&this.settings.language, &e)), cx),
                 };
             });
         })
@@ -1816,7 +1830,7 @@ impl MainView {
                     Notice::Info("文件太大,不适合预览;请用“解压到…”取出来".into()),
                     cx,
                 ),
-                Err(e) => this.say(Notice::Error(explain(&e)), cx),
+                Err(e) => this.say(Notice::Error(explain(&this.settings.language, &e)), cx),
             });
         })
         .detach();
@@ -1950,7 +1964,7 @@ impl MainView {
             }
             match (&t.state, &t.error, &t.summary) {
                 (TaskState::Done, _, Some(s)) => {
-                    let what = kind_label(t.kind);
+                    let what = kind_label(t.kind, &self.settings.language);
                     let msg = match t.kind {
                         JobKind::Convert => self.tool_text("converted").into(),
                         JobKind::Repair => self.tool_text("recovered").into(),
@@ -3609,7 +3623,7 @@ impl MainView {
             .bg(p.panel)
             .border_r_1()
             .border_color(p.line)
-            .child(heading("位置"))
+            .child(heading(self.tool_text("sidebar_locations")))
             .child(
                 nav(
                     if has_archive {
@@ -3635,7 +3649,7 @@ impl MainView {
             .child(
                 nav(
                     Icon::new(gpui_kit::assets::IconName::Clock),
-                    "最近打开",
+                    self.tool_text("sidebar_recent"),
                     Some(self.settings.recent.len().to_string()),
                     if on_recent { Nav::Current } else { Nav::Live },
                 )
@@ -3658,7 +3672,7 @@ impl MainView {
                 .cursor_pointer()
                 .on_click(cx.listener(|this, _, _, cx| this.show_page(Page::Favorites, cx))),
             )
-            .child(heading("快速操作"))
+            .child(heading(self.tool_text("sidebar_quick_actions")))
             .child(
                 nav(
                     Icon::new(gpui_kit::assets::IconName::ArrowLeftRight),
@@ -4022,8 +4036,8 @@ impl MainView {
             0.0
         };
         let detail = match t.state {
-            TaskState::Queued => "等待中".to_string(),
-            TaskState::Paused => "已暂停".to_string(),
+            TaskState::Queued => self.tool_text("task_queued").to_string(),
+            TaskState::Paused => self.tool_text("task_paused").to_string(),
             TaskState::Running => {
                 let mut s = if t.progress.bytes_total == 0 {
                     self.tool_text("processed")
@@ -4039,14 +4053,18 @@ impl MainView {
                     s.push_str(&format!(" · {}", format_speed(t.speed_bps)));
                 }
                 if let Some(eta) = t.eta_secs {
-                    s.push_str(&format!(" · 剩余 {}", format_eta(eta)));
+                    s.push_str(&format!(
+                        " · {}",
+                        crate::text::tr(&self.settings.language, "task_remaining")
+                            .replace("{time}", &format_eta(eta, &self.settings.language))
+                    ));
                 }
                 s
             }
-            TaskState::Done => "完成".to_string(),
-            TaskState::Cancelled => "已取消".to_string(),
+            TaskState::Done => self.tool_text("task_done").to_string(),
+            TaskState::Cancelled => self.tool_text("task_cancelled").to_string(),
             TaskState::Failed => t.error.as_ref().map_or_else(
-                || "失败".to_string(),
+                || self.tool_text("task_failed").to_string(),
                 |e| crate::text::task_error(&self.settings.language, e),
             ),
         };
@@ -4062,7 +4080,11 @@ impl MainView {
                 h_flex()
                     .gap_2()
                     .items_center()
-                    .child(div().text_color(p.fg2).child(kind_label(t.kind)))
+                    .child(
+                        div()
+                            .text_color(p.fg2)
+                            .child(kind_label(t.kind, &self.settings.language)),
+                    )
                     .child(
                         div()
                             .flex_1()
@@ -4481,14 +4503,46 @@ impl MainView {
             v_flex()
                 .gap_4()
                 .child(group(
-                    "外观",
+                    self.tool_text("language"),
                     h_flex()
                         .gap_1()
                         .children(
                             [
-                                ("theme-system", "跟随系统", Theme::System),
-                                ("theme-light", "浅色", Theme::Light),
-                                ("theme-dark", "深色", Theme::Dark),
+                                ("language-auto", "language_auto", "auto"),
+                                ("language-zh-cn", "language_zh_cn", "zh-CN"),
+                                ("language-en", "language_en", "en-US"),
+                            ]
+                            .map(|(id, key, value)| {
+                                segment(
+                                    id,
+                                    self.tool_text(key),
+                                    s.language.eq_ignore_ascii_case(value),
+                                )
+                                .on_click(cx.listener(
+                                    move |this, _, _, cx| {
+                                        this.change_settings(
+                                            |settings| settings.language = value.to_string(),
+                                            cx,
+                                        );
+                                    },
+                                ))
+                            }),
+                        )
+                        .into_any_element(),
+                ))
+                .child(group(
+                    self.tool_text("settings_appearance"),
+                    h_flex()
+                        .gap_1()
+                        .children(
+                            [
+                                (
+                                    "theme-system",
+                                    self.tool_text("theme_system"),
+                                    Theme::System,
+                                ),
+                                ("theme-light", self.tool_text("theme_light"), Theme::Light),
+                                ("theme-dark", self.tool_text("theme_dark"), Theme::Dark),
                             ]
                             .map(|(id, label, t)| {
                                 segment(id, label, theme == t).on_click(cx.listener(
@@ -4499,7 +4553,7 @@ impl MainView {
                         .into_any_element(),
                 ))
                 .child(group(
-                    "主色",
+                    self.tool_text("settings_accent"),
                     h_flex()
                         .gap_2()
                         .children(
@@ -4528,21 +4582,21 @@ impl MainView {
                         .into_any_element(),
                 ))
                 .child(group(
-                    "文件已存在时",
+                    self.tool_text("settings_conflict"),
                     h_flex()
                         .gap_1()
                         .children(
                             [
-                                ("conflict-rename", "保留两者", OnConflict::Rename),
-                                ("conflict-skip", "跳过", OnConflict::Skip),
-                                ("conflict-replace", "覆盖", OnConflict::Replace),
+                                ("conflict-rename", "settings_keep_both", OnConflict::Rename),
+                                ("conflict-skip", "settings_skip", OnConflict::Skip),
+                                ("conflict-replace", "settings_replace", OnConflict::Replace),
                             ]
-                            .map(|(id, label, c)| {
-                                segment(id, label, conflict == c).on_click(cx.listener(
-                                    move |this, _, _, cx| {
+                            .map(|(id, key, c)| {
+                                segment(id, self.tool_text(key), conflict == c).on_click(
+                                    cx.listener(move |this, _, _, cx| {
                                         this.change_settings(|s| s.on_conflict = c, cx);
-                                    },
-                                ))
+                                    }),
+                                )
                             }),
                         )
                         .into_any_element(),
@@ -4553,8 +4607,8 @@ impl MainView {
                         .child(
                             toggle(
                                 "set-smart",
-                                "智能解压",
-                                "压缩包里有多个散文件时,自动放进以压缩包命名的文件夹",
+                                self.tool_text("settings_smart_extract"),
+                                self.tool_text("settings_smart_extract_hint"),
                                 s.smart_extract,
                             )
                             .id("row-smart")
@@ -4595,8 +4649,8 @@ impl MainView {
                         .child(
                             toggle(
                                 "set-updates",
-                                "自动检查更新",
-                                "启动时在后台检查新版本;更新包会验证签名",
+                                self.tool_text("settings_check_updates"),
+                                self.tool_text("settings_check_updates_hint"),
                                 s.check_updates,
                             )
                             .id("row-updates")
@@ -4607,8 +4661,8 @@ impl MainView {
                         .child(
                             toggle(
                                 "set-passwords",
-                                "记住密码",
-                                "打开加密压缩包成功后,把密码存进系统钥匙串,下次自动尝试",
+                                self.tool_text("settings_remember_passwords"),
+                                self.tool_text("settings_remember_passwords_hint"),
                                 s.remember_passwords,
                             )
                             .id("row-passwords")
@@ -4625,7 +4679,7 @@ impl MainView {
                                     Button::new("forget-passwords")
                                         .outline()
                                         .small()
-                                        .label("清除已保存的密码")
+                                        .label(self.tool_text("settings_forget_passwords"))
                                         .on_click(cx.listener(|this, _, _, cx| {
                                             this.forget_all_passwords(cx);
                                         })),
@@ -4635,8 +4689,8 @@ impl MainView {
                         .child(
                             toggle(
                                 "set-stats",
-                                "匿名安装统计",
-                                "只上报随机编号、版本、系统和语言,不含文件名或使用行为",
+                                self.tool_text("settings_install_stats"),
+                                self.tool_text("settings_install_stats_hint"),
                                 s.send_install_stats,
                             )
                             .id("row-stats")
@@ -4653,7 +4707,7 @@ impl MainView {
                                 .ghost()
                                 .small()
                                 .icon(Icon::new(gpui_kit::assets::IconName::ShieldCheck))
-                                .label("查看统计说明并重新选择…")
+                                .label(self.tool_text("settings_show_stats_privacy"))
                                 .on_click(cx.listener(|this, _, _, cx| {
                                     this.show_privacy_notice(cx);
                                 })),
@@ -4662,14 +4716,14 @@ impl MainView {
         Dialog {
             tone: Tone::Neutral,
             icon: Icon::new(IconName::Settings),
-            title: "设置".into(),
-            lead: Some("改动会立即保存。".into()),
+            title: self.tool_text("settings_title").into(),
+            lead: Some(self.tool_text("settings_hint").into()),
             body: Some(body.into_any_element()),
             buttons: vec![
                 Button::new("settings-close")
                     .primary()
                     .icon(IconName::Check)
-                    .label("完成")
+                    .label(self.tool_text("settings_done"))
                     .on_click(cx.listener(|this, _, _, cx| this.close_overlay(cx)))
                     .into_any_element(),
             ],
@@ -4702,27 +4756,27 @@ impl MainView {
         let body = v_flex()
             .gap_3()
             .child(block(
-                "会上报",
-                "随机编号 · 软件版本 · 系统及版本 · CPU 架构 · 界面语言",
+                self.tool_text("privacy_sent_title"),
+                self.tool_text("privacy_sent_fields"),
             ))
-            .child(block("不会收集", "文件名、路径、文件内容,以及任何使用行为"))
+            .child(block(
+                self.tool_text("privacy_never_title"),
+                self.tool_text("privacy_never_fields"),
+            ))
             .child(
                 div()
                     .text_size(px(12.))
                     .line_height(px(18.))
                     .text_color(p.fg3)
-                    .child(
-                        "首次使用时上报一次,之后每天最多一次。发送失败时直接丢弃,不影响使用。\
-                         你随时可以在设置里改变选择。",
-                    ),
+                    .child(self.tool_text("privacy_timing")),
             )
             // Opened again from the settings: say what is chosen now.
             .when(again, |d| {
                 d.child(div().text_size(px(13.)).text_color(p.accent).child(
                     if self.settings.send_install_stats {
-                        "当前选择:参与"
+                        self.tool_text("privacy_choice_joined")
                     } else {
-                        "当前选择:不参与"
+                        self.tool_text("privacy_choice_left")
                     },
                 ))
             });
@@ -4733,7 +4787,7 @@ impl MainView {
                 Button::new("privacy-back")
                     .outline()
                     .icon(IconName::ArrowLeft)
-                    .label("返回")
+                    .label(self.tool_text("privacy_return"))
                     .on_click(cx.listener(|this, _, _, cx| this.leave_privacy_notice(cx)))
                     .into_any_element(),
             );
@@ -4742,7 +4796,7 @@ impl MainView {
             Button::new("privacy-off")
                 .outline()
                 .icon(IconName::Close)
-                .label("不参与")
+                .label(self.tool_text("privacy_decline"))
                 .on_click(cx.listener(|this, _, _, cx| this.answer_privacy(false, cx)))
                 .into_any_element(),
         );
@@ -4750,18 +4804,19 @@ impl MainView {
             Button::new("privacy-on")
                 .primary()
                 .icon(IconName::CircleCheck)
-                .label(if again { "参与" } else { "好的" })
+                .label(self.tool_text(if again {
+                    "privacy_participate"
+                } else {
+                    "privacy_ok"
+                }))
                 .on_click(cx.listener(|this, _, _, cx| this.answer_privacy(true, cx)))
                 .into_any_element(),
         );
         Dialog {
             tone: Tone::Neutral,
             icon: Icon::new(gpui_kit::assets::IconName::ShieldCheck),
-            title: "关于匿名统计".into(),
-            lead: Some(
-                "RustZIP 是免费开源软件。为了了解有多少人在用,会上报一份完全匿名的基本信息。"
-                    .into(),
-            ),
+            title: self.tool_text("privacy_title").into(),
+            lead: Some(self.tool_text("privacy_intro").into()),
             body: Some(body.into_any_element()),
             buttons,
         }
