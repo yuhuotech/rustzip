@@ -2225,6 +2225,7 @@ fn interface_language_can_be_changed_and_is_saved(cx: &mut TestAppContext) {
         assert_eq!(view.settings.language, "en-US");
         assert_eq!(view.tool_text("settings_title"), "Settings");
         assert_eq!(view.tool_text("sidebar_recent"), "Recently opened");
+        assert_eq!(view.tool_text("toolbar_extract"), "Extract to…");
     });
 
     cx.update_window(handle.into(), |_, window, cx| {
@@ -2236,6 +2237,7 @@ fn interface_language_can_be_changed_and_is_saved(cx: &mut TestAppContext) {
         let view = view.read(cx);
         assert_eq!(view.settings.language, "zh-CN");
         assert_eq!(view.tool_text("settings_title"), "设置");
+        assert_eq!(view.tool_text("toolbar_extract"), "解压到…");
     });
     assert_eq!(Settings::load(&path).language, "zh-CN");
 }

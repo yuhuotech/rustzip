@@ -387,7 +387,10 @@ impl MainView {
             // Modified clicks build a multi-selection in `FileRows`, not a new single row.
             TableState::new(FileRows::default(), window, cx).select_on_modifier_click(false)
         });
-        let search = cx.new(|cx| InputState::new(window, cx).placeholder("在压缩包内搜索"));
+        let search = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder(crate::text::tr(&settings.language, "search_archive"))
+        });
         cx.subscribe_in(&table, window, Self::on_table_event)
             .detach();
         cx.subscribe_in(&search, window, |this, _, ev: &InputEvent, _, cx| {
@@ -749,7 +752,7 @@ impl MainView {
             files: true,
             directories: false,
             multiple: true,
-            prompt: Some("打开压缩包".into()),
+            prompt: Some(self.tool_text("dialog_open_archive").into()),
         });
         cx.spawn_in(window, async move |this, cx| {
             if let Ok(Ok(Some(paths))) = rx.await {
@@ -768,7 +771,7 @@ impl MainView {
             files: true,
             directories: true,
             multiple: true,
-            prompt: Some("选择要压缩的文件或文件夹".into()),
+            prompt: Some(self.tool_text("dialog_choose_sources").into()),
         });
         cx.spawn_in(window, async move |this, cx| {
             if let Ok(Ok(Some(paths))) = rx.await {
@@ -882,7 +885,13 @@ impl MainView {
                     Ok(items) => this.files.set_items(items),
                     Err(e) => {
                         this.files.set_items(Vec::new());
-                        this.say(Notice::Error(format!("打不开这个文件夹:{e}")), cx);
+                        this.say(
+                            Notice::Error(
+                                this.tool_text("notice_folder_open_failed")
+                                    .replace("{error}", &e.to_string()),
+                            ),
+                            cx,
+                        );
                     }
                 }
                 cx.notify();
@@ -952,10 +961,7 @@ impl MainView {
         {
             self.open_path(path, None, window, cx);
         } else if crate::services::is_runnable(&path.to_string_lossy()) {
-            self.say(
-                Notice::Info("为了安全,不直接打开程序和脚本;请在文件管理器里确认来源再运行".into()),
-                cx,
-            );
+            self.say(Notice::Info(self.tool_text("notice_safe_run").into()), cx);
         } else {
             (self.opener)(&path);
         }
@@ -1030,7 +1036,10 @@ impl MainView {
                 (_, false) => Some(marked),
                 (Some(p), true) => Some(vec![p.clone()]),
                 (None, true) => {
-                    self.say(Notice::Info("先在列表里选一个文件或文件夹".into()), cx);
+                    self.say(
+                        Notice::Info(self.tool_text("notice_select_item").into()),
+                        cx,
+                    );
                     return;
                 }
             }
@@ -1041,7 +1050,7 @@ impl MainView {
             files: false,
             directories: true,
             multiple: false,
-            prompt: Some("解压到这里".into()),
+            prompt: Some(self.tool_text("dialog_extract_to").into()),
         });
         cx.spawn_in(window, async move |this, cx| {
             if let Ok(Ok(Some(paths))) = rx.await
@@ -1242,7 +1251,10 @@ impl MainView {
     fn extract_picked_to(&mut self, dest: PathBuf, cx: &mut Context<Self>) {
         let picked = self.picked_paths(cx);
         if picked.is_empty() {
-            self.say(Notice::Info("先在列表里选一个文件或文件夹".into()), cx);
+            self.say(
+                Notice::Info(self.tool_text("notice_select_item").into()),
+                cx,
+            );
             return;
         }
         self.start_extract(dest, Some(picked), cx);
@@ -1277,7 +1289,13 @@ impl MainView {
         }
         let n = picked.len();
         cx.write_to_clipboard(ClipboardItem::new_string(picked.join("\n")));
-        self.say(Notice::Info(format!("已复制 {n} 个路径")), cx);
+        self.say(
+            Notice::Info(
+                self.tool_text("notice_copied_paths")
+                    .replace("{count}", &n.to_string()),
+            ),
+            cx,
+        );
     }
 
     /// "Open" in the menu: a folder is entered, a file is opened with its program.
@@ -1330,14 +1348,14 @@ impl MainView {
         cx: &mut Context<Self>,
     ) {
         if !self.can_edit() {
-            self.say(Notice::Info("这种格式的压缩包不能修改".into()), cx);
+            self.say(Notice::Info(self.tool_text("notice_read_only").into()), cx);
             return;
         }
         let rx = cx.prompt_for_paths(PathPromptOptions {
             files: true,
             directories: true,
             multiple: true,
-            prompt: Some("添加到压缩包".into()),
+            prompt: Some(self.tool_text("dialog_add_to_archive").into()),
         });
         cx.spawn_in(window, async move |this, cx| {
             if let Ok(Ok(Some(paths))) = rx.await {
@@ -1418,7 +1436,9 @@ impl MainView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let input = cx.new(|cx| InputState::new(window, cx).placeholder("新名称"));
+        let input = cx.new(|cx| {
+            InputState::new(window, cx).placeholder(self.tool_text("rename_placeholder"))
+        });
         input.update(cx, |s, cx| s.set_value(current, window, cx));
         self.overlay = Some(Overlay::Rename(RenamePrompt {
             target,
@@ -1454,7 +1474,7 @@ impl MainView {
         };
         let name = prompt.input.read(cx).value().trim().to_string();
         if !rz_app::modify::valid_name(&name) {
-            prompt.error = Some("名称不能为空,也不能含有 / \\ : * ? \" < > |".into());
+            prompt.error = Some(self.tool_text("rename_invalid").into());
             self.overlay = Some(Overlay::Rename(prompt));
             cx.notify();
             return;
@@ -1516,13 +1536,18 @@ impl MainView {
                     this.save_settings(cx);
                     this.listed_mut().selected = Some(to);
                     this.refresh_listed(cx);
-                    this.say(Notice::Info("已重命名".into()), cx);
+                    this.say(Notice::Info(this.tool_text("rename_complete").into()), cx);
                 }
-                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => this.say(
-                    Notice::Error("这个文件夹里已经有同名文件,换一个名字".into()),
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                    this.say(Notice::Error(this.tool_text("rename_exists").into()), cx)
+                }
+                Err(e) => this.say(
+                    Notice::Error(
+                        this.tool_text("rename_failed")
+                            .replace("{error}", &e.to_string()),
+                    ),
                     cx,
                 ),
-                Err(e) => this.say(Notice::Error(format!("重命名失败:{e}")), cx),
             });
         })
         .detach();
@@ -1627,9 +1652,15 @@ impl MainView {
                     this.forget_recent(&path, cx);
                     this.files.selected = None;
                     this.refresh_listed(cx);
-                    this.say(Notice::Info("已移到废纸篓 / 回收站".into()), cx);
+                    this.say(Notice::Info(this.tool_text("trash_complete").into()), cx);
                 }
-                Err(e) => this.say(Notice::Error(format!("没能删除:{e}")), cx),
+                Err(e) => this.say(
+                    Notice::Error(
+                        this.tool_text("trash_failed")
+                            .replace("{error}", &e.to_string()),
+                    ),
+                    cx,
+                ),
             });
         })
         .detach();
@@ -1772,21 +1803,24 @@ impl MainView {
     /// system uses for that kind of file.
     pub fn open_selected(&mut self, cx: &mut Context<Self>) {
         let Some(row) = self.selected_row() else {
-            self.say(Notice::Info("先在列表里选一个文件".into()), cx);
+            self.say(
+                Notice::Info(self.tool_text("notice_select_file").into()),
+                cx,
+            );
             return;
         };
         let Some(a) = self.current() else { return };
         let entry = row.entry.and_then(|ix| a.tree.entries().get(ix).cloned());
         let (RowKind::File, Some(entry)) = (row.kind, entry) else {
-            self.say(Notice::Info("预览只能用于文件".into()), cx);
+            self.say(
+                Notice::Info(self.tool_text("notice_preview_file").into()),
+                cx,
+            );
             return;
         };
         // Opening a program or script from an archive would run it, which is not a preview.
         if crate::services::is_runnable(&row.name) {
-            self.say(
-                Notice::Info("为了安全,不直接打开程序和脚本;请解压后确认来源再运行".into()),
-                cx,
-            );
+            self.say(Notice::Info(self.tool_text("notice_safe_run").into()), cx);
             return;
         }
         let (archive, password) = (a.path.clone(), a.password.clone());
@@ -1795,7 +1829,13 @@ impl MainView {
         // Formats that can be rewritten get their changes saved back; the rest are read-only.
         let writable = rz_app::modify::edit_format(&a.format).is_some();
         let (entry_path, archive_key) = (row.path.clone(), archive.clone());
-        self.say(Notice::Info(format!("正在准备 {}…", row.name)), cx);
+        self.say(
+            Notice::Info(
+                self.tool_text("notice_prepare_preview")
+                    .replace("{name}", &row.name),
+            ),
+            cx,
+        );
         cx.spawn(async move |this, cx| {
             let result = cx
                 .background_executor()
@@ -1815,19 +1855,19 @@ impl MainView {
                     (this.opener)(&path);
                     if writable {
                         this.say(
-                            Notice::Info("已用系统程序打开;保存后会自动写回压缩包".into()),
+                            Notice::Info(this.tool_text("notice_external_edit_writeback").into()),
                             cx,
                         );
                         this.watch_scratch(path, archive_key, entry_path, cx);
                     } else {
                         this.say(
-                            Notice::Info("已用系统程序打开(这种压缩包只读,改动不会写回)".into()),
+                            Notice::Info(this.tool_text("notice_external_read_only").into()),
                             cx,
                         );
                     }
                 }
                 Err(Error::LimitExceeded(_)) => this.say(
-                    Notice::Info("文件太大,不适合预览;请用“解压到…”取出来".into()),
+                    Notice::Info(this.tool_text("notice_preview_too_large").into()),
                     cx,
                 ),
                 Err(e) => this.say(Notice::Error(explain(&this.settings.language, &e)), cx),
@@ -1968,8 +2008,14 @@ impl MainView {
                     let msg = match t.kind {
                         JobKind::Convert => self.tool_text("converted").into(),
                         JobKind::Repair => self.tool_text("recovered").into(),
-                        JobKind::Test => format!("{what}通过:{} 个条目没有发现问题", s.files),
-                        JobKind::Edit => format!("{what}完成:压缩包现在有 {} 项", s.files),
+                        JobKind::Test => self
+                            .tool_text("task_test_passed")
+                            .replace("{task}", what)
+                            .replace("{count}", &s.files.to_string()),
+                        JobKind::Edit => self
+                            .tool_text("task_edit_complete")
+                            .replace("{task}", what)
+                            .replace("{count}", &s.files.to_string()),
                         JobKind::Hash => self.tool_text("hash_complete").to_string(),
                         JobKind::DuplicateScan if s.duplicates.is_empty() => {
                             self.tool_text("duplicate_none").to_string()
@@ -1990,7 +2036,11 @@ impl MainView {
                                 .replace("{files}", &files.to_string())
                                 .replace("{size}", &format_size(bytes))
                         }
-                        _ => format!("{what}完成:{} 个文件,{}", s.files, format_size(s.bytes)),
+                        _ => self
+                            .tool_text("task_complete_count")
+                            .replace("{task}", what)
+                            .replace("{count}", &s.files.to_string())
+                            .replace("{size}", &format_size(s.bytes)),
                     };
                     if t.kind != JobKind::DuplicateScan {
                         self.record_task(&t, &msg, cx);
@@ -2034,7 +2084,13 @@ impl MainView {
                 }
                 // Retried as a new task once the password is in, so there is nothing to record.
                 (TaskState::Failed, Some(err), _) if err.code == ErrorCode::Password => {
-                    self.say(Notice::Error(format!("{}需要密码", t.title)), cx);
+                    self.say(
+                        Notice::Error(
+                            self.tool_text("task_password_needed")
+                                .replace("{task}", &t.title),
+                        ),
+                        cx,
+                    );
                 }
                 (TaskState::Failed, Some(err), _)
                     if t.kind == JobKind::DuplicateScan && err.code == ErrorCode::LimitExceeded =>
@@ -2055,7 +2111,14 @@ impl MainView {
                 (TaskState::Failed, Some(err), _) => {
                     let why = crate::text::task_error(&self.settings.language, err);
                     self.record_task(&t, &why, cx);
-                    self.say(Notice::Error(format!("{}失败:{why}", t.title)), cx);
+                    self.say(
+                        Notice::Error(
+                            self.tool_text("task_failed_detail")
+                                .replace("{task}", &t.title)
+                                .replace("{reason}", &why),
+                        ),
+                        cx,
+                    );
                     self.send_task_notification("notification_failed", cx);
                 }
                 (TaskState::Cancelled, _, _) => {
@@ -2630,7 +2693,7 @@ impl MainView {
                     Button::new("new-tab")
                         .ghost()
                         .icon(IconName::Plus)
-                        .tooltip("打开压缩包")
+                        .tooltip(self.tool_text("open_archive_tooltip"))
                         .on_click(cx.listener(|this, _, window, cx| this.pick_archive(window, cx))),
                 ),
             )
@@ -2671,7 +2734,12 @@ impl MainView {
                     .child(name),
             )
             .when(a.password.is_some(), |d| {
-                d.child(div().text_size(px(11.)).text_color(p.fg3).child("已加密"))
+                d.child(
+                    div()
+                        .text_size(px(11.))
+                        .text_color(p.fg3)
+                        .child(self.tool_text("encrypted_badge")),
+                )
             })
             .child(
                 div()
@@ -2715,11 +2783,12 @@ impl MainView {
             || !self.table.read(cx).delegate().marked().is_empty();
         let editable = self.can_edit();
         // Said when hovering a button that is off because of the format.
-        let read_only = format!(
-            "{} 压缩包只读,不能添加、重命名或删除",
-            self.current()
+        let read_only = self.tool_text("archive_read_only").replace(
+            "{format}",
+            &self
+                .current()
                 .map(|a| a.format.to_uppercase())
-                .unwrap_or_default()
+                .unwrap_or_default(),
         );
         let one_picked = self.picked_paths(cx).len() == 1;
         // Previews open one file at a time.
@@ -2739,7 +2808,7 @@ impl MainView {
                 Button::new("extract-all")
                     .primary()
                     .icon(gpui_kit::assets::IconName::ArrowDownToLine)
-                    .label("解压到…")
+                    .label(self.tool_text("toolbar_extract"))
                     .disabled(!has)
                     .on_click(cx.listener(|this, _, window, cx| this.extract_to(window, cx))),
             )
@@ -2747,7 +2816,7 @@ impl MainView {
                 Button::new("add")
                     .ghost()
                     .icon(IconName::Plus)
-                    .label("添加")
+                    .label(self.tool_text("toolbar_add"))
                     .disabled(!editable)
                     .when(!editable, |b| b.tooltip(read_only.clone()))
                     .on_click(
@@ -2758,7 +2827,7 @@ impl MainView {
                 Button::new("test")
                     .ghost()
                     .icon(IconName::CircleCheck)
-                    .label("测试")
+                    .label(self.tool_text("toolbar_test"))
                     .disabled(!has)
                     .on_click(cx.listener(|this, _, _, cx| this.start_test(cx))),
             )
@@ -2766,7 +2835,7 @@ impl MainView {
                 Button::new("rename")
                     .ghost()
                     .icon(IconName::Replace)
-                    .label("重命名")
+                    .label(self.tool_text("toolbar_rename"))
                     .disabled(!one_picked || !editable)
                     .when(!editable, |b| b.tooltip(read_only.clone()))
                     .on_click(cx.listener(|this, _, window, cx| this.ask_rename_entry(window, cx))),
@@ -2775,7 +2844,7 @@ impl MainView {
                 Button::new("delete")
                     .ghost()
                     .icon(Icon::new(gpui_kit::assets::IconName::Trash))
-                    .label("删除")
+                    .label(self.tool_text("toolbar_delete"))
                     .text_color(if has_sel && editable { p.danger } else { p.fg3 })
                     .disabled(!has_sel || !editable)
                     .when(!editable, |b| b.tooltip(read_only))
@@ -2786,7 +2855,7 @@ impl MainView {
                 Button::new("preview")
                     .ghost()
                     .icon(IconName::Eye)
-                    .label("预览")
+                    .label(self.tool_text("toolbar_preview"))
                     .disabled(!can_preview)
                     .on_click(cx.listener(|this, _, _, cx| this.open_selected(cx))),
             )
@@ -2803,7 +2872,7 @@ impl MainView {
         Button::new("open-settings")
             .ghost()
             .icon(IconName::Settings)
-            .tooltip("设置")
+            .tooltip(self.tool_text("settings_tooltip"))
             .on_click(cx.listener(|this, _, _, cx| this.open_settings(cx)))
     }
 
@@ -2833,7 +2902,7 @@ impl MainView {
                     .text_size(px(14.))
                     .text_color(p.fg2)
                     .child(Icon::new(IconName::ArrowDown).size_4())
-                    .child("把压缩包或文件拖到窗口里,或从下面开始"),
+                    .child(self.tool_text("welcome_drag")),
             )
             // Each entry point gets its own full-width row; two buttons side by side
             // looked like one cramped control in the middle of a mostly empty window.
@@ -2849,7 +2918,7 @@ impl MainView {
                             .w_full()
                             .text_size(px(15.))
                             .icon(IconName::FolderOpen)
-                            .label("打开压缩包")
+                            .label(self.tool_text("welcome_open_archive"))
                             .on_click(
                                 cx.listener(|this, _, window, cx| this.pick_archive(window, cx)),
                             ),
@@ -2861,7 +2930,7 @@ impl MainView {
                             .w_full()
                             .text_size(px(15.))
                             .icon(IconName::Plus)
-                            .label("新建压缩")
+                            .label(self.tool_text("welcome_new_archive"))
                             .on_click(
                                 cx.listener(|this, _, window, cx| this.pick_sources(window, cx)),
                             ),
@@ -2873,7 +2942,12 @@ impl MainView {
                         .mt_4()
                         .gap_0p5()
                         .w(px(360.))
-                        .child(div().text_color(p.fg3).text_size(px(11.)).child("最近打开"))
+                        .child(
+                            div()
+                                .text_color(p.fg3)
+                                .text_size(px(11.))
+                                .child(self.tool_text("welcome_recent")),
+                        )
                         .children(
                             self.settings
                                 .recent
@@ -3756,7 +3830,7 @@ impl MainView {
                     .ghost()
                     .small()
                     .icon(IconName::ArrowUp)
-                    .tooltip("上一级")
+                    .tooltip(self.tool_text("go_up"))
                     .disabled(a.cwd.is_empty())
                     .on_click(cx.listener(|this, _, _, cx| this.go_up_or_out(cx))),
             )
@@ -3812,19 +3886,24 @@ impl MainView {
             return v_flex()
                 .gap_1()
                 .child(
-                    div()
-                        .text_size(px(14.))
-                        .child(format!("已选 {} 项", picked.len())),
+                    div().text_size(px(14.)).child(
+                        self.tool_text("selection_count")
+                            .replace("{count}", &picked.len().to_string()),
+                    ),
                 )
-                .child(div().text_color(p.fg3).child("点“解压所选”只解压这些项目"))
+                .child(
+                    div()
+                        .text_color(p.fg3)
+                        .child(self.tool_text("selection_extract_hint")),
+                )
                 .into_any_element();
         }
         match self.selected_row() {
             Some(row) => {
                 let kind = match row.kind {
-                    RowKind::Dir => "文件夹".to_string(),
+                    RowKind::Dir => self.tool_text("entry_folder").to_string(),
                     RowKind::File => rz_app::preview::type_name(&row.name),
-                    RowKind::Link => "链接".to_string(),
+                    RowKind::Link => self.tool_text("entry_link").to_string(),
                 };
                 let picture = self
                     .preview
@@ -3900,24 +3979,40 @@ impl MainView {
                     .child(
                         v_flex()
                             .gap_2()
-                            .child(kv("原始大小", format_size(row.size)))
+                            .child(kv(
+                                self.tool_text("detail_original_size"),
+                                format_size(row.size),
+                            ))
                             // Folders have no packed size of their own.
                             .when_some(
                                 row.packed.filter(|_| row.kind != RowKind::Dir),
-                                |d, packed| d.child(kv("压缩后", format_size(packed))),
+                                |d, packed| {
+                                    d.child(kv(
+                                        self.tool_text("detail_packed_size"),
+                                        format_size(packed),
+                                    ))
+                                },
                             )
                             .when_some(
                                 compression_ratio(row.size, row.packed)
                                     .filter(|_| row.kind != RowKind::Dir),
-                                |d, r| d.child(kv("节省", r)),
+                                |d, r| d.child(kv(self.tool_text("detail_saved"), r)),
                             )
                             .when_some(row.modified, |d, t| {
-                                d.child(kv("修改时间", crate::local_time(t)))
+                                d.child(kv(self.tool_text("detail_modified"), crate::local_time(t)))
                             })
                             .when(row.kind == RowKind::Dir, |d| {
-                                d.child(kv("文件数", row.items.to_string()))
+                                d.child(kv(
+                                    self.tool_text("detail_file_count"),
+                                    row.items.to_string(),
+                                ))
                             })
-                            .when(row.encrypted, |d| d.child(kv("加密", "是".into()))),
+                            .when(row.encrypted, |d| {
+                                d.child(kv(
+                                    self.tool_text("detail_encrypted"),
+                                    self.tool_text("common_yes").into(),
+                                ))
+                            }),
                     )
                     .child(
                         Button::new("extract-this")
@@ -3925,7 +4020,7 @@ impl MainView {
                             .w_full()
                             .h(px(36.))
                             .icon(gpui_kit::assets::IconName::ArrowDownToLine)
-                            .label("解压此项")
+                            .label(self.tool_text("detail_extract_item"))
                             .on_click(
                                 cx.listener(|this, _, window, cx| this.extract(true, window, cx)),
                             ),
@@ -3963,22 +4058,32 @@ impl MainView {
                                 ),
                         )
                         .child(
-                            div()
-                                .text_color(p.fg3)
-                                .child(format!("{} 压缩包", a.format.to_uppercase())),
+                            div().text_color(p.fg3).child(
+                                self.tool_text("detail_archive_type")
+                                    .replace("{format}", &a.format.to_uppercase()),
+                            ),
                         ),
                 )
                 .child(
                     v_flex()
                         .gap_2()
-                        .child(kv("文件数", group_digits(a.tree.total_files() as u64)))
-                        .child(kv("原始大小", format_size(a.tree.total_size())))
+                        .child(kv(
+                            self.tool_text("detail_file_count"),
+                            group_digits(a.tree.total_files() as u64),
+                        ))
+                        .child(kv(
+                            self.tool_text("detail_original_size"),
+                            format_size(a.tree.total_size()),
+                        ))
                         .when_some(a.tree.total_packed(), |d, packed| {
-                            d.child(kv("压缩后", format_size(packed)))
+                            d.child(kv(
+                                self.tool_text("detail_packed_size"),
+                                format_size(packed),
+                            ))
                         })
                         .when_some(
                             compression_ratio(a.tree.total_size(), a.tree.total_packed()),
-                            |d, r| d.child(kv("节省", r)),
+                            |d, r| d.child(kv(self.tool_text("detail_saved"), r)),
                         ),
                 )
                 .child(
@@ -3987,7 +4092,7 @@ impl MainView {
                         .w_full()
                         .h(px(36.))
                         .icon(gpui_kit::assets::IconName::ArrowDownToLine)
-                        .label("解压全部")
+                        .label(self.tool_text("detail_extract_all"))
                         .on_click(
                             cx.listener(|this, _, window, cx| this.extract(false, window, cx)),
                         ),
@@ -4014,7 +4119,12 @@ impl MainView {
             .border_t_1()
             .border_color(p.line)
             .bg(p.panel)
-            .child(div().text_color(p.fg3).text_size(px(11.)).child("任务"))
+            .child(
+                div()
+                    .text_color(p.fg3)
+                    .text_size(px(11.))
+                    .child(self.tool_text("status_task")),
+            )
             .children(
                 self.task_view
                     .iter()
@@ -4097,7 +4207,7 @@ impl MainView {
                             Button::new(("task-pw", id as usize))
                                 .primary()
                                 .xsmall()
-                                .label("输入密码")
+                                .label(self.tool_text("task_enter_password"))
                                 .on_click(cx.listener(move |this, _, window, cx| {
                                     this.ask_password(PasswordTarget::Task(id), false, window, cx);
                                 })),
@@ -4124,9 +4234,9 @@ impl MainView {
                                 .ghost()
                                 .xsmall()
                                 .label(if t.state == TaskState::Paused {
-                                    "继续"
+                                    self.tool_text("task_continue")
                                 } else {
-                                    "暂停"
+                                    self.tool_text("task_pause")
                                 })
                                 .on_click(
                                     cx.listener(move |this, _, _, cx| this.toggle_pause(id, cx)),
@@ -4137,7 +4247,7 @@ impl MainView {
                                 .ghost()
                                 .xsmall()
                                 .icon(IconName::Close)
-                                .tooltip("取消")
+                                .tooltip(self.tool_text("task_cancel"))
                                 .on_click(
                                     cx.listener(move |this, _, _, cx| this.cancel_task(id, cx)),
                                 ),
@@ -4163,12 +4273,15 @@ impl MainView {
     fn render_status(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let p = palette(cx);
         let left = match (&self.loading, self.current()) {
-            (Some(path), _) => div().text_color(p.fg2).child(format!(
-                "正在打开 {}…",
-                path.file_name()
-                    .map(|n| n.to_string_lossy().into_owned())
-                    .unwrap_or_default()
-            )),
+            (Some(path), _) => div().text_color(p.fg2).child(
+                self.tool_text("status_opening").replace(
+                    "{name}",
+                    &path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_default(),
+                ),
+            ),
             // The list of recent archives has its own description, not the open archive's.
             (None, _) if matches!(self.page, Page::Favorites | Page::Passwords) => {
                 let n = if self.page == Page::Favorites {
@@ -4189,9 +4302,12 @@ impl MainView {
                 let total = self.recent.items.len();
                 let missing = self.recent.items.iter().filter(|i| !i.exists).count();
                 div().text_color(p.fg2).child(if missing > 0 {
-                    format!("{total} 个最近的压缩包 · {missing} 个已移走")
+                    self.tool_text("status_recent_missing")
+                        .replace("{total}", &total.to_string())
+                        .replace("{missing}", &missing.to_string())
                 } else {
-                    format!("{total} 个最近的压缩包")
+                    self.tool_text("status_recent_count")
+                        .replace("{total}", &total.to_string())
                 })
             }
             (None, _) if self.page == Page::Folder => {
@@ -4201,7 +4317,11 @@ impl MainView {
                     .as_deref()
                     .and_then(|d| d.file_name().map(|n| n.to_string_lossy().into_owned()))
                     .unwrap_or_else(|| "/".into());
-                div().text_color(p.fg2).child(format!("{name} · {n} 项"))
+                div().text_color(p.fg2).child(
+                    self.tool_text("status_folder_count")
+                        .replace("{name}", &name)
+                        .replace("{count}", &n.to_string()),
+                )
             }
             (None, Some(a)) => {
                 let t = &a.tree;
@@ -4228,16 +4348,17 @@ impl MainView {
                                     .size_4(),
                                 )
                                 .child(if ok {
-                                    "校验通过"
+                                    self.tool_text("status_check_passed")
                                 } else {
-                                    "校验未通过"
+                                    self.tool_text("status_check_failed")
                                 }),
                         )
                     })
                     .child(
-                        div()
-                            .font_family(mono.clone())
-                            .child(format!("{} 项", group_digits(t.total_files() as u64))),
+                        div().font_family(mono.clone()).child(
+                            self.tool_text("status_entry_count")
+                                .replace("{count}", &group_digits(t.total_files() as u64)),
+                        ),
                     )
                     .child(
                         div()
@@ -4260,14 +4381,18 @@ impl MainView {
                                 .text_color(p.accent)
                                 .font_family(mono)
                                 .child(if n < 10. {
-                                    format!("压缩率 {n:.1}%")
+                                    self.tool_text("status_compression_ratio")
+                                        .replace("{ratio}", &format!("{n:.1}"))
                                 } else {
-                                    format!("压缩率 {n:.0}%")
+                                    self.tool_text("status_compression_ratio")
+                                        .replace("{ratio}", &format!("{n:.0}"))
                                 }),
                         )
                     })
             }
-            (None, None) => div().text_color(p.fg3).child("就绪"),
+            (None, None) => div()
+                .text_color(p.fg3)
+                .child(self.tool_text("status_ready")),
         };
         h_flex()
             .id("status")
@@ -4288,13 +4413,17 @@ impl MainView {
                         .small()
                         .icon(IconName::ArrowDown)
                         .text_color(p.accent)
-                        .label(format!("新版本 {} · 更新", u.version))
+                        .label(
+                            self.tool_text("status_new_version")
+                                .replace("{version}", &u.version.to_string()),
+                        )
                         .on_click(cx.listener(|this, _, _, cx| this.install_update(cx))),
                 ),
                 UpdateState::Downloading(u) => d.child(
-                    div()
-                        .text_color(p.fg2)
-                        .child(format!("正在下载 {}…", u.version)),
+                    div().text_color(p.fg2).child(
+                        self.tool_text("status_downloading")
+                            .replace("{version}", &u.version.to_string()),
+                    ),
                 ),
             })
             .when_some(
@@ -4310,7 +4439,7 @@ impl MainView {
                             .when(encrypted, |d| {
                                 d.child("·")
                                     .child(Icon::new(gpui_kit::assets::IconName::Lock).size_3())
-                                    .child("已加密")
+                                    .child(self.tool_text("encrypted_badge"))
                             }),
                     )
                 },

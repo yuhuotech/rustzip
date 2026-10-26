@@ -22,6 +22,79 @@ task_done	完成	Finished
 task_cancelled	已取消	Cancelled
 task_failed	失败	Failed
 task_remaining	剩余 {time}	{time} remaining
+task_enter_password	输入密码	Enter password
+task_continue	继续	Resume
+task_pause	暂停	Pause
+task_cancel	取消	Cancel
+search_archive	在压缩包内搜索	Search in archive
+dialog_open_archive	打开压缩包	Open archive
+dialog_choose_sources	选择要压缩的文件或文件夹	Select files or folders to compress
+dialog_extract_to	解压到这里	Extract here
+dialog_add_to_archive	添加到压缩包	Add to archive
+notice_folder_open_failed	打不开这个文件夹：{error}	Could not open this folder: {error}
+notice_safe_run	为了安全，不直接打开程序和脚本；请在文件管理器里确认来源再运行。	For safety, programs and scripts are not opened directly. Check their source in your file manager before running them.
+notice_select_item	先在列表里选一个文件或文件夹。	Select a file or folder from the list first.
+notice_select_file	先在列表里选一个文件。	Select a file from the list first.
+notice_copied_paths	已复制 {count} 个路径	Copied {count} paths
+notice_read_only	这种格式的压缩包不能修改。	This archive format is read-only.
+notice_preview_file	预览只能用于文件。	Preview is only available for files.
+notice_prepare_preview	正在准备 {name}…	Preparing {name}…
+notice_external_edit_writeback	已用系统程序打开；保存后会自动写回压缩包。	Opened in the system app. Saved changes will be written back to the archive.
+notice_external_read_only	已用系统程序打开；这种压缩包只读，改动不会写回。	Opened in the system app. This archive is read-only, so changes will not be written back.
+notice_preview_too_large	文件太大，不适合预览；请用“解压到…”取出来。	This file is too large to preview. Extract it to view.
+task_test_passed	{task}通过：{count} 个条目没有发现问题	{task} passed: no issues found in {count} entries
+task_edit_complete	{task}完成：压缩包现在有 {count} 项	{task} complete: the archive now has {count} items
+task_complete_count	{task}完成：{count} 个文件，{size}	{task} complete: {count} files, {size}
+task_password_needed	{task}需要密码	{task} needs a password
+task_failed_detail	{task}失败：{reason}	{task} failed: {reason}
+open_archive_tooltip	打开压缩包	Open archive
+encrypted_badge	已加密	Encrypted
+archive_read_only	{format} 压缩包只读，不能添加、重命名或删除	{format} archives are read-only. You cannot add, rename or delete items.
+toolbar_extract	解压到…	Extract to…
+toolbar_add	添加	Add
+toolbar_test	测试	Test
+toolbar_rename	重命名	Rename
+toolbar_delete	删除	Delete
+toolbar_preview	预览	Preview
+settings_tooltip	设置	Settings
+welcome_drag	把压缩包或文件拖到窗口里，或从下面开始	Drop an archive or files here, or start below.
+welcome_open_archive	打开压缩包	Open archive
+welcome_new_archive	新建压缩	Create archive
+welcome_recent	最近打开	Recently opened
+selection_count	已选 {count} 项	{count} selected
+selection_extract_hint	点“解压所选”只解压这些项目。	Choose “Extract selected” to extract only these items.
+entry_folder	文件夹	Folder
+entry_link	链接	Link
+detail_original_size	原始大小	Original size
+detail_packed_size	压缩后	Compressed size
+detail_saved	节省	Saved
+detail_modified	修改时间	Modified
+detail_file_count	文件数	Files
+detail_encrypted	加密	Encrypted
+common_yes	是	Yes
+detail_extract_item	解压此项	Extract this item
+detail_archive_type	{format} 压缩包	{format} archive
+detail_extract_all	解压全部	Extract all
+status_task	任务	Tasks
+status_opening	正在打开 {name}…	Opening {name}…
+status_entry_count	{count} 项	{count} items
+status_check_passed	校验通过	Verified
+status_check_failed	校验未通过	Verification failed
+status_compression_ratio	压缩率 {ratio}%	Compressed to {ratio}% of original
+status_ready	就绪	Ready
+status_new_version	新版本 {version} · 更新	Update available: {version}
+status_downloading	正在下载 {version}…	Downloading {version}…
+go_up	上一级	Go up
+status_recent_missing	{total} 个最近的压缩包 · {missing} 个已移走	{total} recent archives · {missing} missing
+status_recent_count	{total} 个最近的压缩包	{total} recent archives
+status_folder_count	{name} · {count} 项	{name} · {count} items
+rename_placeholder	新名称	New name
+rename_invalid	名称不能为空，也不能含有 / \\ : * ? " < > |	The name cannot be empty or contain / \\ : * ? " < > |.
+rename_complete	已重命名	Renamed
+rename_exists	这个文件夹里已经有同名文件，请换一个名字。	A file with that name already exists in this folder. Choose another name.
+rename_failed	重命名失败：{error}	Could not rename: {error}
+trash_complete	已移到废纸篓 / 回收站	Moved to Trash / Recycle Bin
+trash_failed	没能删除：{error}	Could not delete: {error}
 view_list	列表	List
 view_icons	小图标	Small icons
 add_location	添加位置…	Add location…
