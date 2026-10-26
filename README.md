@@ -62,7 +62,7 @@ RustZIP 是一个用 Rust 开发的压缩管理软件，支持 Windows、macOS �
 - **完成后定位结果**：解压完成后在文件管理器中打开并选中刚解出的内容。
 - **中日韩文件名**：ZIP 自动识别 GBK / Shift-JIS / EUC-KR 等编码，也可手动指定。
 - **压缩包内操作**：添加、删除、重命名、选择性解压、预览；改动先在旁边重新打包并校验，通过后才替换，失败原包不动。
-- **格式转换与修复**：流式转换为 ZIP / 7z / tar 系七种格式；ZIP / 7z 尽力抢救可读条目并报告跳过项。
+- **格式转换与修复**：流式转换为 ZIP / 7z / tar 系八种格式；ZIP / 7z 尽力抢救可读条目并报告跳过项。
 - **任务队列与任务记录**：并发、暂停 / 继续 / 取消、速度与剩余时间；结束的任务进入「任务记录」并保存在本地，菜单上有进行中、失败、完成的角标。
 - **密码本**：用系统钥匙串保存，只在需要时读取，默认关闭「记住密码」。
 - **常用位置**：系统目录加上打开过压缩包的目录，列表与图标两种视图。
@@ -108,15 +108,20 @@ macOS 的 `.app / .dmg`、Windows 安装脚本和 Linux 压缩包的打包文件
 ### 命令行
 
 ```text
-rz a <archive> <path>... [-l 0-9] [-p password] [-t threads]   创建
-rz l <archive> [-p password]                                   列出内容
-rz x <archive> [-o dir] [-p password] [-t threads] [-y|-n]     解压
-rz t <archive> [-p password]                                   校验完整性
+	rz a <archive> <path>... [-l 0-9] [-p -|@file] [-t threads] [-v size] [-d size] [-s size|off] 创建
+rz l <archive> [-p -|@file]                                    列出内容
+rz x <archive> [-o dir] [-p -|@file] [-t threads] [-y|-n]      解压
+rz t <archive> [-p -|@file]                                    校验完整性
+	rz h <file>... [-a sha256|blake3]                              计算 SHA-256 / BLAKE3
 ```
 
-- 创建的格式由扩展名决定：`.zip .7z .tar .tar.gz .tar.xz .tar.zst .tar.bz2`（及 `.tgz .txz .tzst .tbz2`），单文件 `.gz .xz .zst .bz2`。
+- 创建的格式由扩展名决定：`.zip .7z .tar .tar.gz .tar.xz .tar.zst .tar.bz2 .tar.lz4`（及 `.tgz .txz .tzst .tbz2`），单文件 `.gz .xz .zst .bz2 .lz4`。LZ4 使用标准 Frame 格式。
 - 解压遇到同名默认保留两者并加序号；`-y` 覆盖，`-n` 跳过已有。
 - `-e` 指定文件名编码。
+- 加密压缩包密码使用 `-p -` 隐藏提示输入，或 `-p @文件路径` 读取该文件的第一行；不接受命令行明文密码。
+- `-v` 为 ZIP / 7z 设置最大分卷大小，如 `700M` 或 `2G`；留空时创建单文件归档。
+- `-d` 为 7z 指定 LZMA2 字典大小；`-s` 指定固实块最大解压大小，`-s 0` 或 `-s off` 为每个文件分别编码。
+- 只读长尾格式包括 ISO 9660、CAB、CPIO、AR（DEB 容器）；RAR 仅在启用可选 `rar` feature 的构建中可读。
 
 ### 桌面应用
 
@@ -166,8 +171,9 @@ RZ_SHOT_DIR=/某个文件夹 cargo run --release -p rustzip-gui --example screen
 |---|---|
 | zip 读写（含 AES-256 加密） | 已完成 |
 | 7z 读写（固实块、LZMA2 多线程、AES-256、文件名加密） | 已完成 |
-| tar 及 tar.gz / tar.xz / tar.zst / tar.bz2 读写 | 已完成 |
-| 单文件格式 .gz / .xz / .zst / .bz2 读写 | 已完成 |
+| tar 及 tar.gz / tar.xz / tar.zst / tar.bz2 / tar.lz4 读写 | 已完成 |
+| 单文件格式 .gz / .xz / .zst / .bz2 / .lz4 读写 | 已完成 |
+| ZIP / 7z 分卷创建与读取（容量可配置、缺卷明确报错） | 本机往返、取消、缺卷和不覆盖用例通过；外部工具及 Windows 验收待完成 |
 | rar 只读（可选 feature `rar`，默认关闭） | 已完成 |
 | 安全解压（路径穿越、压缩炸弹、符号链接、setuid） | 已完成 |
 | 取消、进度回调、原子写入（失败不留半成品） | 已完成 |
@@ -184,7 +190,7 @@ RZ_SHOT_DIR=/某个文件夹 cargo run --release -p rustzip-gui --example screen
 | 选择性解压（按文件或文件夹，各格式含固实块与并行路径） | 已完成 |
 | 压缩包内添加 / 删除（zip、7z、tar 系列，校验后整体替换） | 已完成（`rz-app::modify`） |
 | 预览（图片在详情栏显示；其他文件解到临时目录用系统程序打开，程序和脚本不打开） | 已完成，原地增量修改未做 |
-| 格式转换（ZIP / 7z / tar 系七种目标，独立源 / 目标密码，校验后另存） | 已完成，符号链接暂不支持 |
+| 格式转换（ZIP / 7z / tar 系八种目标，独立源 / 目标密码，校验后另存） | 已完成，符号链接暂不支持 |
 | ZIP / 7z 修复（尽力抢救可读条目并报告跳过项） | 已完成，严重损坏不保证恢复 |
 | 密码本（系统钥匙串；「记住密码」默认关闭） | 已完成 |
 | 常用位置（系统目录 + 自动记录；列表 / 小图标视图） | 已完成 |
@@ -196,7 +202,12 @@ RZ_SHOT_DIR=/某个文件夹 cargo run --release -p rustzip-gui --example screen
 | 应用图标、macOS 打包、Windows 安装脚本、Linux 压缩包 | 图标和 macOS 打包已在本机跑通；Windows / Linux 打包和发布工作流**未实际运行过** |
 | 文件关联与右键菜单 | macOS 仅「打开方式」；Windows 注册表和 Linux（Dolphin / Nemo）菜单已写好，未实机验证；Finder 右键与 Quick Look 未做 |
 | 7z 分块并行解压、bzip2 多线程、大文件分块 deflate | 未开始 |
-| 分卷 | 未开始 |
+| ZIP / 7z 分卷 | 已实现首版，外部工具及三平台验收待完成 |
+| 文件校验和 | 已完成；`rz h` 与 GUI 文件操作计算 SHA-256 / BLAKE3，流式处理支持取消和进度 |
+| 7z 高级压缩参数 | 字典大小、固实块大小和非固实模式已接入 CLI / GUI，并按内存预算限制并行度 |
+| 应用内预览 | 图片与 64 KiB 内白名单 UTF-8 纯文本已接入；PDF / 音视频仍用系统程序打开 |
+| 只读长尾格式 | ISO 9660、CAB、CPIO、AR 已接入；WIM、DMG、CHM、NSIS 等仍待实现 |
+| 任务完成动作 | 可选择解压完成后显示目录；系统通知默认关闭，可在设置中启用 |
 
 ## 参与贡献
 

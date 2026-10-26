@@ -1,0 +1,26 @@
+name: Install native archive build dependencies
+description: Install the static libarchive prerequisites used by rz-ffi.
+runs:
+  using: composite
+  steps:
+    - name: Install Linux development libraries
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake clang libclang-dev pkg-config libb2-dev libxml2-dev \
+          zlib1g-dev libbz2-dev liblzma-dev libzstd-dev liblz4-dev libacl1-dev libssl-dev
+
+    - name: Install macOS libraries
+      if: runner.os == 'macOS'
+      shell: bash
+      run: brew install cmake pkg-config libb2 libxml2 zlib bzip2 xz zstd lz4
+
+    - name: Install Windows libraries
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        choco install llvm -y --no-progress
+        "$env:ProgramFiles\LLVM\bin" >> $env:GITHUB_PATH
+        vcpkg install zlib:x64-windows bzip2:x64-windows liblzma:x64-windows `
+          zstd:x64-windows lz4:x64-windows openssl:x64-windows

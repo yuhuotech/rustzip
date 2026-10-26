@@ -132,3 +132,47 @@
 - Vercel Preview / Production 继续使用 Neon Postgres,Preview 使用隔离分支;正式域名和服务变量按部署文档配置。
 - 上报协议与去重规则由同一服务层实现,两种数据库各自保留 Drizzle schema 和迁移;本地 SQLite 数据不上传、不与线上同步。
 - Vercel build 在 Next.js build 前校验 Neon URL 与统计 HMAC 密钥并幂等应用 Postgres migrations;缺少配置或迁移失败时阻止部署。
+
+## D17 LZ4 使用标准 Frame 格式
+
+- `.lz4` 与 `.tar.lz4` 使用 LZ4 Frame 格式，读写均采用流式接口；不接受仅凭扩展名推断内容。
+- 使用纯 Rust `lz4_flex` 并保留默认安全编码、解码和 checked-decode 特性；许可证为 MIT。Frame 支持所需的 `twox-hash` 许可证也为 MIT，符合项目依赖许可要求。
+- 单文件 `.lz4` 由核心和 CLI 创建；GUI 的多文件压缩与转换入口提供 `.tar.lz4`。
+
+## D18 ZIP 与 7z 分卷命名和发布
+
+- 第一版分卷只用于 ZIP 与 7z；调用方显式设置每卷大小，默认不分卷。ZIP 按标准 split archive 输出 `.z01`、`.z02`…及最后的 `.zip`；7z 输出 `.7z.001`、`.7z.002`…，读取均要求卷序连续且完整。
+- 分卷按完整归档记录边界安排；ZIP 单条目数据允许跨卷，文件头和中央目录记录不跨卷。小于分卷阈值的归档仍输出普通单文件。
+- 所有卷先写到目标目录内独占的临时文件并校验，再用拒绝覆盖的方式逐个发布；任一卷发布失败时只清理仍可确认为本次创建的卷。读取端只在完整卷集存在时开放归档。
+- 分卷大小至少 64 KiB；ZIP 单卷最大 4 GiB - 1。达到格式字段上限时明确报错，不截断或静默改成单卷。
+- ZIP 多磁盘字段按 [PKWARE APPNOTE 6.3.9，第 4.3 和 8.5 节](https://www.pkware.com/documents/casestudies/APPNOTE.TXT) 编写。Windows 发布回滚用 `same-file`（MIT OR Unlicense）核对目标仍指向本次暂存文件；Unix 使用 device / inode 标识，避免误删被其他进程替换的目标。
+
+## D19 文件哈希使用流式 SHA-256 / BLAKE3
+
+- 文件哈希由 `rz-app` 提供，单次 256 KiB 读取同时更新选择的算法；不将文件整体载入内存，并支持取消和进度回调。
+- 默认计算 SHA-256 与 BLAKE3；CLI `rz h` 可通过 `-a` 选择一种。BLAKE3 依赖 `blake3`，许可证提供 Apache-2.0 选项，符合项目许可；不启用 rayon 和 mmap 特性，避免不受控的并行度或映射大文件。
+- GUI 在最近文件和常用位置的普通文件操作中提供同一哈希任务；目录不作为输入。完成后显示算法和摘要，任务受统一队列管理。
+- 归档完整性测试 `rz t` 继续验证归档后端提供的 CRC / 数据校验，不替代文件哈希命令。
+
+## D20 7z 高级压缩参数与内存预算
+
+- 7z 支持 LZMA2 字典大小和最大固实块大小；字典采用字节值，允许 4 KiB 至 64 MiB。自动模式沿用压缩级别对应的默认字典，预算不足时依次减半；显式值超过预算时返回资源限制错误。
+- 固实块大小未设置时保持一个归档级固实块；设置正数时按最大未压缩字节数切块，0 表示每个文件独立编码。分块时同时限制每块最多 4096 个文件，控制单块元数据规模。
+- LZMA2 并行线程、输入块缓存和估算编码工作集受 `CreateOptions::memory_budget` 限制；超过可用空间时降低线程数。CLI 使用 `-d size` 和 `-s size|off`，GUI 仅在选择 7z 时显示对应输入。
+
+## D21 长尾格式使用隔离的 libarchive 读取器
+
+- 首批通过 libarchive 只读支持 ISO 9660、CAB、CPIO 和 AR；DEB 容器按 AR 读取。libarchive 的格式注册只开启上述四种后端，不开启其 RAR、ZIP、7z 支持；只注册无压缩滤镜，避免解压器调用外部命令。
+- 原生调用封装在 `rz-ffi`，其余核心保持 `forbid(unsafe_code)`。`libarchive2-sys` 和 vendored libarchive 均采用 BSD-2-Clause；静态构建需 CMake、Clang/libclang 及平台压缩库开发文件。
+- libarchive 读取器标记为顺序访问、只读；不保留符号链接和特殊文件，统一作为跳过项交给现有安全解压策略。未验收格式不因 libarchive 可能支持而自动开放。
+
+## D22 CLI 通过应用层执行且不接收明文密码参数
+
+- CLI 的创建、列表、解压和完整性读取通过 `rz-app::cli`；CLI crate 不直接依赖 `rz-engine` 或 `rz-formats`。长操作使用应用层取消 token 和进度接口。
+- `-p -` 使用隐藏 TTY 提示，`-p @file` 读取密码文件的第一行且上限 4 KiB；不再接受明文密码作为参数。命令行使用 `ctrlc`（MIT OR Apache-2.0）处理 Ctrl+C，密码读取使用 `rpassword`（Apache-2.0）。
+- CLI 列表仍使用现有条目枚举接口，尚未提供取消和进度；这项留在后续工作中。
+
+## D23 桌面任务通知与完成后定位
+
+- 解压成功后可按设置在文件管理器中定位结果目录；系统通知作为单独开关，默认关闭。通知仅显示通用成功 / 失败状态，不传文件名、路径或文件内容。
+- 通知服务使用 `notify-rust`（MIT OR Apache-2.0），通过后台 executor 调用；通知失败不改变任务结果，也不阻塞 GUI。关机等高影响动作不包含在本决策中。

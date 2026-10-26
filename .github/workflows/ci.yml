@@ -23,6 +23,7 @@ jobs:
           toolchain: 1.96.0
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      - uses: ./.github/actions/native-archive-deps
       - run: cargo fmt --all --check
       # The GUI crates need a graphics stack; they are built in their own job.
       - run: cargo clippy --workspace --exclude rustzip-gui --exclude gpui-probe --all-targets -- -D warnings
@@ -46,6 +47,7 @@ jobs:
           toolchain: 1.96.0
           components: clippy
       - uses: Swatinem/rust-cache@v2
+      - uses: ./.github/actions/native-archive-deps
       - run: cargo clippy -p rustzip-gui --all-targets -- -D warnings
       - run: cargo test -p rustzip-gui
 
