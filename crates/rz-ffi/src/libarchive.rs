@@ -11,6 +11,7 @@ pub enum Format {
     Cab,
     Cpio,
     Iso9660,
+    Lha,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -56,6 +57,7 @@ impl Reader {
                     Format::Cab => sys::archive_read_support_format_cab(reader.as_ptr()),
                     Format::Cpio => sys::archive_read_support_format_cpio(reader.as_ptr()),
                     Format::Iso9660 => sys::archive_read_support_format_iso9660(reader.as_ptr()),
+                    Format::Lha => sys::archive_read_support_format_lha(reader.as_ptr()),
                 }
             };
             reader.check(code)?;

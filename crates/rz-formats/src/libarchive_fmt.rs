@@ -51,6 +51,7 @@ impl LibarchiveReader {
             NativeFormat::Cab => "cab",
             NativeFormat::Cpio => "cpio",
             NativeFormat::Iso9660 => "iso9660",
+            NativeFormat::Lha => "lha",
         }
     }
 }
@@ -347,13 +348,38 @@ mod tests {
     }
 
     #[test]
-    fn truncated_cab_cpio_and_iso_signatures_fail_cleanly() {
+    fn reads_lha_members_from_the_upstream_libarchive_fixture() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("sample.lzh");
+        std::fs::write(
+            &path,
+            include_bytes!("../tests/fixtures/longtail_lha_lh0.lzh"),
+        )
+        .unwrap();
+
+        let mut archive = crate::open(&path).unwrap();
+        assert_eq!(archive.format_name(), "lha");
+        let entries = archive.entries().unwrap();
+        assert!(entries.iter().any(|entry| entry.path == "file1"));
+        assert!(entries.iter().any(|entry| entry.path == "dir2/symlink1"));
+        let file = entries.iter().find(|entry| entry.path == "file1").unwrap();
+        let mut data = Vec::new();
+        archive.open(file).unwrap().read_to_end(&mut data).unwrap();
+        assert_eq!(
+            data,
+            b"                          file 1 contents\nhello\nhello\nhello\n"
+        );
+    }
+
+    #[test]
+    fn truncated_cab_cpio_lha_and_iso_signatures_fail_cleanly() {
         let temp = tempfile::tempdir().unwrap();
         let mut iso = vec![0u8; 32_774];
         iso[32_769..32_774].copy_from_slice(b"CD001");
         for (name, bytes) in [
             ("broken.cab", b"MSCF\0\0".to_vec()),
             ("broken.cpio", b"07070100".to_vec()),
+            ("broken.lzh", b"\x14\0-lh0-".to_vec()),
             ("broken.iso", iso),
         ] {
             let path = temp.path().join(name);

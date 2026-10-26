@@ -1,5 +1,5 @@
 //! Format backends for read/write ZIP, 7z, tar and single-file streams, plus
-//! read-only RAR, ISO 9660, CAB, CPIO and AR readers.
+//! read-only RAR, ISO 9660, CAB, CPIO, AR and LHA readers.
 
 mod codec;
 mod libarchive_fmt;
@@ -137,6 +137,10 @@ pub fn open(path: &Path) -> Result<Box<dyn ArchiveReader>> {
         Format::Iso9660 => Ok(Box::new(libarchive_fmt::LibarchiveReader::new(
             path,
             rz_ffi::libarchive::Format::Iso9660,
+        )?)),
+        Format::Lha => Ok(Box::new(libarchive_fmt::LibarchiveReader::new(
+            path,
+            rz_ffi::libarchive::Format::Lha,
         )?)),
         compressed => {
             let comp = compression_of(compressed).ok_or(Error::UnknownFormat)?;

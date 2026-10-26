@@ -12,6 +12,7 @@ pub enum Format {
     Cab,
     Cpio,
     Ar,
+    Lha,
     Xz,
     Zstd,
     Bzip2,
@@ -30,6 +31,7 @@ impl Format {
             Format::Cab => "cab",
             Format::Cpio => "cpio",
             Format::Ar => "ar",
+            Format::Lha => "lha",
             Format::Xz => "xz",
             Format::Zstd => "zstd",
             Format::Bzip2 => "bzip2",
@@ -63,6 +65,13 @@ pub fn sniff<R: Read + Seek>(r: &mut R) -> Result<Format> {
         Some(Format::Cab)
     } else if head.starts_with(b"!<arch>\n") {
         Some(Format::Ar)
+    } else if head.len() >= 7
+        && head[2] == b'-'
+        && matches!(head[3], b'l')
+        && matches!(head[4], b'h' | b'z')
+        && head[6] == b'-'
+    {
+        Some(Format::Lha)
     } else if head.starts_with(b"070701")
         || head.starts_with(b"070702")
         || head.starts_with(b"070707")
@@ -148,6 +157,13 @@ mod tests {
         assert_eq!(
             sniff(&mut Cursor::new(vec![0x71, 0xc7, 0, 0, 0, 0, 0, 0])).ok(),
             Some(Format::Cpio)
+        );
+        assert_eq!(
+            sniff(&mut Cursor::new(
+                include_bytes!("../tests/fixtures/longtail_lha_lh0.lzh").to_vec()
+            ))
+            .ok(),
+            Some(Format::Lha)
         );
         let mut iso = vec![0u8; 32_774];
         iso[32_769..32_774].copy_from_slice(b"CD001");

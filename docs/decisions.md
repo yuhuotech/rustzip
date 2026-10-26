@@ -215,3 +215,9 @@
 - 当前评估的纯 Rust Hayro renderer 使用 Apache-2.0 OR MIT，且禁止 unsafe，但默认 Flate fallback 将解码输出不断追加到 `Vec`，没有输出上限；可选的标准解码路径也调用无上限的 `read_to_end`。仅限制源文件字节数和最终像素数不足以防止解压炸弹，所以在渲染器实现可执行的解压输出硬上限前不接入。依据：[Hayro 渲染说明与许可证](https://github.com/LaurenzV/hayro)、[Flate 解码实现](https://github.com/LaurenzV/hayro/blob/main/hayro-syntax/src/filter/lzw_flate.rs)。
 - `pdfium-render` 的 Rust 绑定许可证为 MIT OR Apache-2.0，但不包含 PDFium 动态库，需额外下载、构建和跨平台打包原生二进制；因此本轮不选用。PDFium 的归档样本、运行时限制和包体成本需要单独评估。
 - 达到资源边界后，内置预览需清楚提示用户改用系统 PDF 阅读器；在满足上述限制之前继续由系统程序打开 PDF。
+
+## D31 LHA / LZH 只读后端
+
+- 在 D21 隔离的 libarchive reader 中新增 LHA/LZH 注册；只注册 LHA reader，不注册 7z、ZIP、RAR 或外部命令滤镜。
+- 格式嗅探检查头部方法字段 `-lh?- / -lz?- `，之后仍由 libarchive 验证实际结构。LHA 只读，链接条目仍交由通用安全策略跳过。
+- 回归 fixture 取自上游 libarchive 的 BSD-2-Clause LHA `-lh0-` 测试数据，覆盖目录、相对链接和普通文件；来源与内容记录在 `crates/rz-formats/tests/fixtures/README.md`。
