@@ -157,6 +157,9 @@ menu_extract_all	解压全部…	Extract all…
 menu_search_archive	在压缩包内搜索	Search in archive
 menu_close_tab	关闭标签页	Close tab
 menu_tools	工具	Tools
+close_tab	关闭标签页	Close tab
+task_progress	任务进度：{task}	Task progress: {task}
+archive_file_list	压缩包文件列表	Archive file list
 update_installed	新版本 {version} 已下载并通过签名验证，请按安装程序提示完成更新。	Version {version} was downloaded and signature-checked. Follow the installer instructions.
 update_failed	更新没有成功：{error}。可以稍后再试。	Update failed: {error}. You can try again later.
 passwords_cleared	已清除保存的密码。	Saved passwords cleared.

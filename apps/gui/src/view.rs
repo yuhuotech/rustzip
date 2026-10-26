@@ -15,7 +15,6 @@ use crate::{
     RowRename, SelectAllRows,
 };
 use gpui_kit::base::TestSupportExt as _;
-use gpui_kit::component::FocusableExt as _;
 use gpui_kit::component::button::*;
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::progress::Progress;
@@ -2717,6 +2716,7 @@ impl MainView {
                         .ghost()
                         .icon(IconName::Plus)
                         .tooltip(self.tool_text("open_archive_tooltip"))
+                        .accessibility_label(self.tool_text("open_archive_tooltip"))
                         .on_click(cx.listener(|this, _, window, cx| this.pick_archive(window, cx))),
                 ),
             )
@@ -2768,6 +2768,7 @@ impl MainView {
                 div()
                     .id(("close-open", ix))
                     .flex_none()
+                    .aria_label(self.tool_text("close_tab"))
                     .text_color(p.fg3)
                     .hover(|d| d.text_color(p.fg))
                     .child(Icon::new(IconName::Close).size_3())
@@ -2896,6 +2897,7 @@ impl MainView {
             .ghost()
             .icon(IconName::Settings)
             .tooltip(self.tool_text("settings_tooltip"))
+            .accessibility_label(self.tool_text("settings_tooltip"))
             .on_click(cx.listener(|this, _, _, cx| this.open_settings(cx)))
     }
 
@@ -3039,6 +3041,7 @@ impl MainView {
                         .child(
                             div()
                                 .id("files")
+                                .aria_label(self.tool_text("archive_file_list"))
                                 .flex_1()
                                 .min_h_0()
                                 // The table only knows right clicks on rows. Before it sees
@@ -3080,10 +3083,8 @@ impl MainView {
                                         .absolute()
                                         .size_full()
                                 })
-                                // No focus ring: Ctrl+A would flash one around the whole list.
                                 .child(
                                     DataTable::new(&self.table)
-                                        .focus_ring(false)
                                         .with_size(px(28.))
                                         .bordered(false),
                                 )
@@ -3895,6 +3896,7 @@ impl MainView {
                     .small()
                     .icon(IconName::ArrowUp)
                     .tooltip(self.tool_text("go_up"))
+                    .accessibility_label(self.tool_text("go_up"))
                     .disabled(a.cwd.is_empty())
                     .on_click(cx.listener(|this, _, _, cx| this.go_up_or_out(cx))),
             )
@@ -4312,6 +4314,7 @@ impl MainView {
                                 .xsmall()
                                 .icon(IconName::Close)
                                 .tooltip(self.tool_text("task_cancel"))
+                                .accessibility_label(self.tool_text("task_cancel"))
                                 .on_click(
                                     cx.listener(move |this, _, _, cx| this.cancel_task(id, cx)),
                                 ),
@@ -4319,7 +4322,13 @@ impl MainView {
                     }),
             )
             .when(!t.state.is_finished(), |d| {
-                d.child(Progress::new(("progress", id as usize)).value(pct))
+                d.child(
+                    Progress::new(("progress", id as usize))
+                        .value(pct)
+                        .accessibility_label(
+                            self.tool_text("task_progress").replace("{task}", &t.title),
+                        ),
+                )
             })
             .child(
                 div()
@@ -4577,7 +4586,11 @@ impl MainView {
                                 .child(self.tool_text("password_wrong")),
                         )
                     })
-                    .child(Input::new(&prompt.input).mask_toggle())
+                    .child(
+                        Input::new(&prompt.input)
+                            .mask_toggle()
+                            .aria_label(self.tool_text("password_placeholder")),
+                    )
                     .into_any_element(),
             ),
             buttons: vec![
@@ -5152,7 +5165,9 @@ impl MainView {
                             .text_size(px(12.))
                             .child(self.tool_text("compress_name_label")),
                     )
-                    .child(Input::new(&form.name)),
+                    .child(
+                        Input::new(&form.name).aria_label(self.tool_text("compress_name_label")),
+                    ),
             )
             .child(
                 v_flex()
@@ -5232,7 +5247,11 @@ impl MainView {
                                 .text_size(px(12.))
                                 .child(self.tool_text("compress_password_label")),
                         )
-                        .child(Input::new(&form.password).mask_toggle()),
+                        .child(
+                            Input::new(&form.password)
+                                .mask_toggle()
+                                .aria_label(self.tool_text("compress_password_label")),
+                        ),
                 )
             })
             .when(form.format.supports_volumes(), |d| {
@@ -5245,7 +5264,9 @@ impl MainView {
                                 .text_size(px(12.))
                                 .child(self.tool_text("volume_size")),
                         )
-                        .child(Input::new(&form.volume_size)),
+                        .child(
+                            Input::new(&form.volume_size).aria_label(self.tool_text("volume_size")),
+                        ),
                 )
             })
             .when(form.format == Format::SevenZ, |d| {
@@ -5262,7 +5283,10 @@ impl MainView {
                                         .text_size(px(12.))
                                         .child(self.tool_text("dict_size")),
                                 )
-                                .child(Input::new(&form.dictionary_size)),
+                                .child(
+                                    Input::new(&form.dictionary_size)
+                                        .aria_label(self.tool_text("dict_size")),
+                                ),
                         )
                         .child(
                             v_flex()
@@ -5274,7 +5298,10 @@ impl MainView {
                                         .text_size(px(12.))
                                         .child(self.tool_text("solid_size")),
                                 )
-                                .child(Input::new(&form.solid_block_size)),
+                                .child(
+                                    Input::new(&form.solid_block_size)
+                                        .aria_label(self.tool_text("solid_size")),
+                                ),
                         ),
                 )
             });
