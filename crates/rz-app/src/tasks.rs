@@ -55,6 +55,9 @@ pub enum JobSpec {
         file: PathBuf,
         algorithms: Vec<crate::hash::HashAlgorithm>,
     },
+    ScanDuplicates {
+        sources: Vec<PathBuf>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -66,6 +69,7 @@ pub enum JobKind {
     Test,
     Edit,
     Hash,
+    DuplicateScan,
 }
 
 impl JobSpec {
@@ -83,18 +87,22 @@ impl JobSpec {
             JobSpec::Test { .. } => JobKind::Test,
             JobSpec::Edit { .. } => JobKind::Edit,
             JobSpec::Hash { .. } => JobKind::Hash,
+            JobSpec::ScanDuplicates { .. } => JobKind::DuplicateScan,
         }
     }
 
     /// A short name for the task list: the archive's file name.
     pub fn title(&self) -> String {
-        let path = match self {
+        let path: &std::path::Path = match self {
             JobSpec::Transform { archive, .. } => archive,
             JobSpec::Compress { output, .. } => output,
             JobSpec::Extract { archive, .. }
             | JobSpec::Test { archive, .. }
             | JobSpec::Edit { archive, .. } => archive,
             JobSpec::Hash { file, .. } => file,
+            JobSpec::ScanDuplicates { sources } => sources
+                .first()
+                .map_or(std::path::Path::new("files"), PathBuf::as_path),
         };
         path.file_name()
             .map(|n| n.to_string_lossy().into_owned())
@@ -139,6 +147,7 @@ impl JobSpec {
             }
             JobSpec::Compress { .. } => None,
             JobSpec::Hash { .. } => None,
+            JobSpec::ScanDuplicates { .. } => None,
         }
     }
 }
@@ -212,6 +221,8 @@ pub struct Summary {
     /// Recovery details remain inspectable after the completion toast disappears.
     pub recovery: Option<rz_engine::TransformReport>,
     pub hashes: Vec<crate::hash::HashResult>,
+    /// Duplicate groups found by the optional pre-compression scan.
+    pub duplicates: Vec<crate::duplicates::DuplicateGroup>,
     pub files: u64,
     pub bytes: u64,
     /// The archive that was created, or the folder files were extracted to.
@@ -708,6 +719,7 @@ fn run(
                 elapsed: started.elapsed(),
                 recovery: (*recover).then_some(rep),
                 hashes: Vec::new(),
+                duplicates: Vec::new(),
             })
         }
         JobSpec::Compress {
@@ -736,6 +748,7 @@ fn run(
                 elapsed: started.elapsed(),
                 recovery: None,
                 hashes: Vec::new(),
+                duplicates: Vec::new(),
             })
         }
         JobSpec::Hash { file, algorithms } => {
@@ -749,6 +762,27 @@ fn run(
                 elapsed: started.elapsed(),
                 recovery: None,
                 hashes,
+                duplicates: Vec::new(),
+            })
+        }
+        JobSpec::ScanDuplicates { sources } => {
+            let duplicates = crate::duplicates::find_duplicates(sources, token, &mut sink)?;
+            let files = duplicates
+                .iter()
+                .map(|group| group.paths.len() as u64)
+                .sum();
+            let bytes = duplicates.iter().fold(0u64, |total, group| {
+                total.saturating_add(group.size.saturating_mul(group.paths.len() as u64))
+            });
+            Ok(Summary {
+                files,
+                bytes,
+                output: PathBuf::new(),
+                reveal: PathBuf::new(),
+                elapsed: started.elapsed(),
+                recovery: None,
+                hashes: Vec::new(),
+                duplicates,
             })
         }
         JobSpec::Extract {
@@ -788,6 +822,7 @@ fn run(
                 elapsed: started.elapsed(),
                 recovery: None,
                 hashes: Vec::new(),
+                duplicates: Vec::new(),
             })
         }
         JobSpec::Edit {
@@ -814,6 +849,7 @@ fn run(
                 elapsed: started.elapsed(),
                 recovery: None,
                 hashes: Vec::new(),
+                duplicates: Vec::new(),
             })
         }
         JobSpec::Test {
@@ -862,6 +898,7 @@ fn run(
                 elapsed: started.elapsed(),
                 recovery: None,
                 hashes: Vec::new(),
+                duplicates: Vec::new(),
             })
         }
     }

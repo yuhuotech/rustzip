@@ -7,6 +7,7 @@
 
 pub mod browse;
 pub mod cli;
+pub mod duplicates;
 pub mod hash;
 pub mod history;
 pub mod locations;

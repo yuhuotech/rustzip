@@ -115,3 +115,17 @@ task_notifications	系统通知	System notifications
 task_notifications_hint	任务完成或失败时发送简短通知，不包含文件名或路径。	Send a short notification when a task finishes or fails; it contains no file names or paths.
 notification_done	后台任务已完成	A background task finished
 notification_failed	后台任务失败	A background task failed
+duplicate_scan	重复文件检查	Duplicate file scan
+duplicate_none	没有发现内容相同的文件，可以继续压缩。	No identical files found. You can continue compressing.
+duplicate_found	发现 {groups} 组重复文件（多出的 {files} 个文件共 {size}）。继续压缩会保留全部文件。	Found {groups} duplicate groups ({files} extra files, {size}). Continuing keeps every file.
+duplicate_scan_limit	文件超过扫描上限，暂时无法检查重复。	The selected files exceed the scan limit, so duplicates could not be checked.
+duplicate_scan_limit_title	重复检查未完成	Duplicate scan incomplete
+duplicate_scan_limit_hint	可继续压缩所选文件；本次没有检查重复内容，也不会自动删除文件。	You can continue compressing these files. This run did not check for duplicates or remove anything.
+duplicate_prompt_title	发现重复文件	Duplicate files found
+duplicate_prompt_lead	内容哈希相同；继续压缩会保留全部文件，不会自动删除。	Files have matching content hashes. Continuing keeps every file; nothing is deleted.
+duplicate_continue	继续压缩	Continue compression
+duplicate_cancel	取消压缩	Cancel compression
+duplicate_cancelled	已取消压缩	Compression cancelled
+duplicate_group_files	{count} 个文件	{count} files
+duplicate_more	还有 {count} 组未显示	{count} more groups not shown
+duplicate_file_more	还有 {count} 个文件	{count} more files

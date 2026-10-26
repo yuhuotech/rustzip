@@ -207,6 +207,11 @@ pub enum Overlay {
     RecoveryReport(TaskId),
     Password(PasswordPrompt),
     Compress(CompressForm),
+    DuplicatePrompt {
+        job: JobSpec,
+        groups: Vec<rz_app::duplicates::DuplicateGroup>,
+        scan_incomplete: bool,
+    },
     Settings,
     /// Shown once, on the first start: what the anonymous statistics are.
     Privacy,
@@ -274,6 +279,8 @@ pub struct MainView {
     tests: HashMap<TaskId, PathBuf>,
     /// Which archive each running add/delete belongs to, to read it again afterwards.
     edits: HashMap<TaskId, PathBuf>,
+    /// Compression jobs waiting for their content-based duplicate scan.
+    duplicate_scans: HashMap<TaskId, JobSpec>,
 }
 
 /// Reads the whole entry list of an archive. Runs off the UI thread.
@@ -302,6 +309,17 @@ fn group_digits(n: u64) -> String {
     out
 }
 
+fn duplicate_short_name(path: &Path) -> String {
+    let name = path
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "?".into());
+    path.parent()
+        .and_then(Path::file_name)
+        .map(|parent| format!("{}/{}", parent.to_string_lossy(), name))
+        .unwrap_or(name)
+}
+
 fn format_speed(bps: u64) -> String {
     format!("{}/s", format_size(bps))
 }
@@ -323,6 +341,7 @@ pub(crate) fn kind_label(kind: JobKind) -> &'static str {
         JobKind::Convert => crate::text::tr("auto", "convert"),
         JobKind::Repair => crate::text::tr("auto", "repair"),
         JobKind::Hash => crate::text::tr("auto", "hash"),
+        JobKind::DuplicateScan => crate::text::tr("auto", "duplicate_scan"),
     }
 }
 
@@ -397,6 +416,7 @@ impl MainView {
             announced: HashSet::new(),
             tests: HashMap::new(),
             edits: HashMap::new(),
+            duplicate_scans: HashMap::new(),
         }
     }
 
@@ -1937,9 +1957,30 @@ impl MainView {
                         JobKind::Test => format!("{what}通过:{} 个条目没有发现问题", s.files),
                         JobKind::Edit => format!("{what}完成:压缩包现在有 {} 项", s.files),
                         JobKind::Hash => self.tool_text("hash_complete").to_string(),
+                        JobKind::DuplicateScan if s.duplicates.is_empty() => {
+                            self.tool_text("duplicate_none").to_string()
+                        }
+                        JobKind::DuplicateScan => {
+                            let files: usize = s
+                                .duplicates
+                                .iter()
+                                .map(rz_app::duplicates::DuplicateGroup::duplicate_count)
+                                .sum();
+                            let bytes = s.duplicates.iter().fold(0u64, |total, group| {
+                                total.saturating_add(
+                                    group.size.saturating_mul(group.duplicate_count() as u64),
+                                )
+                            });
+                            self.tool_text("duplicate_found")
+                                .replace("{groups}", &s.duplicates.len().to_string())
+                                .replace("{files}", &files.to_string())
+                                .replace("{size}", &format_size(bytes))
+                        }
                         _ => format!("{what}完成:{} 个文件,{}", s.files, format_size(s.bytes)),
                     };
-                    self.record_task(&t, &msg, cx);
+                    if t.kind != JobKind::DuplicateScan {
+                        self.record_task(&t, &msg, cx);
+                    }
                     let toast = if t.kind == JobKind::Hash {
                         let values = s
                             .hashes
@@ -1951,15 +1992,51 @@ impl MainView {
                     } else {
                         msg
                     };
-                    self.say(Notice::Info(toast), cx);
-                    self.send_task_notification("notification_done", cx);
+                    if t.kind != JobKind::DuplicateScan || !s.duplicates.is_empty() {
+                        self.say(Notice::Info(toast), cx);
+                    }
+                    if t.kind != JobKind::DuplicateScan {
+                        self.send_task_notification("notification_done", cx);
+                    }
                     if self.settings.open_folder_when_done && t.kind == JobKind::Extract {
                         cx.reveal_path(&s.reveal);
+                    }
+                    let pending_compression = if t.kind == JobKind::DuplicateScan {
+                        self.duplicate_scans.remove(&t.id)
+                    } else {
+                        None
+                    };
+                    if let Some(job) = pending_compression {
+                        if s.duplicates.is_empty() {
+                            self.submit(job, cx);
+                        } else {
+                            self.overlay = Some(Overlay::DuplicatePrompt {
+                                job,
+                                groups: s.duplicates.clone(),
+                                scan_incomplete: false,
+                            });
+                        }
                     }
                 }
                 // Retried as a new task once the password is in, so there is nothing to record.
                 (TaskState::Failed, Some(err), _) if err.code == ErrorCode::Password => {
                     self.say(Notice::Error(format!("{}需要密码", t.title)), cx);
+                }
+                (TaskState::Failed, Some(err), _)
+                    if t.kind == JobKind::DuplicateScan && err.code == ErrorCode::LimitExceeded =>
+                {
+                    if let Some(job) = self.duplicate_scans.remove(&t.id) {
+                        self.overlay = Some(Overlay::DuplicatePrompt {
+                            job,
+                            groups: Vec::new(),
+                            scan_incomplete: true,
+                        });
+                        self.say(
+                            Notice::Info(self.tool_text("duplicate_scan_limit").into()),
+                            cx,
+                        );
+                        continue;
+                    }
                 }
                 (TaskState::Failed, Some(err), _) => {
                     let why = crate::text::task_error(&self.settings.language, err);
@@ -1967,7 +2044,10 @@ impl MainView {
                     self.say(Notice::Error(format!("{}失败:{why}", t.title)), cx);
                     self.send_task_notification("notification_failed", cx);
                 }
-                (TaskState::Cancelled, _, _) => self.record_task(&t, "", cx),
+                (TaskState::Cancelled, _, _) => {
+                    self.duplicate_scans.remove(&t.id);
+                    self.record_task(&t, "", cx);
+                }
                 _ => {}
             }
         }
@@ -2273,8 +2353,9 @@ impl MainView {
             return;
         };
         let password = (f.format.supports_password() && !pw.is_empty()).then_some(pw);
+        let sources = f.sources.clone();
         let spec = JobSpec::Compress {
-            sources: f.sources.clone(),
+            sources: sources.clone(),
             output,
             format,
             opts: CreateOptions {
@@ -2289,7 +2370,30 @@ impl MainView {
             },
         };
         self.overlay = None;
-        self.submit(spec, cx);
+        let scan_id = self.tasks.submit(JobSpec::ScanDuplicates { sources });
+        self.duplicate_scans.insert(scan_id, spec);
+        self.notice = None;
+        self.refresh_tasks(cx);
+        self.ensure_polling(cx);
+        cx.notify();
+    }
+
+    pub fn continue_duplicate_compression(&mut self, cx: &mut Context<Self>) {
+        let Some(Overlay::DuplicatePrompt { job, .. }) = self.overlay.take() else {
+            return;
+        };
+        self.submit(job, cx);
+    }
+
+    pub fn cancel_duplicate_compression(&mut self, cx: &mut Context<Self>) {
+        if !matches!(self.overlay, Some(Overlay::DuplicatePrompt { .. })) {
+            return;
+        }
+        self.overlay = None;
+        self.say(
+            Notice::Info(self.tool_text("duplicate_cancelled").into()),
+            cx,
+        );
     }
 
     pub fn close_overlay(&mut self, cx: &mut Context<Self>) {
@@ -4201,6 +4305,11 @@ impl MainView {
             Overlay::RecoveryReport(id) => self.recovery_card(*id, cx),
             Overlay::Password(prompt) => self.password_card(prompt, cx),
             Overlay::Compress(form) => self.compress_card(form, cx),
+            Overlay::DuplicatePrompt {
+                job,
+                groups,
+                scan_incomplete,
+            } => self.duplicate_prompt_card(job, groups, *scan_incomplete, cx),
             Overlay::Settings => self.settings_card(cx),
             Overlay::Privacy => self.privacy_card(cx),
             Overlay::ConfirmDelete(paths) => self.delete_card(paths, cx),
@@ -4655,6 +4764,105 @@ impl MainView {
             ),
             body: Some(body.into_any_element()),
             buttons,
+        }
+        .render(&p)
+    }
+
+    fn duplicate_prompt_card(
+        &self,
+        _job: &JobSpec,
+        groups: &[rz_app::duplicates::DuplicateGroup],
+        scan_incomplete: bool,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let p = palette(cx);
+        let (title, lead) = if scan_incomplete {
+            (
+                self.tool_text("duplicate_scan_limit_title"),
+                self.tool_text("duplicate_scan_limit_hint"),
+            )
+        } else {
+            (
+                self.tool_text("duplicate_prompt_title"),
+                self.tool_text("duplicate_prompt_lead"),
+            )
+        };
+        let rows = groups.iter().take(8).map(|group| {
+            let names = group.paths.iter().take(4).map(|path| {
+                div()
+                    .overflow_hidden()
+                    .text_ellipsis()
+                    .font_family(cx.theme().mono_font_family.clone())
+                    .child(duplicate_short_name(path))
+            });
+            let body = v_flex()
+                .gap_1()
+                .children(names)
+                .when(group.paths.len() > 4, |d| {
+                    d.child(
+                        div().text_size(px(11.)).text_color(p.fg3).child(
+                            self.tool_text("duplicate_file_more")
+                                .replace("{count}", &(group.paths.len() - 4).to_string()),
+                        ),
+                    )
+                });
+            v_flex()
+                .gap_2()
+                .p_2()
+                .rounded(px(8.))
+                .bg(p.panel)
+                .border_1()
+                .border_color(p.line)
+                .child(
+                    h_flex()
+                        .justify_between()
+                        .text_size(px(12.))
+                        .text_color(p.fg2)
+                        .child(
+                            self.tool_text("duplicate_group_files")
+                                .replace("{count}", &group.paths.len().to_string()),
+                        )
+                        .child(format_size(group.size)),
+                )
+                .child(body)
+        });
+        let extra_groups = groups.len().saturating_sub(8);
+        let body = if scan_incomplete {
+            v_flex().into_any_element()
+        } else {
+            v_flex()
+                .gap_2()
+                .children(rows)
+                .when(extra_groups > 0, |d| {
+                    d.child(
+                        div().text_size(px(12.)).text_color(p.fg3).child(
+                            self.tool_text("duplicate_more")
+                                .replace("{count}", &extra_groups.to_string()),
+                        ),
+                    )
+                })
+                .into_any_element()
+        };
+        Dialog {
+            tone: Tone::Neutral,
+            icon: Icon::new(IconName::Search),
+            title: title.into(),
+            lead: Some(lead.into()),
+            body: Some(body),
+            buttons: vec![
+                Button::new("duplicate-cancel")
+                    .outline()
+                    .icon(IconName::Close)
+                    .label(self.tool_text("duplicate_cancel"))
+                    .on_click(cx.listener(|this, _, _, cx| this.cancel_duplicate_compression(cx)))
+                    .into_any_element(),
+                Button::new("duplicate-continue")
+                    .primary()
+                    .icon(IconName::Check)
+                    .label(self.tool_text("duplicate_continue"))
+                    .on_click(cx.listener(|this, _, _, cx| this.continue_duplicate_compression(cx)))
+                    .into_any_element(),
+            ],
         }
         .render(&p)
     }

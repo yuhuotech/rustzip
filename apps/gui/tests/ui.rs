@@ -134,16 +134,33 @@ fn row_names(cx: &mut TestAppContext, view: &Entity<MainView>) -> Vec<String> {
 }
 
 fn wait_for_tasks(cx: &mut TestAppContext, handle: WindowHandle<Root>, view: &Entity<MainView>) {
-    let ids: Vec<_> = cx.update(|cx| {
-        view.read(cx)
-            .tasks
-            .snapshot()
-            .iter()
-            .map(|t| t.id)
-            .collect()
-    });
-    for id in ids {
-        cx.update(|cx| view.read(cx).tasks.wait_for(id, WAIT));
+    for _ in 0..8 {
+        let ids: Vec<_> = cx.update(|cx| {
+            view.read(cx)
+                .tasks
+                .snapshot()
+                .iter()
+                .filter(|task| !task.state.is_finished())
+                .map(|task| task.id)
+                .collect()
+        });
+        if ids.is_empty() {
+            with_view(cx, handle, view, |v, _, cx| v.refresh_tasks(cx));
+            let pending = cx.update(|cx| {
+                view.read(cx)
+                    .tasks
+                    .snapshot()
+                    .iter()
+                    .any(|task| !task.state.is_finished())
+            });
+            if !pending {
+                return;
+            }
+            continue;
+        }
+        for id in ids {
+            cx.update(|cx| view.read(cx).tasks.wait_for(id, WAIT));
+        }
     }
     with_view(cx, handle, view, |v, _, cx| v.refresh_tasks(cx));
 }
@@ -1340,6 +1357,49 @@ fn email_share_preset_uses_adjustable_twenty_mib_zip_parts(cx: &mut TestAppConte
     wait_for_tasks(cx, handle, &view);
     assert!(tmp.path().join("custom.zip").is_file());
     assert!(!tmp.path().join("custom.z01").exists());
+}
+
+#[gpui_kit::test]
+fn compression_prompts_before_packing_content_duplicates(cx: &mut TestAppContext) {
+    let tmp = tempfile::tempdir().unwrap();
+    let src = tmp.path().join("data");
+    fs::create_dir_all(src.join("one")).unwrap();
+    fs::create_dir_all(src.join("two")).unwrap();
+    fs::write(src.join("one/a.txt"), b"same content").unwrap();
+    fs::write(src.join("two/b.txt"), b"same content").unwrap();
+    let output = tmp.path().join("data.zip");
+    let (handle, view) = open_window(cx, None);
+
+    with_view(cx, handle, &view, |v, window, cx| {
+        v.open_compress(vec![src.clone()], window, cx);
+        v.submit_compress(cx);
+    });
+    wait_for_tasks(cx, handle, &view);
+    cx.update(|cx| match &view.read(cx).overlay {
+        Some(Overlay::DuplicatePrompt { groups, .. }) => {
+            assert_eq!(groups.len(), 1);
+            assert_eq!(groups[0].duplicate_count(), 1);
+        }
+        _ => panic!("expected a duplicate prompt"),
+    });
+    assert!(!output.exists());
+
+    with_view(cx, handle, &view, |v, _, cx| {
+        v.cancel_duplicate_compression(cx);
+    });
+    assert!(!output.exists());
+
+    with_view(cx, handle, &view, |v, window, cx| {
+        v.open_compress(vec![src.clone()], window, cx);
+        v.submit_compress(cx);
+    });
+    wait_for_tasks(cx, handle, &view);
+    with_view(cx, handle, &view, |v, _, cx| {
+        v.continue_duplicate_compression(cx);
+    });
+    wait_for_tasks(cx, handle, &view);
+    let (tree, _) = load_archive(&output, None).unwrap();
+    assert_eq!(tree.total_files(), 2);
 }
 
 #[gpui_kit::test]
