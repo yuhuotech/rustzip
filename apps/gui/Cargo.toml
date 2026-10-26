@@ -16,6 +16,7 @@ path = "src/main.rs"
 
 [dependencies]
 gpui-kit = "0.8.0"
+notify-rust.workspace = true
 # Only for the local time zone; formatting stays in rz-app.
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 rz-app.workspace = true

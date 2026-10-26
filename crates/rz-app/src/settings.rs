@@ -58,6 +58,7 @@ pub struct Settings {
     /// Put loose files in a folder named after the archive.
     pub smart_extract: bool,
     pub open_folder_when_done: bool,
+    pub task_notifications: bool,
     /// Character set for old archive file names; `auto` guesses.
     pub name_encoding: String,
     pub check_updates: bool,
@@ -92,6 +93,7 @@ impl Default for Settings {
             on_conflict: OnConflict::Rename,
             smart_extract: true,
             open_folder_when_done: true,
+            task_notifications: false,
             name_encoding: "auto".into(),
             check_updates: true,
             send_install_stats: true,
@@ -376,6 +378,7 @@ mod tests {
     #[test]
     fn defaults_round_trip_through_a_file() {
         let dir = tempfile::tempdir().unwrap_or_else(|_| unreachable!());
+        assert!(!Settings::default().task_notifications);
         let path = dir.path().join("sub/settings.json");
         let mut s = Settings {
             theme: Theme::Dark,

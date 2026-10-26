@@ -23,6 +23,7 @@ pub fn kind_key(kind: JobKind) -> &'static str {
         JobKind::Edit => "edit",
         JobKind::Convert => "convert",
         JobKind::Repair => "repair",
+        JobKind::Hash => "hash",
     }
 }
 
@@ -344,6 +345,7 @@ fn kind_from_key(key: &str) -> JobKind {
         "edit" => JobKind::Edit,
         "convert" => JobKind::Convert,
         "repair" => JobKind::Repair,
+        "hash" => JobKind::Hash,
         _ => JobKind::Extract,
     }
 }

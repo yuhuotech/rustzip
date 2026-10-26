@@ -48,6 +48,9 @@ confirm_delete	删除这个已保存的密码？	Delete this saved password?
 delete_hint	此操作只删除密码本条目，不修改压缩包。请确认仍记得这个密码。	This only removes the saved password. Make sure you still know it.
 source	源压缩包	Source archive
 choose_source	选择压缩包…	Choose archive…
+source_current	当前打开	Currently open
+source_empty	未选择压缩包	No archive selected
+change_source	更换…	Change…
 source_password	源密码（未加密可留空）	Source password (optional)
 output_password	新包密码（留空表示不加密）	Output password (empty means unencrypted)
 format	目标格式	Output format
@@ -95,3 +98,18 @@ history_failed	失败	Failed
 history_succeeded	已完成	Finished
 history_cancelled	已取消	Cancelled
 history_new	新	New
+volume_size	分卷大小（MiB，留空则不分卷）	Volume size (MiB; empty means no split)
+volume_invalid	分卷大小请输入正整数 MiB。	Enter a positive whole number of MiB for the volume size.
+dict_size	字典大小（MiB，留空自动）	Dictionary size (MiB; empty means automatic)
+dict_invalid	字典大小请输入 1 到 64 MiB。	Enter a dictionary size from 1 to 64 MiB.
+solid_size	固实块大小（MiB，留空整包，0 不固实）	Solid block size (MiB; empty means whole archive, 0 disables solid mode)
+solid_invalid	固实块大小请输入 0 或正整数 MiB。	Enter 0 or a positive whole number of MiB.
+hash	计算校验和	Calculate hashes
+hash_complete	文件校验和已计算	File hashes calculated
+task_resource_limit	此任务触发了资源或安全限制，请检查参数后重试。	This task reached a resource or safety limit. Review its settings and try again.
+open_after_extract	解压完成后打开目录	Open folder after extraction
+open_after_extract_hint	解压成功后在文件管理器中显示结果目录。	After extraction, reveal the output directory in the file manager.
+task_notifications	系统通知	System notifications
+task_notifications_hint	任务完成或失败时发送简短通知，不包含文件名或路径。	Send a short notification when a task finishes or fails; it contains no file names or paths.
+notification_done	后台任务已完成	A background task finished
+notification_failed	后台任务失败	A background task failed

@@ -8,6 +8,8 @@ use std::path::Path;
 /// The largest picture that is unpacked just to be shown. Bigger ones get the
 /// type tile instead; they are better extracted and opened in a viewer.
 pub const MAX_IMAGE_BYTES: u64 = 8 * 1024 * 1024;
+/// Text is rendered in the detail panel, so keep both decoding and layout work small.
+pub const MAX_TEXT_BYTES: u64 = 64 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImageFormat {
@@ -34,6 +36,47 @@ pub fn image_format(name: &str) -> Option<ImageFormat> {
         "bmp" => Some(ImageFormat::Bmp),
         _ => None,
     }
+}
+
+/// Whether a file can be shown as plain UTF-8 text without handing it to a renderer.
+pub fn is_text_format(name: &str) -> bool {
+    matches!(
+        extension(name).as_str(),
+        "txt"
+            | "md"
+            | "rst"
+            | "log"
+            | "json"
+            | "toml"
+            | "yaml"
+            | "yml"
+            | "xml"
+            | "csv"
+            | "tsv"
+            | "rs"
+            | "py"
+            | "go"
+            | "c"
+            | "h"
+            | "cpp"
+            | "hpp"
+            | "java"
+            | "sh"
+            | "sql"
+            | "js"
+            | "mjs"
+            | "ts"
+            | "css"
+    )
+}
+
+/// Decodes bounded preview bytes only when they are text rather than binary data.
+pub fn decode_text(data: Vec<u8>) -> Option<String> {
+    if data.contains(&0) {
+        return None;
+    }
+    let text = String::from_utf8(data).ok()?;
+    Some(text.strip_prefix('\u{feff}').unwrap_or(&text).to_string())
 }
 
 /// A human name for a file type, such as `JavaScript` for `app.js`.
@@ -126,6 +169,14 @@ mod tests {
         assert_eq!(image_format("A.JPG"), Some(ImageFormat::Jpeg));
         assert_eq!(image_format("logo.svg"), None);
         assert_eq!(image_format("noext"), None);
+        assert!(is_text_format("README.MD"));
+        assert!(!is_text_format("page.html"));
+        assert!(!is_text_format("program.exe"));
+        assert_eq!(
+            decode_text(b"\xef\xbb\xbfhello".to_vec()).as_deref(),
+            Some("hello")
+        );
+        assert!(decode_text(vec![b'a', 0, b'b']).is_none());
     }
 
     #[test]
@@ -145,6 +196,28 @@ mod tests {
         assert_eq!(data, vec![7u8; 100]);
         assert!(matches!(
             read_entry(&path, &entry, None, None, 50),
+            Err(Error::LimitExceeded(_))
+        ));
+    }
+
+    #[test]
+    fn text_preview_reads_are_bounded_by_the_detail_panel_limit() {
+        use std::io::Write;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("text.zip");
+        let mut zip = zip::ZipWriter::new(std::fs::File::create(&path).unwrap());
+        zip.start_file("notes.txt", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        zip.write_all(b"hello").unwrap();
+        zip.finish().unwrap();
+
+        let mut reader = rz_formats::open(&path).unwrap();
+        let entry = reader.entries().unwrap().remove(0);
+        let data = read_entry(&path, &entry, None, None, MAX_TEXT_BYTES).unwrap();
+        assert_eq!(decode_text(data).as_deref(), Some("hello"));
+        assert!(matches!(
+            read_entry(&path, &entry, None, None, 4),
             Err(Error::LimitExceeded(_))
         ));
     }

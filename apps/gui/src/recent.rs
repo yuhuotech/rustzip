@@ -187,12 +187,20 @@ pub fn list_dir(dir: &Path) -> std::io::Result<Vec<RecentItem>> {
 /// Whether a file name looks like one of the archives this program opens.
 pub fn looks_like_archive(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
-    [
+    let standard = [
         ".zip", ".7z", ".rar", ".tar", ".tgz", ".txz", ".tzst", ".tbz2", ".tbz", ".gz", ".xz",
-        ".zst", ".zstd", ".bz2", ".jar", ".apk", ".cbz",
+        ".zst", ".zstd", ".bz2", ".lz4", ".jar", ".apk", ".cbz",
     ]
     .iter()
-    .any(|e| lower.ends_with(e))
+    .any(|e| lower.ends_with(e));
+    standard
+        || lower.rfind(".z").is_some_and(|at| {
+            lower[at + 2..].len() == 2 && lower[at + 2..].bytes().all(|b| b.is_ascii_digit())
+        })
+        || lower.rfind(".7z.").is_some_and(|at| {
+            let suffix = &lower[at + 4..];
+            suffix.len() == 3 && suffix.bytes().all(|b| b.is_ascii_digit())
+        })
 }
 
 /// The folder name for "extract to a folder of the same name": the file name without its
@@ -203,7 +211,26 @@ pub fn archive_stem(path: &Path) -> String {
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
     let lower = name.to_ascii_lowercase();
-    for double in [".tar.gz", ".tar.xz", ".tar.zst", ".tar.zstd", ".tar.bz2"] {
+    if let Some(at) = lower.rfind(".7z.") {
+        let suffix = &lower[at + 4..];
+        if suffix.len() == 3 && suffix.bytes().all(|b| b.is_ascii_digit()) {
+            return name[..at].to_string();
+        }
+    }
+    if let Some(at) = lower.rfind(".z") {
+        let suffix = &lower[at + 2..];
+        if suffix.len() == 2 && suffix.bytes().all(|b| b.is_ascii_digit()) {
+            return name[..at].to_string();
+        }
+    }
+    for double in [
+        ".tar.gz",
+        ".tar.xz",
+        ".tar.zst",
+        ".tar.zstd",
+        ".tar.bz2",
+        ".tar.lz4",
+    ] {
         if lower.ends_with(double) {
             return name[..name.len() - double.len()].to_string();
         }
@@ -301,6 +328,10 @@ mod tests {
         assert_eq!(archive_stem(Path::new("/a/data.tar.gz")), "data");
         assert_eq!(archive_stem(Path::new("/a/项目文档.zip")), "项目文档");
         assert_eq!(archive_stem(Path::new("/a/v1.2.7z")), "v1.2");
+        assert_eq!(archive_stem(Path::new("/a/photos.7z.001")), "photos");
+        assert_eq!(archive_stem(Path::new("/a/backup.z01")), "backup");
         assert_eq!(archive_stem(Path::new("/a/noext")), "noext-解压");
+        assert!(looks_like_archive("photos.7z.001"));
+        assert!(looks_like_archive("backup.z01"));
     }
 }

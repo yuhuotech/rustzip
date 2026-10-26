@@ -14,7 +14,9 @@ use rz_app::{JobSpec, OutputFormat, TaskId, TransformOptions};
 use std::path::PathBuf;
 use zeroize::Zeroizing;
 
-const FORMATS: [&str; 7] = ["zip", "7z", "tar", "tar.gz", "tar.xz", "tar.zst", "tar.bz2"];
+const FORMATS: [&str; 8] = [
+    "zip", "7z", "tar", "tar.gz", "tar.xz", "tar.zst", "tar.bz2", "tar.lz4",
+];
 
 #[derive(Default)]
 pub struct ToolState {
@@ -35,6 +37,7 @@ pub struct PasswordForm {
 
 pub struct TransformForm {
     pub source: Option<PathBuf>,
+    pub source_is_current: bool,
     pub recover: bool,
     pub format: &'static str,
     pub source_password: Entity<InputState>,
@@ -320,6 +323,7 @@ impl MainView {
             return;
         }
         let source = self.current().map(|a| a.path.clone());
+        let source_is_current = source.is_some();
         let password = self
             .current()
             .and_then(|a| a.password.clone())
@@ -337,6 +341,7 @@ impl MainView {
         .detach();
         self.overlay = Some(Overlay::Transform(TransformForm {
             source,
+            source_is_current,
             recover,
             format: "zip",
             source_password,
@@ -357,6 +362,7 @@ impl MainView {
                 let _ = this.update_in(cx, |this, window, cx| {
                     if let Some(Overlay::Transform(f)) = &mut this.overlay {
                         f.source = paths.into_iter().next();
+                        f.source_is_current = false;
                         f.source_password
                             .update(cx, |s, cx| s.set_value("", window, cx));
                     }
@@ -617,30 +623,59 @@ impl MainView {
 
     pub fn transform_card(&self, f: &TransformForm, cx: &mut Context<Self>) -> AnyElement {
         let p = palette(cx);
+        let source_selected = f.source.is_some();
+        let source_name = f
+            .source
+            .as_ref()
+            .and_then(|path| path.file_name())
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_else(|| self.tool_text("source_empty").to_string());
         let body = v_flex()
             .gap_2()
             .child(self.tool_text("source"))
-            .when_some(f.source.clone(), |d, path| {
-                d.child(
-                    div()
-                        .font_family(cx.theme().mono_font_family.clone())
-                        .overflow_hidden()
-                        .text_ellipsis()
-                        .child(
-                            path.file_name()
-                                .unwrap_or_default()
-                                .to_string_lossy()
-                                .into_owned(),
-                        ),
-                )
-            })
             .child(
-                Button::new("transform-source")
-                    .outline()
-                    .label(self.tool_text("choose_source"))
-                    .disabled(self.tools.busy)
-                    .on_click(
-                        cx.listener(|this, _, window, cx| this.pick_transform_source(window, cx)),
+                h_flex()
+                    .h(px(40.))
+                    .gap_2()
+                    .px_2()
+                    .rounded(px(8.))
+                    .border_1()
+                    .border_color(p.line)
+                    .bg(p.win)
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .overflow_hidden()
+                            .text_ellipsis()
+                            .font_family(cx.theme().mono_font_family.clone())
+                            .text_color(if source_selected { p.fg } else { p.fg3 })
+                            .child(source_name),
+                    )
+                    .when(f.source_is_current, |d| {
+                        d.child(
+                            div()
+                                .px_1p5()
+                                .rounded_full()
+                                .bg(p.accent_soft)
+                                .text_size(px(10.))
+                                .text_color(p.accent)
+                                .child(self.tool_text("source_current")),
+                        )
+                    })
+                    .child(
+                        Button::new("transform-source")
+                            .ghost()
+                            .small()
+                            .label(self.tool_text(if source_selected {
+                                "change_source"
+                            } else {
+                                "choose_source"
+                            }))
+                            .disabled(self.tools.busy)
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.pick_transform_source(window, cx)
+                            })),
                     ),
             )
             .child(self.tool_text("source_password"))

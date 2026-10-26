@@ -218,7 +218,7 @@ fn folders_open_on_double_click_and_the_way_back_works(cx: &mut TestAppContext) 
 }
 
 #[gpui_kit::test]
-fn a_picture_is_previewed_and_other_files_are_not(cx: &mut TestAppContext) {
+fn pictures_and_plain_text_are_previewed_in_the_details_panel(cx: &mut TestAppContext) {
     let tmp = tempfile::tempdir().unwrap();
     let src = tmp.path().join("pics");
     fs::create_dir_all(&src).unwrap();
@@ -254,9 +254,16 @@ fn a_picture_is_previewed_and_other_files_are_not(cx: &mut TestAppContext) {
     cx.update(|cx| {
         let pv = view.read(cx).preview.as_ref().expect("a preview");
         assert_eq!(pv.path, "pics/pic.png");
+        assert!(pv.image.is_some());
+        assert!(pv.text.is_none());
     });
     select(cx, 0);
-    cx.update(|cx| assert!(view.read(cx).preview.is_none()));
+    cx.update(|cx| {
+        let pv = view.read(cx).preview.as_ref().expect("text preview");
+        assert_eq!(pv.path, "pics/note.txt");
+        assert_eq!(pv.text.as_deref(), Some("text"));
+        assert!(pv.image.is_none());
+    });
 }
 
 #[gpui_kit::test]
@@ -1238,6 +1245,15 @@ fn the_compress_form_builds_the_right_job(cx: &mut TestAppContext) {
         v.set_format(Format::SevenZ, cx);
         v.set_preset(Preset::Smallest, cx);
     });
+    let (dictionary_size, solid_block_size) = cx.update(|cx| match &view.read(cx).overlay {
+        Some(Overlay::Compress(f)) => (f.dictionary_size.clone(), f.solid_block_size.clone()),
+        _ => panic!("no compress form"),
+    });
+    cx.update_window(handle.into(), |_, window, cx| {
+        dictionary_size.update(cx, |s, cx| s.set_value("2", window, cx));
+        solid_block_size.update(cx, |s, cx| s.set_value("1", window, cx));
+    })
+    .unwrap();
     with_view(cx, handle, &view, |v, _, cx| v.submit_compress(cx));
     wait_for_tasks(cx, handle, &view);
     let out = tmp.path().join("data.7z");
@@ -2036,6 +2052,8 @@ fn settings_changes_are_saved_and_the_theme_follows_the_choice(cx: &mut TestAppC
         v.set_theme(Pick::Dark, window, cx);
         v.change_settings(|s| s.on_conflict = OnConflict::Skip, cx);
         v.change_settings(|s| s.smart_extract = false, cx);
+        v.change_settings(|s| s.open_folder_when_done = false, cx);
+        v.change_settings(|s| s.task_notifications = true, cx);
     });
     cx.update(|cx| assert!(cx.theme().is_dark()));
     cx.run_until_parked();
@@ -2043,6 +2061,8 @@ fn settings_changes_are_saved_and_the_theme_follows_the_choice(cx: &mut TestAppC
     assert_eq!(saved.theme, Pick::Dark);
     assert_eq!(saved.on_conflict, OnConflict::Skip);
     assert!(!saved.smart_extract);
+    assert!(!saved.open_folder_when_done);
+    assert!(saved.task_notifications);
 
     // A fixed choice is not undone by the system; choosing "system" hands control back.
     with_view(cx, handle, &view, |v, window, cx| {

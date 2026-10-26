@@ -102,7 +102,8 @@ pub struct Preview {
     pub archive: PathBuf,
     /// Path of the file inside the archive.
     pub path: String,
-    pub image: Arc<Image>,
+    pub image: Option<Arc<Image>>,
+    pub text: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -131,15 +132,19 @@ pub enum Format {
     TarZst,
     TarXz,
     TarGz,
+    TarBz2,
+    TarLz4,
 }
 
 impl Format {
-    pub const ALL: [Format; 5] = [
+    pub const ALL: [Format; 7] = [
         Format::Zip,
         Format::SevenZ,
         Format::TarZst,
         Format::TarXz,
         Format::TarGz,
+        Format::TarBz2,
+        Format::TarLz4,
     ];
 
     pub fn extension(self) -> &'static str {
@@ -149,10 +154,16 @@ impl Format {
             Format::TarZst => "tar.zst",
             Format::TarXz => "tar.xz",
             Format::TarGz => "tar.gz",
+            Format::TarBz2 => "tar.bz2",
+            Format::TarLz4 => "tar.lz4",
         }
     }
 
     pub fn supports_password(self) -> bool {
+        matches!(self, Format::Zip | Format::SevenZ)
+    }
+
+    pub fn supports_volumes(self) -> bool {
         matches!(self, Format::Zip | Format::SevenZ)
     }
 }
@@ -178,6 +189,9 @@ pub struct CompressForm {
     pub sources: Vec<PathBuf>,
     pub name: Entity<InputState>,
     pub password: Entity<InputState>,
+    pub volume_size: Entity<InputState>,
+    pub dictionary_size: Entity<InputState>,
+    pub solid_block_size: Entity<InputState>,
     pub format: Format,
     pub preset: Preset,
 }
@@ -304,6 +318,7 @@ pub(crate) fn kind_label(kind: JobKind) -> &'static str {
         JobKind::Edit => "修改",
         JobKind::Convert => crate::text::tr("auto", "convert"),
         JobKind::Repair => crate::text::tr("auto", "repair"),
+        JobKind::Hash => crate::text::tr("auto", "hash"),
     }
 }
 
@@ -1791,18 +1806,27 @@ impl MainView {
         id
     }
 
-    /// Starts reading the selected picture so the details panel can show it.
+    /// Starts reading a bounded picture or text file for the details panel.
     ///
-    /// Only pictures of a sensible size are read; everything else keeps the type tile.
+    /// Only small pictures and bounded UTF-8 text are read; other files keep the type tile.
     pub fn load_preview(&mut self, cx: &mut Context<Self>) {
         let Some(row) = self.selected_row() else {
             self.preview = None;
             return;
         };
         let Some(a) = self.current() else { return };
-        let format = rz_app::preview::image_format(&row.name);
+        let image_format = rz_app::preview::image_format(&row.name);
+        let text_format = rz_app::preview::is_text_format(&row.name);
         let entry = row.entry.and_then(|ix| a.tree.entries().get(ix).cloned());
-        let (Some(format), Some(entry), RowKind::File) = (format, entry, row.kind) else {
+        let (Some(entry), RowKind::File) = (entry, row.kind) else {
+            self.preview = None;
+            return;
+        };
+        let limit = if image_format.is_some() {
+            rz_app::preview::MAX_IMAGE_BYTES
+        } else if text_format {
+            rz_app::preview::MAX_TEXT_BYTES
+        } else {
             self.preview = None;
             return;
         };
@@ -1815,7 +1839,7 @@ impl MainView {
             return;
         }
         self.preview = None;
-        if row.size > rz_app::preview::MAX_IMAGE_BYTES {
+        if row.size > limit {
             return;
         }
         let encoding = self.settings.forced_encoding().map(str::to_string);
@@ -1830,20 +1854,27 @@ impl MainView {
                         &entry,
                         password.as_deref(),
                         encoding_bg.as_deref(),
-                        rz_app::preview::MAX_IMAGE_BYTES,
+                        limit,
                     )
                 })
                 .await;
             // A picture that cannot be read just keeps the type tile.
             let Ok(data) = data else { return };
-            let format = match format {
-                rz_app::preview::ImageFormat::Png => ImageFormat::Png,
-                rz_app::preview::ImageFormat::Jpeg => ImageFormat::Jpeg,
-                rz_app::preview::ImageFormat::Gif => ImageFormat::Gif,
-                rz_app::preview::ImageFormat::Webp => ImageFormat::Webp,
-                rz_app::preview::ImageFormat::Bmp => ImageFormat::Bmp,
+            let (image, text) = if let Some(format) = image_format {
+                let format = match format {
+                    rz_app::preview::ImageFormat::Png => ImageFormat::Png,
+                    rz_app::preview::ImageFormat::Jpeg => ImageFormat::Jpeg,
+                    rz_app::preview::ImageFormat::Gif => ImageFormat::Gif,
+                    rz_app::preview::ImageFormat::Webp => ImageFormat::Webp,
+                    rz_app::preview::ImageFormat::Bmp => ImageFormat::Bmp,
+                };
+                (Some(Arc::new(Image::from_bytes(format, data))), None)
+            } else {
+                let Some(text) = rz_app::preview::decode_text(data) else {
+                    return;
+                };
+                (None, Some(text))
             };
-            let image = Arc::new(Image::from_bytes(format, data));
             let _ = this.update(cx, |this, cx| {
                 // The selection may have moved on while the file was being read.
                 let still_here = this.current().is_some_and(|a| {
@@ -1854,6 +1885,7 @@ impl MainView {
                         archive,
                         path,
                         image,
+                        text,
                     });
                     cx.notify();
                 }
@@ -1900,10 +1932,23 @@ impl MainView {
                         JobKind::Repair => self.tool_text("recovered").into(),
                         JobKind::Test => format!("{what}通过:{} 个条目没有发现问题", s.files),
                         JobKind::Edit => format!("{what}完成:压缩包现在有 {} 项", s.files),
+                        JobKind::Hash => self.tool_text("hash_complete").to_string(),
                         _ => format!("{what}完成:{} 个文件,{}", s.files, format_size(s.bytes)),
                     };
                     self.record_task(&t, &msg, cx);
-                    self.say(Notice::Info(msg), cx);
+                    let toast = if t.kind == JobKind::Hash {
+                        let values = s
+                            .hashes
+                            .iter()
+                            .map(|digest| format!("{}  {}", digest.algorithm.name(), digest.hex))
+                            .collect::<Vec<_>>()
+                            .join("\n");
+                        format!("{msg}\n{values}")
+                    } else {
+                        msg
+                    };
+                    self.say(Notice::Info(toast), cx);
+                    self.send_task_notification("notification_done", cx);
                     if self.settings.open_folder_when_done && t.kind == JobKind::Extract {
                         cx.reveal_path(&s.reveal);
                     }
@@ -1916,12 +1961,32 @@ impl MainView {
                     let why = crate::text::task_error(&self.settings.language, err);
                     self.record_task(&t, &why, cx);
                     self.say(Notice::Error(format!("{}失败:{why}", t.title)), cx);
+                    self.send_task_notification("notification_failed", cx);
                 }
                 (TaskState::Cancelled, _, _) => self.record_task(&t, "", cx),
                 _ => {}
             }
         }
         cx.notify();
+    }
+
+    fn send_task_notification(&self, message_key: &str, cx: &mut Context<Self>) {
+        if !self.settings.task_notifications {
+            return;
+        }
+        let message = self.tool_text(message_key).to_string();
+        cx.spawn(async move |_, cx| {
+            let _ = cx
+                .background_executor()
+                .spawn(async move {
+                    let _ = notify_rust::Notification::new()
+                        .summary("RustZIP")
+                        .body(&message)
+                        .show();
+                })
+                .await;
+        })
+        .detach();
     }
 
     fn record_task(&mut self, t: &TaskInfo, detail: &str, cx: &mut Context<Self>) {
@@ -1980,6 +2045,19 @@ impl MainView {
     pub fn clear_finished(&mut self, cx: &mut Context<Self>) {
         self.tasks.clear_finished();
         self.refresh_tasks(cx);
+    }
+
+    pub fn hash_file(&mut self, path: PathBuf, cx: &mut Context<Self>) {
+        self.submit(
+            JobSpec::Hash {
+                file: path,
+                algorithms: vec![
+                    rz_app::hash::HashAlgorithm::Sha256,
+                    rz_app::hash::HashAlgorithm::Blake3,
+                ],
+            },
+            cx,
+        );
     }
 
     // ----- password prompt ---------------------------------------------------------------
@@ -2066,17 +2144,25 @@ impl MainView {
                 .placeholder("留空则不加密")
                 .masked(true)
         });
+        let volume_size = cx.new(|cx| InputState::new(window, cx));
+        let dictionary_size = cx.new(|cx| InputState::new(window, cx));
+        let solid_block_size = cx.new(|cx| InputState::new(window, cx));
         let format = match self.settings.default_format.as_str() {
             "7z" => Format::SevenZ,
             "tar.zst" => Format::TarZst,
             "tar.xz" => Format::TarXz,
             "tar.gz" => Format::TarGz,
+            "tar.bz2" => Format::TarBz2,
+            "tar.lz4" => Format::TarLz4,
             _ => Format::Zip,
         };
         self.overlay = Some(Overlay::Compress(CompressForm {
             sources,
             name,
             password,
+            volume_size,
+            dictionary_size,
+            solid_block_size,
             format,
             preset: Preset::Balanced,
         }));
@@ -2104,6 +2190,9 @@ impl MainView {
         };
         let name = f.name.read(cx).value().trim().to_string();
         let pw = f.password.read(cx).value().to_string();
+        let volume_text = f.volume_size.read(cx).value().trim().to_string();
+        let dictionary_text = f.dictionary_size.read(cx).value().trim().to_string();
+        let solid_text = f.solid_block_size.read(cx).value().trim().to_string();
         if name.is_empty() || name.contains(['/', '\\', ':']) || name.starts_with('.') {
             self.say(
                 Notice::Error("文件名不能为空,也不能含有 / \\ : 或以点开头".into()),
@@ -2111,6 +2200,53 @@ impl MainView {
             );
             return;
         }
+        let volume_size = if f.format.supports_volumes() && !volume_text.is_empty() {
+            let bytes = volume_text
+                .parse::<u64>()
+                .ok()
+                .filter(|mib| *mib > 0)
+                .and_then(|mib| mib.checked_mul(1 << 20));
+            let Some(bytes) = bytes else {
+                self.say(Notice::Error(self.tool_text("volume_invalid").into()), cx);
+                return;
+            };
+            Some(bytes)
+        } else {
+            None
+        };
+        let (dictionary_size, solid_block_size) = if f.format == Format::SevenZ {
+            let dictionary_size = if dictionary_text.is_empty() {
+                None
+            } else {
+                let bytes = dictionary_text
+                    .parse::<u64>()
+                    .ok()
+                    .filter(|mib| (1..=64).contains(mib))
+                    .and_then(|mib| mib.checked_mul(1 << 20))
+                    .and_then(|bytes| u32::try_from(bytes).ok());
+                let Some(bytes) = bytes else {
+                    self.say(Notice::Error(self.tool_text("dict_invalid").into()), cx);
+                    return;
+                };
+                Some(bytes)
+            };
+            let solid_block_size = if solid_text.is_empty() {
+                None
+            } else {
+                let bytes = solid_text
+                    .parse::<u64>()
+                    .ok()
+                    .and_then(|mib| mib.checked_mul(1 << 20));
+                let Some(bytes) = bytes else {
+                    self.say(Notice::Error(self.tool_text("solid_invalid").into()), cx);
+                    return;
+                };
+                Some(bytes)
+            };
+            (dictionary_size, solid_block_size)
+        } else {
+            (None, None)
+        };
         let dir = f.sources[0]
             .parent()
             .map(Path::to_path_buf)
@@ -2130,6 +2266,9 @@ impl MainView {
                 level: f.preset.level(),
                 password,
                 threads: self.settings.threads,
+                volume_size,
+                dictionary_size,
+                solid_block_size,
                 ..CreateOptions::default()
             },
         };
@@ -3046,6 +3185,16 @@ impl MainView {
                         .on_click(cx.listener(|this, _, _, cx| this.extract_recent(true, cx))),
                 )
             })
+            .child(
+                Button::new("recent-hash")
+                    .ghost()
+                    .icon(Icon::new(gpui_kit::assets::IconName::ShieldCheck))
+                    .label(self.tool_text("hash"))
+                    .on_click(cx.listener({
+                        let path = path.clone();
+                        move |this, _, _, cx| this.hash_file(path.clone(), cx)
+                    })),
+            )
             .child(divider())
             .child(
                 Button::new("recent-reveal")
@@ -3148,6 +3297,18 @@ impl MainView {
                         .on_click(cx.listener(|this, _, _, cx| this.extract_recent(true, cx))),
                 )
             })
+        })
+        .when(!is_dir, |d| {
+            d.child(
+                Button::new("folder-hash")
+                    .ghost()
+                    .icon(Icon::new(gpui_kit::assets::IconName::ShieldCheck))
+                    .label(self.tool_text("hash"))
+                    .on_click(cx.listener({
+                        let path = path.clone();
+                        move |this, _, _, cx| this.hash_file(path.clone(), cx)
+                    })),
+            )
         })
         .child(
             Button::new("folder-compress")
@@ -3535,7 +3696,12 @@ impl MainView {
                     .preview
                     .as_ref()
                     .filter(|pv| pv.archive == a.path && pv.path == row.path)
-                    .map(|pv| pv.image.clone());
+                    .and_then(|pv| pv.image.clone());
+                let text_preview = self
+                    .preview
+                    .as_ref()
+                    .filter(|pv| pv.archive == a.path && pv.path == row.path)
+                    .and_then(|pv| pv.text.clone());
                 let (tile_bg, tile_fg) = crate::rows::badge_colors(&row, cx);
                 v_flex()
                     .gap_4()
@@ -3553,6 +3719,22 @@ impl MainView {
                             .bg(tile_bg)
                             .when_some(picture, |d, image| {
                                 d.child(img(image).max_w_full().max_h_full())
+                            })
+                            .when_some(text_preview, |d, text| {
+                                d.child(
+                                    div()
+                                        .id("preview-text-content")
+                                        .w_full()
+                                        .h_full()
+                                        .overflow_y_scroll()
+                                        .p_2()
+                                        .text_left()
+                                        .text_size(px(11.))
+                                        .line_height(px(15.))
+                                        .font_family(cx.theme().mono_font_family.clone())
+                                        .text_color(p.fg)
+                                        .child(text),
+                                )
                             })
                             .when(self.preview_is_missing(&row), |d| {
                                 d.child(
@@ -4257,6 +4439,36 @@ impl MainView {
                         )
                         .child(
                             toggle(
+                                "set-open-after-extract",
+                                self.tool_text("open_after_extract"),
+                                self.tool_text("open_after_extract_hint"),
+                                s.open_folder_when_done,
+                            )
+                            .id("row-open-after-extract")
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.change_settings(
+                                    |s| s.open_folder_when_done = !s.open_folder_when_done,
+                                    cx,
+                                );
+                            })),
+                        )
+                        .child(
+                            toggle(
+                                "set-task-notifications",
+                                self.tool_text("task_notifications"),
+                                self.tool_text("task_notifications_hint"),
+                                s.task_notifications,
+                            )
+                            .id("row-task-notifications")
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.change_settings(
+                                    |s| s.task_notifications = !s.task_notifications,
+                                    cx,
+                                );
+                            })),
+                        )
+                        .child(
+                            toggle(
                                 "set-updates",
                                 "自动检查更新",
                                 "启动时在后台检查新版本;更新包会验证签名",
@@ -4466,6 +4678,8 @@ impl MainView {
                             Format::TarZst => "fmt-tar-zst",
                             Format::TarXz => "fmt-tar-xz",
                             Format::TarGz => "fmt-tar-gz",
+                            Format::TarBz2 => "fmt-tar-bz2",
+                            Format::TarLz4 => "fmt-tar-lz4",
                         };
                         segment(id, f.extension(), form.format == f)
                             .on_click(cx.listener(move |this, _, _, cx| this.set_format(f, cx)))
@@ -4497,6 +4711,49 @@ impl MainView {
                         .gap_1()
                         .child(div().text_color(p.fg3).text_size(px(12.)).child("密码"))
                         .child(Input::new(&form.password).mask_toggle()),
+                )
+            })
+            .when(form.format.supports_volumes(), |d| {
+                d.child(
+                    v_flex()
+                        .gap_1()
+                        .child(
+                            div()
+                                .text_color(p.fg3)
+                                .text_size(px(12.))
+                                .child(self.tool_text("volume_size")),
+                        )
+                        .child(Input::new(&form.volume_size)),
+                )
+            })
+            .when(form.format == Format::SevenZ, |d| {
+                d.child(
+                    h_flex()
+                        .gap_2()
+                        .child(
+                            v_flex()
+                                .flex_1()
+                                .gap_1()
+                                .child(
+                                    div()
+                                        .text_color(p.fg3)
+                                        .text_size(px(12.))
+                                        .child(self.tool_text("dict_size")),
+                                )
+                                .child(Input::new(&form.dictionary_size)),
+                        )
+                        .child(
+                            v_flex()
+                                .flex_1()
+                                .gap_1()
+                                .child(
+                                    div()
+                                        .text_color(p.fg3)
+                                        .text_size(px(12.))
+                                        .child(self.tool_text("solid_size")),
+                                )
+                                .child(Input::new(&form.solid_block_size)),
+                        ),
                 )
             });
         Dialog {

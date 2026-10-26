@@ -17,7 +17,7 @@ pub fn tr(language: &str, key: &str) -> &'static str {
 
 /// Archive types people know by name but that no backend reads yet.
 const KNOWN_ARCHIVE_EXTENSIONS: [&str; 12] = [
-    "cab", "iso", "dmg", "wim", "arj", "lzh", "cpio", "rpm", "deb", "xar", "z", "img",
+    "dmg", "wim", "arj", "lzh", "rpm", "xar", "z", "img", "chm", "nsis", "sit", "lha",
 ];
 
 /// Turns a failure to open `path` into a sentence a non-technical user can act on.
@@ -51,6 +51,9 @@ pub fn task_error(language: &str, error: &rz_app::tasks::TaskError) -> String {
     if error.code == rz_app::tasks::ErrorCode::AlreadyExists {
         return tr(language, "destination_exists").into();
     }
+    if error.code == rz_app::tasks::ErrorCode::LimitExceeded {
+        return tr(language, "task_resource_limit").into();
+    }
     if let Some((first, second)) = &error.conflicting_paths {
         tr(language, "case_conflict")
             .replace("{first}", first)
@@ -76,7 +79,7 @@ mod tests {
             tr("zh", "open_not_archive")
         );
         assert_eq!(
-            open_error("zh", Path::new("disk.ISO"), &Error::UnknownFormat),
+            open_error("zh", Path::new("disk.WIM"), &Error::UnknownFormat),
             tr("zh", "open_unsupported")
         );
         assert_eq!(
