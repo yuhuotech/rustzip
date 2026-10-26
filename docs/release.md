@@ -56,7 +56,7 @@ Vercel build 会在部署期间自动应用 Neon Postgres migrations;检查部�
 | 能力 | macOS | Windows | Linux |
 |---|---|---|---|
 | 双击/"打开方式"打开压缩包 | 已做(Info.plist 文档类型 + 系统打开事件) | 已做(安装程序注册,不抢默认程序) | 已做(`.desktop` 的 MimeType) |
-| 右键"用 RustZIP 压缩"/"解压到此处" | **未做**(需要 Finder 扩展或 Services,另做) | 已做(安装程序写注册表) | Dolphin 服务菜单、Nemo 动作已做;Nautilus 通过用户级 Scripts 子菜单提供,待实机验证 |
+| 右键"用 RustZIP 压缩"/"解压到此处" | **未做**(需要 Finder 扩展或 Services,另做) | 已做(安装程序写注册表) | Dolphin 服务菜单、Nemo 动作已做;Nautilus 50.2.2 的 Scripts 子菜单、压缩入口和逐字节解压已在 Ubuntu 26.04 / Xvfb 验收 |
 | 预览(Quick Look 等) | 未做 | 未做 | 未做 |
 
 命令行入口:`rustzip --extract-here <压缩包>...` 解压到压缩包所在目录;`rustzip --compress <文件或文件夹>...` 打开新建压缩窗口。

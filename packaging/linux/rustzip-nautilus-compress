@@ -1,2 +1,3 @@
 #!/bin/sh
-exec rustzip --compress "$@"
+case "$0" in */*) script_dir=${0%/*} ;; *) script_dir=. ;; esac
+exec "$script_dir/.rustzip/rustzip" --compress "$@"

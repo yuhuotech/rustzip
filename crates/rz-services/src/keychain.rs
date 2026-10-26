@@ -136,17 +136,29 @@ mod tests {
     fn round_trip_through_the_real_keychain() {
         assert!(KeychainStore::available());
         let store = KeychainStore;
-        let label = "rustzip-test-entry.zip";
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |elapsed| elapsed.as_nanos());
+        let label = format!("rustzip-test-{}-{nonce}.zip", std::process::id());
+        let _cleanup = DeleteTestPassword(label.clone());
         store
-            .set(label, "p\u{e4}ssw\u{f6}rd \u{5bc6}\u{7801}")
+            .set(&label, "p\u{e4}ssw\u{f6}rd \u{5bc6}\u{7801}")
             .unwrap();
         assert_eq!(
-            store.get(label).as_deref(),
+            store.get(&label).as_deref(),
             Some("p\u{e4}ssw\u{f6}rd \u{5bc6}\u{7801}")
         );
-        assert!(store.labels().iter().any(|l| l == label));
-        store.delete(label).unwrap();
-        assert_eq!(store.get(label), None);
-        assert!(!store.labels().iter().any(|l| l == label));
+        assert!(store.labels().iter().any(|l| l == &label));
+        store.delete(&label).unwrap();
+        assert_eq!(store.get(&label), None);
+        assert!(!store.labels().iter().any(|l| l == &label));
+    }
+
+    struct DeleteTestPassword(String);
+
+    impl Drop for DeleteTestPassword {
+        fn drop(&mut self) {
+            let _ = KeychainStore.delete(&self.0);
+        }
     }
 }
