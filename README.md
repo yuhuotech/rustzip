@@ -203,7 +203,7 @@ RZ_SHOT_DIR=/某个文件夹 cargo run --release -p rustzip-gui --example screen
 | 发布工具（生成签名密钥、给安装包签名、生成 `update.json`） | 已完成（`rz-release`） |
 | 桌面应用 `rustzip`（GPUI Kit） | macOS 无头界面测试与真实 Metal 离屏渲染验证；Windows / Linux 未验证。侧栏工具的范围见 `docs/sidebar-implementation.md` |
 | 应用图标、macOS 打包、Windows 安装脚本、Linux 压缩包 | 图标和 macOS 打包已在本机跑通；Windows / Linux 打包和发布工作流**未实际运行过** |
-| 文件关联与右键菜单 | macOS 仅「打开方式」；Windows 注册表和 Linux（Dolphin / Nemo）菜单已写好，未实机验证；Finder 右键与 Quick Look 未做 |
+| 文件关联与右键菜单 | macOS 仅「打开方式」；Windows 注册表和 Linux Dolphin / Nemo 菜单、Nautilus Scripts 子菜单已打包，均未实机验证；Finder 右键与 Quick Look 未做 |
 | 7z 分块并行解压、bzip2 多线程、大文件分块 deflate | 未开始 |
 | ZIP / 7z 分卷 | 已实现首版，外部工具及三平台验收待完成 |
 | 文件校验和 | 已完成；`rz h` 与 GUI 文件操作计算 SHA-256 / BLAKE3，流式处理支持取消和进度 |

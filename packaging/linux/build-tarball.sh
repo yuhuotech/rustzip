@@ -17,7 +17,7 @@ cargo build --release -p rustzip-gui
 stage="$(mktemp -d)/$name"
 mkdir -p "$stage/icons"
 cp target/release/rustzip "$stage/"
-cp packaging/linux/*.desktop packaging/linux/*.nemo_action "$stage/"
+cp packaging/linux/*.desktop packaging/linux/*.nemo_action packaging/linux/rustzip-nautilus-* "$stage/"
 cp packaging/icons/hicolor/*.png "$stage/icons/"
 cat > "$stage/install.sh" <<'EOF'
 #!/usr/bin/env sh
@@ -30,7 +30,9 @@ if [ "${1:-}" = "--uninstall" ]; then
     rm -f "$prefix/bin/rustzip" "$apps/rustzip.desktop" \
           "$prefix/share/kservices5/ServiceMenus/rustzip-servicemenu.desktop" \
           "$prefix/share/nemo/actions/rustzip-compress.nemo_action" \
-          "$prefix/share/nemo/actions/rustzip-extract.nemo_action"
+          "$prefix/share/nemo/actions/rustzip-extract.nemo_action" \
+          "$prefix/share/nautilus/scripts/RustZIP - Compress selected items" \
+          "$prefix/share/nautilus/scripts/RustZIP - Extract archives here"
     for s in 16 32 48 64 128 256 512; do
         rm -f "$prefix/share/icons/hicolor/${s}x${s}/apps/rustzip.png"
     done
@@ -43,12 +45,17 @@ install -Dm755 "$here/rustzip-servicemenu.desktop" \
     "$prefix/share/kservices5/ServiceMenus/rustzip-servicemenu.desktop"
 install -Dm644 "$here/rustzip-compress.nemo_action" "$prefix/share/nemo/actions/rustzip-compress.nemo_action"
 install -Dm644 "$here/rustzip-extract.nemo_action" "$prefix/share/nemo/actions/rustzip-extract.nemo_action"
+install -Dm755 "$here/rustzip-nautilus-compress" \
+    "$prefix/share/nautilus/scripts/RustZIP - Compress selected items"
+install -Dm755 "$here/rustzip-nautilus-extract-here" \
+    "$prefix/share/nautilus/scripts/RustZIP - Extract archives here"
 for s in 16 32 48 64 128 256 512; do
     install -Dm644 "$here/icons/$s.png" "$prefix/share/icons/hicolor/${s}x${s}/apps/rustzip.png"
 done
 command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$apps" || true
 command -v gtk-update-icon-cache >/dev/null 2>&1 && gtk-update-icon-cache -q "$prefix/share/icons/hicolor" || true
 echo "RustZIP installed to $prefix. Make sure $prefix/bin is on your PATH."
+echo "Restart Nautilus to show the RustZIP actions in its Scripts submenu."
 EOF
 chmod +x "$stage/install.sh" "$stage/rustzip"
 
