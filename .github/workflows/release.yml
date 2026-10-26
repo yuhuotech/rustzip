@@ -7,8 +7,10 @@ name: Release
 #   - optional macOS signing secrets: MACOS_CERT_P12 (base64), MACOS_CERT_PASSWORD,
 #     MACOS_SIGN_IDENTITY, and for notarization APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD
 on:
-  push:
-    tags: ["v*"]
+  workflow_dispatch:
+  # Automatic tag builds and releases are paused until the project is ready.
+  # push:
+  #   tags: ["v*"]
 
 permissions:
   contents: write
@@ -19,6 +21,7 @@ env:
 
 jobs:
   build:
+    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
     name: Build ${{ matrix.platform }}
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.experimental }}
@@ -118,7 +121,7 @@ jobs:
   publish:
     needs: build
     runs-on: ubuntu-22.04
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable

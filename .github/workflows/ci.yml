@@ -1,9 +1,11 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_dispatch:
+  # Automatic runs are paused until the project is ready.
+  # push:
+  #   branches: [main]
+  # pull_request:
 
 env:
   CARGO_TERM_COLOR: always
