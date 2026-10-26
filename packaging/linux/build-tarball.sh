@@ -26,13 +26,15 @@ set -eu
 here="$(cd "$(dirname "$0")" && pwd)"
 prefix="${PREFIX:-$HOME/.local}"
 apps="$prefix/share/applications"
+data_home="${XDG_DATA_HOME:-$prefix/share}"
+nautilus_scripts="$data_home/nautilus/scripts"
 if [ "${1:-}" = "--uninstall" ]; then
     rm -f "$prefix/bin/rustzip" "$apps/rustzip.desktop" \
           "$prefix/share/kservices5/ServiceMenus/rustzip-servicemenu.desktop" \
           "$prefix/share/nemo/actions/rustzip-compress.nemo_action" \
           "$prefix/share/nemo/actions/rustzip-extract.nemo_action" \
-          "$prefix/share/nautilus/scripts/RustZIP - Compress selected items" \
-          "$prefix/share/nautilus/scripts/RustZIP - Extract archives here"
+          "$nautilus_scripts/RustZIP - Compress selected items" \
+          "$nautilus_scripts/RustZIP - Extract archives here"
     for s in 16 32 48 64 128 256 512; do
         rm -f "$prefix/share/icons/hicolor/${s}x${s}/apps/rustzip.png"
     done
@@ -46,9 +48,9 @@ install -Dm755 "$here/rustzip-servicemenu.desktop" \
 install -Dm644 "$here/rustzip-compress.nemo_action" "$prefix/share/nemo/actions/rustzip-compress.nemo_action"
 install -Dm644 "$here/rustzip-extract.nemo_action" "$prefix/share/nemo/actions/rustzip-extract.nemo_action"
 install -Dm755 "$here/rustzip-nautilus-compress" \
-    "$prefix/share/nautilus/scripts/RustZIP - Compress selected items"
+    "$nautilus_scripts/RustZIP - Compress selected items"
 install -Dm755 "$here/rustzip-nautilus-extract-here" \
-    "$prefix/share/nautilus/scripts/RustZIP - Extract archives here"
+    "$nautilus_scripts/RustZIP - Extract archives here"
 for s in 16 32 48 64 128 256 512; do
     install -Dm644 "$here/icons/$s.png" "$prefix/share/icons/hicolor/${s}x${s}/apps/rustzip.png"
 done
