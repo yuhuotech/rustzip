@@ -3151,26 +3151,52 @@ impl MainView {
             .border_b_1()
             .border_color(p.line)
             .child(
-                title("recent-th-name", "名称", RecentSort::Name, false)
-                    .flex_1()
-                    .min_w_0(),
+                title(
+                    "recent-th-name",
+                    self.tool_text("recent_column_name"),
+                    RecentSort::Name,
+                    false,
+                )
+                .flex_1()
+                .min_w_0(),
             )
             // The size is one of the first things to look for, so it sits next to the name.
-            .child(title("recent-th-size", "大小", RecentSort::Size, true).w(px(W_SIZE)))
+            .child(
+                title(
+                    "recent-th-size",
+                    self.tool_text("recent_column_size"),
+                    RecentSort::Size,
+                    true,
+                )
+                .w(px(W_SIZE)),
+            )
             // In a folder listing every item is in the same place.
             .when(!folder_mode, |d| {
                 d.child(
-                    title("recent-th-folder", "位置", RecentSort::Folder, false)
-                        .flex_1()
-                        .min_w_0()
-                        .pl_3(),
+                    title(
+                        "recent-th-folder",
+                        self.tool_text("recent_column_location"),
+                        RecentSort::Folder,
+                        false,
+                    )
+                    .flex_1()
+                    .min_w_0()
+                    .pl_3(),
                 )
             })
-            .child(title("recent-th-created", "创建时间", RecentSort::Created, false).w(px(W_TIME)))
+            .child(
+                title(
+                    "recent-th-created",
+                    self.tool_text("recent_column_created"),
+                    RecentSort::Created,
+                    false,
+                )
+                .w(px(W_TIME)),
+            )
             .child(
                 title(
                     "recent-th-modified",
-                    "修改时间",
+                    self.tool_text("recent_column_modified"),
                     RecentSort::Modified,
                     false,
                 )
@@ -3224,7 +3250,12 @@ impl MainView {
                                     .child(item.name.clone()),
                             )
                             .when(open && !item.is_dir, |d| {
-                                d.child(div().text_size(px(11.)).text_color(p.fg3).child("已打开"))
+                                d.child(
+                                    div()
+                                        .text_size(px(11.))
+                                        .text_color(p.fg3)
+                                        .child(self.tool_text("recent_item_open")),
+                                )
                             }),
                     )
                     .child(
@@ -3236,7 +3267,7 @@ impl MainView {
                             .child(match (item.exists, item.size) {
                                 (true, Some(n)) => format_size(n),
                                 (true, None) => "—".to_string(),
-                                _ => "已移走".to_string(),
+                                _ => self.tool_text("recent_item_missing").to_string(),
                             }),
                     )
                     .when(!folder_mode, |d| {
@@ -3302,9 +3333,9 @@ impl MainView {
             })
             .when(rows.is_empty(), |d| {
                 d.child(div().p_6().text_color(p.fg3).child(if folder_mode {
-                    "这个文件夹里没有可显示的内容"
+                    self.tool_text("recent_empty_folder")
                 } else {
-                    "还没有打开过压缩包。打开的压缩包会记在这里。"
+                    self.tool_text("recent_empty_list")
                 }))
             })
             .child(
@@ -3338,14 +3369,14 @@ impl MainView {
                     Button::new("recent-open-other")
                         .primary()
                         .icon(IconName::FolderOpen)
-                        .label("打开压缩包…")
+                        .label(self.tool_text("welcome_open_archive"))
                         .on_click(cx.listener(|this, _, window, cx| this.pick_archive(window, cx))),
                 )
                 .child(
                     Button::new("recent-new")
                         .ghost()
                         .icon(IconName::Plus)
-                        .label("新建压缩")
+                        .label(self.tool_text("welcome_new_archive"))
                         .on_click(cx.listener(|this, _, window, cx| this.pick_sources(window, cx))),
                 )
                 .child(divider())
@@ -3353,7 +3384,7 @@ impl MainView {
                     Button::new("recent-clear")
                         .ghost()
                         .icon(IconName::Delete)
-                        .label("清空记录")
+                        .label(self.tool_text("recent_clear"))
                         .disabled(self.settings.recent.is_empty())
                         .on_click(cx.listener(|this, _, _, cx| this.clear_recent(cx))),
                 );
@@ -3371,7 +3402,7 @@ impl MainView {
                 Button::new("recent-open")
                     .primary()
                     .icon(IconName::FolderOpen)
-                    .label("打开")
+                    .label(self.tool_text("open"))
                     .on_click(cx.listener({
                         let path = path.clone();
                         move |this, _, window, cx| this.open_path(path.clone(), None, window, cx)
@@ -3381,7 +3412,7 @@ impl MainView {
                 Button::new("recent-extract-here")
                     .ghost()
                     .icon(gpui_kit::assets::IconName::ArrowDownToLine)
-                    .label("解压到当前文件夹")
+                    .label(self.tool_text("action_extract_here"))
                     .on_click(cx.listener(|this, _, _, cx| this.extract_recent(false, cx))),
             )
             .when(several, |d| {
@@ -3389,7 +3420,7 @@ impl MainView {
                     Button::new("recent-extract-named")
                         .ghost()
                         .icon(IconName::Folder)
-                        .label("解压到同名文件夹")
+                        .label(self.tool_text("action_extract_named"))
                         .on_click(cx.listener(|this, _, _, cx| this.extract_recent(true, cx))),
                 )
             })
@@ -3408,7 +3439,7 @@ impl MainView {
                 Button::new("recent-reveal")
                     .ghost()
                     .icon(IconName::ExternalLink)
-                    .label("在文件夹中显示")
+                    .label(self.tool_text("action_reveal"))
                     .on_click(cx.listener({
                         let path = path.clone();
                         move |_, _, _, cx| cx.reveal_path(&path)
@@ -3418,14 +3449,14 @@ impl MainView {
                 Button::new("recent-rename")
                     .ghost()
                     .icon(IconName::Replace)
-                    .label("重命名")
+                    .label(self.tool_text("action_rename"))
                     .on_click(cx.listener(|this, _, window, cx| this.ask_rename_file(window, cx))),
             )
             .child(
                 Button::new("recent-trash")
                     .ghost()
                     .icon(Icon::new(gpui_kit::assets::IconName::Trash))
-                    .label("删除")
+                    .label(self.tool_text("delete"))
                     .text_color(p.danger)
                     .on_click(cx.listener(|this, _, _, cx| this.ask_trash(cx))),
             )
@@ -3435,7 +3466,7 @@ impl MainView {
             Button::new("recent-forget")
                 .ghost()
                 .icon(IconName::Close)
-                .label("从列表移除")
+                .label(self.tool_text("action_remove_from_list"))
                 .on_click(cx.listener(move |this, _, _, cx| this.forget_recent(&forget, cx))),
         )
     }
@@ -3461,14 +3492,14 @@ impl MainView {
                     Button::new("folder-open-other")
                         .primary()
                         .icon(IconName::FolderOpen)
-                        .label("打开压缩包…")
+                        .label(self.tool_text("welcome_open_archive"))
                         .on_click(cx.listener(|this, _, window, cx| this.pick_archive(window, cx))),
                 )
                 .child(
                     Button::new("folder-new")
                         .ghost()
                         .icon(IconName::Plus)
-                        .label("新建压缩")
+                        .label(self.tool_text("welcome_new_archive"))
                         .on_click(cx.listener(|this, _, window, cx| this.pick_sources(window, cx))),
                 );
         };
@@ -3482,7 +3513,11 @@ impl MainView {
             Button::new("folder-open")
                 .primary()
                 .icon(IconName::FolderOpen)
-                .label(if is_dir { "进入" } else { "打开" })
+                .label(if is_dir {
+                    self.tool_text("action_enter")
+                } else {
+                    self.tool_text("open")
+                })
                 .on_click(cx.listener({
                     let path = path.clone();
                     move |this, _, window, cx| this.open_listed(path.clone(), is_dir, window, cx)
@@ -3493,7 +3528,7 @@ impl MainView {
                 Button::new("folder-extract-here")
                     .ghost()
                     .icon(gpui_kit::assets::IconName::ArrowDownToLine)
-                    .label("解压到当前文件夹")
+                    .label(self.tool_text("action_extract_here"))
                     .on_click(cx.listener(|this, _, _, cx| this.extract_recent(false, cx))),
             )
             .when(several, |d| {
@@ -3501,7 +3536,7 @@ impl MainView {
                     Button::new("folder-extract-named")
                         .ghost()
                         .icon(IconName::Folder)
-                        .label("解压到同名文件夹")
+                        .label(self.tool_text("action_extract_named"))
                         .on_click(cx.listener(|this, _, _, cx| this.extract_recent(true, cx))),
                 )
             })
@@ -3522,7 +3557,7 @@ impl MainView {
             Button::new("folder-compress")
                 .ghost()
                 .icon(IconName::Plus)
-                .label("压缩")
+                .label(self.tool_text("action_compress"))
                 .on_click(cx.listener({
                     let path = path.clone();
                     move |this, _, window, cx| this.open_compress(vec![path.clone()], window, cx)
@@ -3533,7 +3568,7 @@ impl MainView {
             Button::new("folder-reveal")
                 .ghost()
                 .icon(IconName::ExternalLink)
-                .label("在文件夹中显示")
+                .label(self.tool_text("action_reveal"))
                 .on_click(cx.listener({
                     let path = path.clone();
                     move |_, _, _, cx| cx.reveal_path(&path)
@@ -3543,14 +3578,14 @@ impl MainView {
             Button::new("folder-rename")
                 .ghost()
                 .icon(IconName::Replace)
-                .label("重命名")
+                .label(self.tool_text("action_rename"))
                 .on_click(cx.listener(|this, _, window, cx| this.ask_rename_file(window, cx))),
         )
         .child(
             Button::new("folder-trash")
                 .ghost()
                 .icon(Icon::new(gpui_kit::assets::IconName::Trash))
-                .label("删除")
+                .label(self.tool_text("delete"))
                 .text_color(p.danger)
                 .on_click(cx.listener(|this, _, _, cx| this.ask_trash(cx))),
         )

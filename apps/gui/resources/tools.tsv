@@ -85,6 +85,23 @@ status_ready	就绪	Ready
 status_new_version	新版本 {version} · 更新	Update available: {version}
 status_downloading	正在下载 {version}…	Downloading {version}…
 go_up	上一级	Go up
+recent_column_name	名称	Name
+recent_column_size	大小	Size
+recent_column_location	位置	Location
+recent_column_created	创建时间	Created
+recent_column_modified	修改时间	Modified
+recent_item_open	已打开	Open
+recent_item_missing	已移走	Missing
+recent_empty_folder	这个文件夹里没有可显示的内容。	This folder is empty.
+recent_empty_list	还没有打开过压缩包。打开的压缩包会记在这里。	No recently opened archives. Archives you open will appear here.
+recent_clear	清空最近打开	Clear recent list
+action_extract_here	解压到当前文件夹	Extract here
+action_extract_named	解压到同名文件夹	Extract to named folder
+action_reveal	在文件夹中显示	Show in folder
+action_rename	重命名	Rename
+action_remove_from_list	从列表移除	Remove from list
+action_enter	进入	Enter
+action_compress	压缩	Compress
 status_recent_missing	{total} 个最近的压缩包 · {missing} 个已移走	{total} recent archives · {missing} missing
 status_recent_count	{total} 个最近的压缩包	{total} recent archives
 status_folder_count	{name} · {count} 项	{name} · {count} items
