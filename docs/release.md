@@ -12,6 +12,8 @@
 
 ## 发一个版本
 
+> 当前 GitHub Actions 自动触发暂时关闭：推送 `main`、PR 和推送版本 tag 都不会自动构建。CI 可从 Actions 页面手动运行；Release 工作流仅保留手动触发，并且只在 `v*` tag 上执行。
+
 1. 改根 `Cargo.toml` 里 `[workspace.package] version`,提交。
 2. `git tag v0.2.0 && git push origin v0.2.0`。
 3. `.github/workflows/release.yml` 在三个系统上打包(macOS arm64 和 x86_64 各一个 dmg,Windows 一个安装程序,Linux 一个 tar.gz),用 `RZ_UPDATE_KEY` 给每个安装包签名,汇总成 `update.json`,创建 GitHub Release 并上传。
@@ -61,4 +63,4 @@ Vercel build 会在部署期间自动应用 Neon Postgres migrations;检查部�
 
 命令行入口:`rustzip --extract-here <压缩包>...` 解压到压缩包所在目录;`rustzip --compress <文件或文件夹>...` 打开新建压缩窗口。
 
-**验证状态**:macOS 的打包、签名校验、dmg 在开发机上跑通过。Windows 安装程序、Linux 打包和整个 release 工作流**还没有真正运行过**,第一次打 tag 时很可能需要调整。
+**验证状态**：macOS arm64 `.app` / DMG 的打包、签名校验和启动通过，尚未公证；Linux x86_64 tarball 已在 Ubuntu 26.04 构建，并通过隔离安装 / 卸载和 Nautilus Scripts 菜单验收。Windows 安装程序和完整 release 工作流尚未运行。当前 GitHub Actions 只允许手动触发 CI；Release 需在 `v*` tag 上手动运行。仓库截至 2026-10-27 尚无公开 GitHub Release。

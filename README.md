@@ -10,7 +10,7 @@
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#开源许可证)
 [![Rust](https://img.shields.io/badge/rust-1.93%2B-orange.svg?logo=rust)](https://www.rust-lang.org)
 ![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey.svg)
-![Status](https://img.shields.io/badge/status-早期开发-yellow.svg)
+![Status](https://img.shields.io/badge/status-pre--release-orange.svg)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#参与贡献)
 
 [特色功能](#特色功能) · [截图](#截图) · [快速开始](#快速开始) · [使用说明](#使用说明) · [开发进度](#开发进度) · [参与贡献](#参与贡献)
@@ -31,13 +31,13 @@ RustZIP 是一个用 Rust 开发的压缩管理软件，支持 Windows、macOS �
 
 桌面应用与命令行共用同一套核心库，行为一致。
 
-> 项目仍在早期开发，格式支持与核心安全能力已经落地，但还没有发布正式安装包，见[开发进度](#开发进度)。
+> 核心归档能力、CLI 和桌面主流程已经实现；macOS 与 Ubuntu 26.04 已完成一部分实机验证。**截至 2026-10-27，GitHub Releases 还没有公开版本**；Windows 原生 GUI / 安装器、其他文件管理器集成及正式发布流程仍待验收。详细状态见[开发计划](docs/next-development-plan.md)和[Ubuntu 验收记录](docs/linux-ubuntu-acceptance.md)。
 
 ## 特色功能
 
 **格式**
 
-- 读写 `zip`（含 AES-256 加密）、`7z`（固实块、LZMA2、AES-256、文件名加密）、`tar` 及 `tar.gz / xz / zst / bz2`，以及单文件 `.gz / .xz / .zst / .bz2`。
+- 读写 `zip`（含 AES-256 加密）、`7z`（固实块、LZMA2、AES-256、文件名加密）、`tar` 及 `tar.gz / xz / zst / bz2 / lz4`，以及单文件 `.gz / .xz / .zst / .bz2 / .lz4`。
 - 读取按文件头识别，不看扩展名。
 - `rar` 只读，不实现压缩，通过默认关闭的可选 feature 提供（见[关于 RAR](#关于-rar)）。
 
@@ -86,7 +86,7 @@ RustZIP 是一个用 Rust 开发的压缩管理软件，支持 Windows、macOS �
 
 ## 快速开始
 
-目前还没有发布安装包，请从源码构建。需要 Rust 1.93 或更新（仓库里的 `rust-toolchain.toml` 会自动选择）。
+目前还没有公开发布的安装包，请从源码构建；`packaging/` 中可以生成各平台安装产物，Linux tarball 已在 Ubuntu 26.04 做过安装验收。需要 Rust 1.93 或更新（仓库里的 `rust-toolchain.toml` 会自动选择）。
 
 ```bash
 git clone https://github.com/yuhuotech/rustzip.git
@@ -168,7 +168,7 @@ RZ_SHOT_DIR=/某个文件夹 cargo run --release -p rustzip-gui --example screen
 
 ## 开发进度
 
-下表是逐项的实现状态，方便接着迭代。
+下表区分功能实现状态与平台验收状态。详细证据和下一步事项见[开发计划](docs/next-development-plan.md)。
 
 | 能力 | 状态 |
 |---|---|
@@ -176,7 +176,7 @@ RZ_SHOT_DIR=/某个文件夹 cargo run --release -p rustzip-gui --example screen
 | 7z 读写（固实块、LZMA2 多线程、AES-256、文件名加密） | 已完成 |
 | tar 及 tar.gz / tar.xz / tar.zst / tar.bz2 / tar.lz4 读写 | 已完成 |
 | 单文件格式 .gz / .xz / .zst / .bz2 / .lz4 读写 | 已完成 |
-| ZIP / 7z 分卷创建与读取（容量可配置、缺卷明确报错） | 本机往返、取消、缺卷和不覆盖用例通过；外部工具及 Windows 验收待完成 |
+| ZIP / 7z 分卷创建与读取（容量可配置、缺卷明确报错） | 本机往返、取消、缺卷、现有卷保护及发布竞态测试通过；Linux 上与 p7zip 26.00 / 26.02 双向互通，Info-ZIP split ZIP 可由 RustZIP 测试和解压；Windows / macOS 常用工具矩阵待验收 |
 | rar 只读（可选 feature `rar`，默认关闭） | 已完成 |
 | 安全解压（路径穿越、压缩炸弹、符号链接、setuid） | 已完成 |
 | 取消、进度回调、原子写入（失败不留半成品） | 已完成 |
@@ -191,8 +191,8 @@ RZ_SHOT_DIR=/某个文件夹 cargo run --release -p rustzip-gui --example screen
 | 设置：原子保存、损坏自动隔离、范围校验、各系统配置目录 | 已完成（`rz-app`） |
 | 智能解压 | 已完成（`rz-app`） |
 | 选择性解压（按文件或文件夹，各格式含固实块与并行路径） | 已完成 |
-| 压缩包内添加 / 删除（zip、7z、tar 系列，校验后整体替换） | 已完成（`rz-app::modify`） |
-| 预览（图片在详情栏显示；其他文件解到临时目录用系统程序打开，程序和脚本不打开） | 已完成，原地增量修改未做 |
+| 压缩包内添加 / 删除 / 重命名（zip、7z、tar 系列，校验后整体替换） | 已完成（`rz-app::modify`）；原地增量改写未做 |
+| 预览 | 图片在详情栏显示；64 KiB 内白名单 UTF-8 纯文本可预览；PDF / 音视频交给系统程序打开 |
 | 格式转换（ZIP / 7z / tar 系八种目标，独立源 / 目标密码，校验后另存） | 已完成，符号链接暂不支持 |
 | ZIP / 7z 修复（尽力抢救可读条目并报告跳过项） | 已完成，严重损坏不保证恢复 |
 | 密码本（系统钥匙串；「记住密码」默认关闭） | 已完成 |
@@ -201,18 +201,16 @@ RZ_SHOT_DIR=/某个文件夹 cargo run --release -p rustzip-gui --example screen
 | 更新校验（Ed25519，绑定版本 / 平台 / 哈希） | 已完成，界面已接入，更新源为 GitHub Release |
 | 匿名安装统计（激活 + 每日心跳，可关闭） | 客户端已完成；接收服务见 [`web/`](web/) 和 [`web/README.md`](web/README.md)，发布前设置 `RZ_STATS_URL` |
 | 发布工具（生成签名密钥、给安装包签名、生成 `update.json`） | 已完成（`rz-release`） |
-| 桌面应用 `rustzip`（GPUI Kit） | macOS 无头界面测试与真实 Metal 离屏渲染验证；Windows / Linux 未验证。侧栏工具的范围见 `docs/sidebar-implementation.md` |
-| 应用图标、macOS 打包、Windows 安装脚本、Linux 压缩包 | 图标和 macOS 打包已在本机跑通；Windows / Linux 打包和发布工作流**未实际运行过** |
-| 文件关联与右键菜单 | macOS 仅「打开方式」；Windows 注册表和 Linux Dolphin / Nemo 菜单、Nautilus Scripts 子菜单已打包，均未实机验证；Finder 右键与 Quick Look 未做 |
+| 桌面应用 `rustzip`（GPUI Kit） | macOS Metal 渲染与 Ubuntu 26.04 GNOME Wayland / Xvfb 启动通过；Ubuntu 和 macOS 的工作区测试通过；Windows 原生 GUI 尚未验收。侧栏工具范围见 `docs/sidebar-implementation.md` |
+| 多语言界面 | 十种语言、364 个资源键已完成；系统语言识别、菜单切换和侧栏布局在 macOS / Ubuntu 26.04 通过；Windows 语言 API、屏幕阅读器和阿拉伯语 RTL 整页布局待设备验收 |
+| 应用图标与打包 | macOS `.app` / DMG 已签名并启动，尚未公证；Ubuntu x86_64 Linux tarball 构建、隔离安装和卸载通过；Windows 安装器、完整发布流程尚未运行；当前没有公开 GitHub Release |
+| 文件关联与右键菜单 | macOS 支持“打开方式”，Finder 右键 / Quick Look 未做；Nautilus 50.2.2 的 Scripts 菜单、压缩入口和逐字节解压在 Ubuntu 26.04 / Xvfb 验收；Dolphin / Nemo 菜单已打包但未点击验收；Windows 注册表入口未实机验收 |
 | 7z 分块并行解压、bzip2 多线程、大文件分块 deflate | 未开始 |
-| ZIP / 7z 分卷 | 已实现首版，外部工具及三平台验收待完成 |
-| 文件校验和 | 已完成；`rz h` 与 GUI 文件操作计算 SHA-256 / BLAKE3，流式处理支持取消和进度 |
 | 7z 高级压缩参数 | 字典大小、固实块大小和非固实模式已接入 CLI / GUI，并按内存预算限制并行度 |
 | 压缩预设 | 极速 / 均衡 / 最小体积 / 邮件分享 / 跨平台兼容已接入；邮件分享默认 20 MiB ZIP / 7z 分卷 |
 | 重复文件检测 | GUI 压缩前按内容哈希提示重复，可取消或继续；不自动删除文件 |
-| 应用内预览 | 图片与 64 KiB 内白名单 UTF-8 纯文本已接入；PDF / 音视频仍用系统程序打开 |
-| 只读长尾格式 | ISO 9660、CAB、CPIO、AR、LHA / LZH、RPM、XAR 已接入；WIM、DMG、CHM、NSIS 等仍待实现 |
-| 任务完成动作 | 可选择解压完成后显示目录；系统通知默认关闭，可在设置中启用 |
+| 只读长尾格式 | ISO 9660、CAB、CPIO、AR、LHA / LZH、RPM、XAR 已接入；DEB 作为 AR 容器读取；WIM、DMG、CHM、NSIS 尚未实现 |
+| 任务完成动作与通知 | 可选择解压完成后显示目录；系统通知默认关闭；Ubuntu GNOME 通知开启 / 关闭行为已验收，macOS / Windows 待验收 |
 
 ## 参与贡献
 
