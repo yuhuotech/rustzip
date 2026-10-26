@@ -4773,22 +4773,22 @@ impl MainView {
                             brand::accents(p.win.l < 0.5, &s.language)
                                 .into_iter()
                                 .enumerate()
-                                .map(|(ix, (id, _, colour))| {
+                                .map(|(ix, (id, label, colour))| {
                                     let on = s.accent == id;
-                                    div()
-                                        .id(("accent", ix))
-                                        .size(px(28.))
+                                    Button::new(("accent", ix))
+                                        .ghost()
+                                        .xsmall()
+                                        .w(px(28.))
+                                        .h(px(28.))
                                         .rounded_full()
-                                        .flex()
-                                        .items_center()
-                                        .justify_center()
-                                        .cursor_pointer()
                                         .border_2()
                                         .border_color(if on { p.fg } else { p.win })
+                                        .bg(colour)
+                                        .accessibility_label(label)
+                                        .toggled(on)
                                         .on_click(cx.listener(move |this, _, _, cx| {
                                             this.set_accent(id, cx);
                                         }))
-                                        .child(div().size(px(20.)).rounded_full().bg(colour))
                                 })
                                 .collect::<Vec<_>>(),
                         )

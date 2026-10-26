@@ -2264,7 +2264,11 @@ fn the_accent_colour_is_saved_and_repaints_the_theme(cx: &mut TestAppContext) {
     let (handle, view) = open_window(cx, Some(path.clone()));
     let before = cx.update(|cx| cx.theme().primary);
 
-    with_view(cx, handle, &view, |v, _, cx| v.set_accent("rose", cx));
+    with_view(cx, handle, &view, |v, _, cx| v.open_settings(cx));
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.click(("accent", 4usize), cx)
+    })
+    .unwrap();
     let after = cx.update(|cx| cx.theme().primary);
     assert_ne!(before, after);
     cx.run_until_parked();
