@@ -30,7 +30,7 @@ runs:
       uses: actions/cache@v4
       with:
         path: ${{ runner.temp }}\rustzip-vcpkg-cache
-        key: rustzip-vcpkg-x64-windows-${{ steps.vcpkg-version.outputs.version }}-v1
+        key: rustzip-vcpkg-x64-windows-static-md-${{ steps.vcpkg-version.outputs.version }}-v2
 
     - name: Install Windows libraries
       if: runner.os == 'Windows'
@@ -39,16 +39,13 @@ runs:
         choco install llvm -y --no-progress
         "$env:ProgramFiles\LLVM\bin" >> $env:GITHUB_PATH
         $env:VCPKG_DEFAULT_BINARY_CACHE = Join-Path $env:RUNNER_TEMP "rustzip-vcpkg-cache"
+        $env:VCPKG_DEFAULT_TRIPLET = "x64-windows-static-md"
+        "VCPKG_DEFAULT_TRIPLET=$env:VCPKG_DEFAULT_TRIPLET" >> $env:GITHUB_ENV
         New-Item -ItemType Directory -Force -Path $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
-        vcpkg install zlib:x64-windows bzip2:x64-windows liblzma:x64-windows `
-          zstd:x64-windows lz4:x64-windows openssl:x64-windows
+        vcpkg install zlib bzip2 liblzma zstd lz4 openssl --triplet $env:VCPKG_DEFAULT_TRIPLET
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         # libarchive2-sys links zlib.lib; the vcpkg zlib port names its import library z.lib.
-        $vcpkgLib = Join-Path $env:VCPKG_INSTALLATION_ROOT "installed\x64-windows\lib"
-        $zlibImport = Join-Path $vcpkgLib "z.lib"
-        if (-not (Test-Path $zlibImport)) { throw "vcpkg z.lib is missing" }
-        Copy-Item $zlibImport (Join-Path $vcpkgLib "zlib.lib") -Force
-        $lzmaImport = Join-Path $vcpkgLib "lzma.lib"
-        if (-not (Test-Path $lzmaImport)) { throw "vcpkg lzma.lib is missing" }
-        Copy-Item $lzmaImport (Join-Path $vcpkgLib "rustzip_lzma_import.lib") -Force
-        (Join-Path $env:VCPKG_INSTALLATION_ROOT "installed\x64-windows\bin") >> $env:GITHUB_PATH
+        $vcpkgLib = Join-Path $env:VCPKG_INSTALLATION_ROOT "installed\$env:VCPKG_DEFAULT_TRIPLET\lib"
+        $zlib = @("z.lib", "zlibstatic.lib") | ForEach-Object { Join-Path $vcpkgLib $_ } | Where-Object { Test-Path $_ } | Select-Object -First 1
+        if (-not $zlib) { throw "vcpkg static zlib library is missing" }
+        Copy-Item $zlib (Join-Path $vcpkgLib "zlib.lib") -Force

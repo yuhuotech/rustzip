@@ -55,9 +55,9 @@ Vercel build 会在部署期间自动应用 Neon Postgres migrations;检查部�
 
 默认包不启用 RAR，也不注册 RAR 专属关联。macOS / Linux 可设置 `RZ_WITH_RAR=1` 打包测试版；Windows 需用 `cargo build --release -p rustzip-gui --features rar` 构建，并给 Inno Setup 增加 `/DRarEnabled=1`。启用时安装包附带 unRAR 许可证。RAR 临时磁盘输出尚无硬上限，不能将此测试包视为已完成安全验收的正式发行版，见 D35 / D36。
 
-Windows 安装器需要 `VCPKG_INSTALLATION_ROOT` 指向包含 `installed\x64-windows\bin` 和 `share` 的 vcpkg；也可以分别用 `/DVcpkgBin=...`、`/DVcpkgShare=...` 指定。安装器只打包列出的归档后端运行时 DLL 和相应许可文件；这些文件名及依赖加载尚待 Windows 原生打包和卸载验收。
+Windows 使用 `x64-windows-static-md` vcpkg triplet 静态链接原生归档库，避免 libarchive 与 Rust LZMA 后端的 DLL 导入符号冲突。安装器从 `VCPKG_INSTALLATION_ROOT` 收集原生依赖许可证；原生安装与卸载仍待 Windows runner 验收。
 
-Windows MSVC 的 `libarchive2-sys` 需要 vcpkg 导入库。安装依赖后，按 CI 的 `native-archive-deps` action 将 `z.lib` 复制为 `zlib.lib`，并将 `lzma.lib` 复制为 `rustzip_lzma_import.lib`；后者避免被 Rust 编码器的同名静态库遮蔽。构建和运行测试时还需将 vcpkg 的 `installed\x64-windows\bin` 加入 `PATH`。这些步骤仍需在 Windows runner 完整复测。
+Windows MSVC 构建通过 CI 的 `native-archive-deps` action 安装 `x64-windows-static-md` vcpkg 库，并将 zlib 的库文件名适配为 `libarchive2-sys` 使用的 `zlib.lib`。原生链接和测试仍需 Windows runner 实测。
 
 ## 系统集成现状
 

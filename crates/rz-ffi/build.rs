@@ -9,10 +9,13 @@ fn main() {
             println!("cargo:warning=VCPKG_INSTALLATION_ROOT is required for native libarchive");
             return;
         };
-        let lib = PathBuf::from(root).join("installed/x64-windows/lib");
+        let triplet =
+            env::var("VCPKG_DEFAULT_TRIPLET").unwrap_or_else(|_| "x64-windows-static-md".into());
+        println!("cargo:rerun-if-env-changed=VCPKG_DEFAULT_TRIPLET");
+        let lib = PathBuf::from(root)
+            .join("installed")
+            .join(triplet)
+            .join("lib");
         println!("cargo:rustc-link-search=native={}", lib.display());
-        // The separate name prevents another crate's static lzma.lib from shadowing
-        // the vcpkg import library required by libarchive's __imp_lzma symbols.
-        println!("cargo:rustc-link-lib=dylib=rustzip_lzma_import");
     }
 }

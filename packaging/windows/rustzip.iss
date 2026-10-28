@@ -17,17 +17,11 @@
   #define RarEnabled 0
 #endif
 #define VcpkgRoot GetEnv("VCPKG_INSTALLATION_ROOT")
-#ifndef VcpkgBin
-  #if VcpkgRoot == ""
-    #error Set VCPKG_INSTALLATION_ROOT or pass /DVcpkgBin with the x64-windows runtime DLL directory.
-  #endif
-  #define VcpkgBin VcpkgRoot + "\installed\x64-windows\bin"
-#endif
 #ifndef VcpkgShare
   #if VcpkgRoot == ""
-    #error Set VCPKG_INSTALLATION_ROOT or pass /DVcpkgShare with the x64-windows share directory.
+    #error Set VCPKG_INSTALLATION_ROOT or pass /DVcpkgShare with the x64-windows-static-md share directory.
   #endif
-  #define VcpkgShare VcpkgRoot + "\installed\x64-windows\share"
+  #define VcpkgShare VcpkgRoot + "\installed\x64-windows-static-md\share"
 #endif
 
 [Setup]
@@ -62,13 +56,6 @@ Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: 
 
 [Files]
 Source: "{#SourceExe}"; DestDir: "{app}"; Flags: ignoreversion
-; Only the libraries used by libarchive are bundled from the vcpkg triplet.
-Source: "{#VcpkgBin}\z.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#VcpkgBin}\bz2.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#VcpkgBin}\liblzma.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#VcpkgBin}\zstd.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#VcpkgBin}\lz4.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#VcpkgBin}\libcrypto-*.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#VcpkgShare}\zlib\copyright"; DestDir: "{app}\licenses"; DestName: "zlib.txt"; Flags: ignoreversion
 Source: "{#VcpkgShare}\bzip2\copyright"; DestDir: "{app}\licenses"; DestName: "bzip2.txt"; Flags: ignoreversion
 Source: "{#VcpkgShare}\liblzma\copyright"; DestDir: "{app}\licenses"; DestName: "liblzma.txt"; Flags: ignoreversion

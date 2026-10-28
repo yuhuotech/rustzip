@@ -40,13 +40,10 @@ try {
         "/DIR=`"$install`"", "/TASKS=contextmenu,openwith", "/LOG=`"$work\install.log`""
     ) -Wait -PassThru
     if ($process.ExitCode -ne 0) { throw "Installer failed: $($process.ExitCode)" }
-    foreach ($file in @("rustzip.exe", "z.dll", "bz2.dll", "liblzma.dll", "zstd.dll", "lz4.dll", "licenses\zlib.txt")) {
+    foreach ($file in @("rustzip.exe", "licenses\zlib.txt")) {
         if (-not (Test-Path -LiteralPath (Join-Path $install $file))) {
             throw "Installed file missing: $file"
         }
-    }
-    if (-not (Get-ChildItem -Path $install -Filter "libcrypto-*.dll")) {
-        throw "OpenSSL runtime DLL is missing"
     }
     foreach ($key in $owned) {
         if (-not (Test-Path -LiteralPath $key)) { throw "Expected registry key missing: $key" }
