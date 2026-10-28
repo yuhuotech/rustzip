@@ -241,3 +241,8 @@
 - 在 D21 隔离的 libarchive reader 中新增 RPM 支持。RPM 魔数、版本和包类型字段通过验证后，固定注册 RPM filter、gzip/bzip2/xz/zstd 内置解码器和 CPIO reader；不注册 program filter，也不调用 `rpm2cpio` 等外部命令。
 - RustZIP 仅列出、测试和提取包内普通文件；不执行包安装脚本，不保留链接等特殊文件，不提供 RPM 写入。
 - sniff 使用 RPM 包头魔数与版本 / 类型字段，不以 `.rpm` 扩展名判定。bzip2 和 gzip 测试 fixture 来自 vendored libarchive 的 BSD-2-Clause 测试数据，由三份虚构的 `hello` 文本文件组成；没有新增 Cargo 依赖。
+
+## D35 bzip2 并行压缩与 RAR 预览边界
+
+- 更新 D7 的 bzip2 单线程状态：单文件和 tar.bz2 可将输入分块并行压缩为按顺序拼接的标准 bzip2 流；线程数受内存预算估算限制，不足时回退单线程。解压仍为单线程。
+- 当前 unrar 后端在提供条目流之前会把整个条目写入临时文件，不能保证预览磁盘上限。因此详情栏和外部打开入口均不读取 RAR 预览，提示用户先解压；正常的 RAR 浏览、测试和解压不变。未来只有具备可验证的解码输出硬限制后才恢复预览。

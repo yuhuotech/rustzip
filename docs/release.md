@@ -61,6 +61,8 @@ Vercel build 会在部署期间自动应用 Neon Postgres migrations;检查部�
 | 右键"用 RustZIP 压缩"/"解压到此处" | **未做**(需要 Finder 扩展或 Services,另做) | 已做(安装程序写注册表) | Dolphin 服务菜单、Nemo 动作已做;Nautilus 50.2.2 的 Scripts 子菜单、压缩入口和逐字节解压已在 Ubuntu 26.04 / Xvfb 验收 |
 | 预览(Quick Look 等) | 未做 | 未做 | 未做 |
 
+macOS 的“打开方式”声明包含已接入的常见只读格式及 LZ4；声明本身不改变系统默认程序，实际 Finder 展示仍需在安装后的系统上验收。
+
 命令行入口:`rustzip --extract-here <压缩包>...` 解压到压缩包所在目录;`rustzip --compress <文件或文件夹>...` 打开新建压缩窗口。
 
 **验证状态**：macOS arm64 `.app` / DMG 的打包、签名校验和启动通过，尚未公证；Linux x86_64 tarball 已在 Ubuntu 26.04 构建，并通过隔离安装 / 卸载和 Nautilus Scripts 菜单验收。Windows 安装程序和完整 release 工作流尚未运行。当前 GitHub Actions 只允许手动触发 CI；Release 需在 `v*` tag 上手动运行。仓库截至 2026-10-27 尚无公开 GitHub Release。
