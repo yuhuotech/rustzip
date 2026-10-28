@@ -5,7 +5,7 @@
 use crate::view::{MainView, Notice, PasswordTarget};
 use gpui_kit::{Context, Window};
 use rz_app::stats::{StatsState, report_if_due};
-use rz_app::update::{Update, Updater, current_platform};
+use rz_app::update::{Fetcher, Update, Updater, current_platform};
 use rz_services::{
     HttpFetcher, HttpSender, UPDATE_MANIFEST_URL, UPDATE_PUBLIC_KEY, environment, stats_url,
 };
@@ -34,7 +34,7 @@ fn today() -> i64 {
 }
 
 /// Hands a downloaded installer to the operating system.
-fn open_with_system(path: &Path) {
+fn open_with_system(path: &Path) -> std::io::Result<()> {
     let (program, target): (&str, PathBuf) = match std::env::consts::OS {
         "macos" => ("open", path.to_path_buf()),
         "windows" => ("explorer", path.to_path_buf()),
@@ -45,7 +45,7 @@ fn open_with_system(path: &Path) {
                 .map_or_else(|| path.to_path_buf(), Path::to_path_buf),
         ),
     };
-    let _ = Command::new(program).arg(target).spawn();
+    Command::new(program).arg(target).spawn().map(|_| ())
 }
 
 /// The largest file unpacked just to be opened for a look.
@@ -167,6 +167,19 @@ fn download_name(url: &str) -> String {
     }
 }
 
+fn download_and_open_update<F: Fetcher>(
+    updater: &Updater<'_, F>,
+    update: &Update,
+    dir: &Path,
+    open: impl FnOnce(&Path) -> std::io::Result<()>,
+) -> Result<(), String> {
+    let bytes = updater.download(update).map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    let file = dir.join(download_name(&update.asset.url));
+    std::fs::write(&file, bytes).map_err(|e| e.to_string())?;
+    open(&file).map_err(|e| e.to_string())
+}
+
 impl MainView {
     /// Called once after the window is up. Neither check may delay or break startup.
     pub fn start_background_services(&mut self, cx: &mut Context<Self>) {
@@ -211,20 +224,18 @@ impl MainView {
                 .background_executor()
                 .spawn(async move {
                     let fetcher = HttpFetcher::new();
-                    let bytes = Updater::new(&fetcher, UPDATE_MANIFEST_URL, UPDATE_PUBLIC_KEY)
-                        .download(&job)
-                        .map_err(|e| e.to_string())?;
                     let dir = std::env::temp_dir().join(format!("RustZIP-update-{}", job.version));
-                    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-                    let file = dir.join(download_name(&job.asset.url));
-                    std::fs::write(&file, bytes).map_err(|e| e.to_string())?;
-                    Ok::<_, String>(file)
+                    download_and_open_update(
+                        &Updater::new(&fetcher, UPDATE_MANIFEST_URL, UPDATE_PUBLIC_KEY),
+                        &job,
+                        &dir,
+                        open_with_system,
+                    )
                 })
                 .await;
             let _ = this.update(cx, |this, cx| match saved {
-                Ok(file) => {
+                Ok(()) => {
                     this.update = None;
-                    open_with_system(&file);
                     this.say(
                         Notice::Info(
                             this.tool_text("update_installed")
@@ -366,6 +377,78 @@ mod tests {
         assert_eq!(download_name("https://x/y/"), "RustZIP-update");
         assert_eq!(download_name("https://x/..%2f..%2fevil"), "RustZIP-update");
         assert!(!download_name("https://x/a b/../../etc").contains('/'));
+    }
+
+    #[test]
+    fn update_handoff_verifies_before_opening_and_propagates_launch_failure() {
+        use ed25519_dalek::{Signer, SigningKey};
+        use rz_app::update::{Asset, hex, signed_message};
+        use std::cell::Cell;
+
+        struct Bytes(Vec<u8>);
+        impl Fetcher for Bytes {
+            fn get(&self, _: &str, _: u64) -> rz_core::Result<Vec<u8>> {
+                Ok(self.0.clone())
+            }
+        }
+        let key = SigningKey::from_bytes(&[7; 32]);
+        let version = "0.2.0";
+        let platform = "macos-aarch64";
+        let digest = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+        let signature = key.sign(&signed_message(version, platform, digest));
+        let update = Update {
+            version: version.parse().unwrap(),
+            notes: String::new(),
+            asset: Asset {
+                platform: platform.into(),
+                url: "https://example.com/installer.dmg".into(),
+                size: 3,
+                sha256: digest.into(),
+                signature: hex(&signature.to_bytes()),
+            },
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let fetcher = Bytes(b"abc".to_vec());
+        let updater = Updater::new(
+            &fetcher,
+            "https://example.com/update.json",
+            key.verifying_key().to_bytes(),
+        );
+        let called = Cell::new(false);
+        let result = download_and_open_update(&updater, &update, dir.path(), |path| {
+            called.set(true);
+            assert_eq!(std::fs::read(path).unwrap(), b"abc");
+            Err(std::io::Error::other("launch failed"))
+        });
+        assert!(called.get());
+        assert!(result.unwrap_err().contains("launch failed"));
+
+        called.set(false);
+        assert!(
+            download_and_open_update(&updater, &update, dir.path(), |path| {
+                called.set(true);
+                assert_eq!(std::fs::read(path).unwrap(), b"abc");
+                Ok(())
+            })
+            .is_ok()
+        );
+        assert!(called.get());
+
+        let bad = Bytes(b"bad".to_vec());
+        let updater = Updater::new(
+            &bad,
+            "https://example.com/update.json",
+            key.verifying_key().to_bytes(),
+        );
+        called.set(false);
+        assert!(
+            download_and_open_update(&updater, &update, dir.path(), |_| {
+                called.set(true);
+                Ok(())
+            })
+            .is_err()
+        );
+        assert!(!called.get());
     }
 
     #[test]

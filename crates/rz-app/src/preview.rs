@@ -1,7 +1,7 @@
 //! What the details panel shows for a file: a readable type name and, for pictures,
 //! the picture itself.
 
-use rz_core::{Entry, Error};
+use rz_core::{CancelToken, Entry, Error};
 use std::io::Read;
 use std::path::Path;
 
@@ -10,6 +10,8 @@ use std::path::Path;
 pub const MAX_IMAGE_BYTES: u64 = 8 * 1024 * 1024;
 /// Text is rendered in the detail panel, so keep both decoding and layout work small.
 pub const MAX_TEXT_BYTES: u64 = 64 * 1024;
+/// RAR's current decoder writes whole entries to disk before returning data.
+pub const RAR_PREVIEW_UNAVAILABLE: &str = "RAR preview requires bounded extraction";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImageFormat {
@@ -141,16 +143,44 @@ pub fn read_entry(
         )));
     }
     let mut reader = rz_formats::open(archive)?;
+    if reader.format_name() == "rar" {
+        return Err(Error::Unsupported(RAR_PREVIEW_UNAVAILABLE.into()));
+    }
     if let Some(pw) = password {
         reader.set_password(pw)?;
     }
     if let Some(enc) = encoding {
         reader.set_encoding(enc)?;
     }
-    // Several formats only know their entries once the list has been read.
-    reader.entries()?;
+    reader.set_read_control(CancelToken::new(), limit);
     let mut data = Vec::new();
-    reader.open(entry)?.take(limit + 1).read_to_end(&mut data)?;
+    let format = reader.format_name();
+    if format == "7z" || format.starts_with("tar") {
+        let mut found = false;
+        let result = reader.for_each(&mut |candidate, stream| {
+            if candidate.index == entry.index {
+                found = true;
+                stream
+                    .take(limit.saturating_add(1))
+                    .read_to_end(&mut data)?;
+                // Stop sequential decoding as soon as the requested entry is read.
+                return Err(Error::Cancelled);
+            }
+            Ok(())
+        });
+        match result {
+            Err(Error::Cancelled) if found => {}
+            Err(error) => return Err(error),
+            Ok(()) => return Err(Error::Corrupt("preview entry not found".into())),
+        }
+    } else {
+        // Some readers need their entries initialized before opening one.
+        reader.entries()?;
+        reader
+            .open(entry)?
+            .take(limit.saturating_add(1))
+            .read_to_end(&mut data)?;
+    }
     if data.len() as u64 > limit {
         return Err(Error::LimitExceeded("entry is larger than declared".into()));
     }
@@ -218,6 +248,118 @@ mod tests {
         assert_eq!(decode_text(data).as_deref(), Some("hello"));
         assert!(matches!(
             read_entry(&path, &entry, None, None, 4),
+            Err(Error::LimitExceeded(_))
+        ));
+    }
+
+    #[cfg(feature = "rar")]
+    #[test]
+    fn rar_preview_is_refused_before_extracting_an_entry() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../rz-formats/tests/fixtures/container.rar");
+        let entry = Entry {
+            index: 0,
+            path: "small.txt".into(),
+            kind: rz_core::EntryKind::File,
+            size: 1,
+            packed_size: None,
+            modified: None,
+            encrypted: false,
+            unix_mode: None,
+        };
+        assert!(matches!(
+            read_entry(&path, &entry, None, None, MAX_TEXT_BYTES),
+            Err(Error::Unsupported(reason)) if reason == RAR_PREVIEW_UNAVAILABLE
+        ));
+    }
+
+    #[test]
+    fn sequential_archives_preview_only_the_requested_entry() {
+        use rz_core::{CreateOptions, NoProgress};
+        use rz_engine::compress;
+        use rz_formats::OutputFormat;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let src = tmp.path().join("source");
+        std::fs::create_dir(&src).unwrap();
+        std::fs::write(src.join("first.txt"), vec![b'a'; 128 * 1024]).unwrap();
+        std::fs::write(src.join("target.txt"), b"target text").unwrap();
+        for (name, password) in [
+            ("plain.tar.gz", None),
+            ("solid.7z", None),
+            ("encrypted.7z", Some("secret")),
+        ] {
+            let archive = tmp.path().join(name);
+            let opts = CreateOptions {
+                password: password.map(str::to_string),
+                ..CreateOptions::default()
+            };
+            compress(
+                std::slice::from_ref(&src),
+                &archive,
+                OutputFormat::from_path(&archive).unwrap(),
+                &opts,
+                &CancelToken::new(),
+                &mut NoProgress,
+            )
+            .unwrap();
+            let mut reader = rz_formats::open(&archive).unwrap();
+            if let Some(password) = password {
+                reader.set_password(password).unwrap();
+            }
+            let entry = reader
+                .entries()
+                .unwrap()
+                .into_iter()
+                .find(|entry| entry.path.ends_with("target.txt"))
+                .unwrap();
+            assert_eq!(
+                read_entry(&archive, &entry, password, None, MAX_TEXT_BYTES).unwrap(),
+                b"target text",
+                "{name}"
+            );
+            assert!(matches!(
+                read_entry(&archive, &entry, password, None, 4),
+                Err(Error::LimitExceeded(_))
+            ));
+            if password.is_some() {
+                assert!(read_entry(&archive, &entry, Some("wrong"), None, MAX_TEXT_BYTES).is_err());
+            }
+            let corrupt = tmp.path().join(format!("corrupt-{name}"));
+            let mut bytes = std::fs::read(&archive).unwrap();
+            bytes.truncate(bytes.len() / 2);
+            std::fs::write(&corrupt, bytes).unwrap();
+            assert!(
+                read_entry(&corrupt, &entry, password, None, MAX_TEXT_BYTES).is_err(),
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn single_stream_preview_checks_actual_size_even_with_stale_metadata() {
+        use rz_core::{CreateOptions, NoProgress};
+        use rz_engine::compress;
+        use rz_formats::OutputFormat;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let src = tmp.path().join("large.txt");
+        std::fs::write(&src, vec![b'a'; 128 * 1024]).unwrap();
+        let archive = tmp.path().join("large.txt.gz");
+        compress(
+            &[src],
+            &archive,
+            OutputFormat::from_path(&archive).unwrap(),
+            &CreateOptions::default(),
+            &CancelToken::new(),
+            &mut NoProgress,
+        )
+        .unwrap();
+        let mut reader = rz_formats::open(&archive).unwrap();
+        let mut entry = reader.entries().unwrap().remove(0);
+        entry.size = 1;
+        assert!(matches!(
+            read_entry(&archive, &entry, None, None, MAX_TEXT_BYTES),
             Err(Error::LimitExceeded(_))
         ));
     }

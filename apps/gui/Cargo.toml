@@ -31,6 +31,7 @@ sys-locale.workspace = true
 winresource = "0.1"
 
 [dev-dependencies]
+ed25519-dalek = "3.0.0"
 gpui-kit = { version = "0.8.0", features = ["test-support"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 tempfile = "3"

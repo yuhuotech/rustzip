@@ -43,6 +43,7 @@ notice_prepare_preview	Подготовка {name}…
 notice_external_edit_writeback	Открыто в системном приложении. Сохранённые изменения будут записаны обратно в архив.
 notice_external_read_only	Открыто в системном приложении. Этот архив доступен только для чтения, поэтому изменения не будут записаны.
 notice_preview_too_large	Файл слишком большой для предпросмотра. Распакуйте его, чтобы открыть.
+notice_rar_preview_unavailable	Предпросмотр RAR недоступен; распакуйте файл перед открытием.
 task_test_passed	{task} завершено: проблем не найдено в элементах — {count}
 task_edit_complete	{task} завершено: теперь в архиве элементов — {count}
 task_complete_count	{task} завершено: файлов — {count}, {size}

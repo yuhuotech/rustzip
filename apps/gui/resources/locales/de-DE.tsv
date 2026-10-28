@@ -43,6 +43,7 @@ notice_prepare_preview	{name} wird vorbereitet…
 notice_external_edit_writeback	In der System-App geöffnet. Gespeicherte Änderungen werden zurück ins Archiv geschrieben.
 notice_external_read_only	In der System-App geöffnet. Dieses Archiv ist schreibgeschützt, Änderungen werden nicht zurückgeschrieben.
 notice_preview_too_large	Diese Datei ist für eine Vorschau zu groß. Entpacke sie, um sie anzusehen.
+notice_rar_preview_unavailable	Die RAR-Vorschau ist nicht verfügbar; entpacke die Datei vor dem Öffnen.
 task_test_passed	{task} abgeschlossen: Keine Probleme in {count} Einträgen gefunden
 task_edit_complete	{task} abgeschlossen: Das Archiv enthält jetzt {count} Elemente
 task_complete_count	{task} abgeschlossen: {count} Dateien, {size}

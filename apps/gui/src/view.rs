@@ -1878,6 +1878,14 @@ impl MainView {
                     Notice::Info(this.tool_text("notice_preview_too_large").into()),
                     cx,
                 ),
+                Err(Error::Unsupported(reason))
+                    if reason == rz_app::preview::RAR_PREVIEW_UNAVAILABLE =>
+                {
+                    this.say(
+                        Notice::Info(this.tool_text("notice_rar_preview_unavailable").into()),
+                        cx,
+                    )
+                }
                 Err(e) => this.say(Notice::Error(explain(&this.settings.language, &e)), cx),
             });
         })
@@ -4131,6 +4139,13 @@ impl MainView {
                             )
                             .child(div().text_color(p.fg3).child(kind)),
                     )
+                    .when(a.format == "rar" && row.kind == RowKind::File, |d| {
+                        d.child(
+                            div()
+                                .text_color(p.fg3)
+                                .child(self.tool_text("notice_rar_preview_unavailable")),
+                        )
+                    })
                     .child(
                         v_flex()
                             .gap_2()
