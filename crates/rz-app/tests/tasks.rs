@@ -592,8 +592,27 @@ fn a_cancel_and_pause_storm_ends_with_one_terminal_state_per_task() {
         assert!(info.state.is_finished(), "{id} stuck in {:?}", info.state);
     }
 
+    // `wait_for` observes the final task state just before its worker emits the
+    // matching event, so drain until every terminal event has reached the channel.
+    let mut events: Vec<Event> = rx.try_iter().collect();
+    while events
+        .iter()
+        .filter(|event| {
+            matches!(
+                event,
+                Event::Finished { .. } | Event::Failed { .. } | Event::Cancelled(_)
+            )
+        })
+        .count()
+        < ids.len()
+    {
+        events.push(
+            rx.recv_timeout(WAIT)
+                .unwrap_or_else(|error| panic!("terminal events did not arrive: {error}")),
+        );
+    }
+
     // Every task produced exactly one terminal event, after its Added event.
-    let events: Vec<Event> = rx.try_iter().collect();
     for id in &ids {
         let mut added_at = None;
         let mut terminals = 0;
