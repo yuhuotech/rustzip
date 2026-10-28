@@ -46,6 +46,7 @@ runs:
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         # libarchive2-sys links zlib.lib; the vcpkg zlib port names its import library z.lib.
         $vcpkgLib = Join-Path $env:VCPKG_INSTALLATION_ROOT "installed\$env:VCPKG_DEFAULT_TRIPLET\lib"
-        $zlib = @("z.lib", "zlibstatic.lib") | ForEach-Object { Join-Path $vcpkgLib $_ } | Where-Object { Test-Path $_ } | Select-Object -First 1
+        $zlib = @("z.lib", "zlib.lib", "zlibstatic.lib") | ForEach-Object { Join-Path $vcpkgLib $_ } | Where-Object { Test-Path $_ } | Select-Object -First 1
         if (-not $zlib) { throw "vcpkg static zlib library is missing" }
-        Copy-Item $zlib (Join-Path $vcpkgLib "zlib.lib") -Force
+        $libarchiveZlib = Join-Path $vcpkgLib "zlib.lib"
+        if ($zlib -ne $libarchiveZlib) { Copy-Item $zlib $libarchiveZlib -Force }
