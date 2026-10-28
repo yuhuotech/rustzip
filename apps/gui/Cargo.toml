@@ -6,6 +6,9 @@ edition = "2024"
 license.workspace = true
 publish = false
 
+[features]
+rar = ["rz-app/rar"]
+
 [lib]
 name = "rustzip_gui"
 path = "src/lib.rs"

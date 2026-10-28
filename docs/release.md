@@ -48,10 +48,14 @@ Vercel build 会在部署期间自动应用 Neon Postgres migrations;检查部�
 | 系统 | 命令 | 产物 |
 |---|---|---|
 | macOS | `packaging/macos/build-app.sh dist` | `RustZIP.app` 和 `RustZIP-<版本>-macos-<架构>.dmg` |
-| Windows | `iscc /DAppVersion=0.1.0 packaging\windows\rustzip.iss`(需先 `cargo build --release -p rustzip-gui`) | `RustZIP-<版本>-windows-x86_64.exe` |
+| Windows | `iscc /DAppVersion=0.1.0 packaging\windows\rustzip.iss`(需先安装 x64-windows vcpkg 依赖并运行 `cargo build --release -p rustzip-gui`) | `RustZIP-<版本>-windows-x86_64.exe` |
 | Linux | `packaging/linux/build-tarball.sh dist` | `RustZIP-<版本>-linux-<架构>.tar.gz`,解开后 `./install.sh` |
 
 图标由 `cargo run --release -p rustzip-gui --example make_icons -- packaging/icons` 生成(`.icns`、`.ico`、各尺寸 PNG)。
+
+默认包不启用 RAR，也不注册 RAR 专属关联。macOS / Linux 可设置 `RZ_WITH_RAR=1` 打包测试版；Windows 需用 `cargo build --release -p rustzip-gui --features rar` 构建，并给 Inno Setup 增加 `/DRarEnabled=1`。启用时安装包附带 unRAR 许可证。RAR 临时磁盘输出尚无硬上限，不能将此测试包视为已完成安全验收的正式发行版，见 D35 / D36。
+
+Windows 安装器需要 `VCPKG_INSTALLATION_ROOT` 指向包含 `installed\x64-windows\bin` 和 `share` 的 vcpkg；也可以分别用 `/DVcpkgBin=...`、`/DVcpkgShare=...` 指定。安装器只打包列出的归档后端运行时 DLL 和相应许可文件；这些文件名及依赖加载尚待 Windows 原生打包和卸载验收。
 
 ## 系统集成现状
 
@@ -61,8 +65,10 @@ Vercel build 会在部署期间自动应用 Neon Postgres migrations;检查部�
 | 右键"用 RustZIP 压缩"/"解压到此处" | **未做**(需要 Finder 扩展或 Services,另做) | 已做(安装程序写注册表) | Dolphin 服务菜单、Nemo 动作已做;Nautilus 50.2.2 的 Scripts 子菜单、压缩入口和逐字节解压已在 Ubuntu 26.04 / Xvfb 验收 |
 | 预览(Quick Look 等) | 未做 | 未做 | 未做 |
 
-macOS 的“打开方式”声明包含已接入的常见只读格式及 LZ4；声明本身不改变系统默认程序，实际 Finder 展示仍需在安装后的系统上验收。
+macOS 的“打开方式”声明包含已接入的常见只读格式及 LZ4，RAR 仅在显式启用时声明；声明本身不改变系统默认程序，实际 Finder 展示仍需在安装后的系统上验收。
 
 命令行入口:`rustzip --extract-here <压缩包>...` 解压到压缩包所在目录;`rustzip --compress <文件或文件夹>...` 打开新建压缩窗口。
 
 **验证状态**：macOS arm64 `.app` / DMG 的打包、签名校验和启动通过，尚未公证；Linux x86_64 tarball 已在 Ubuntu 26.04 构建，并通过隔离安装 / 卸载和 Nautilus Scripts 菜单验收。Windows 安装程序和完整 release 工作流尚未运行。当前 GitHub Actions 只允许手动触发 CI；Release 需在 `v*` tag 上手动运行。仓库截至 2026-10-27 尚无公开 GitHub Release。
+
+2026-10-28 的手动 CI、macOS 钥匙串 / Launch Services 检查及 Windows 链接失败与后续修复状态见 [第二阶段验收](phase-2-platform-acceptance.md)；修复后的工作区尚未在 Windows 或远端 CI 验证。

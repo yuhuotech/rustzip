@@ -9,20 +9,31 @@
 #                          Without it the app is ad-hoc signed: it runs on this Mac, and
 #                          other Macs ask the user to approve it in System Settings.
 #   NOTARY_PROFILE         a `xcrun notarytool store-credentials` profile; notarizes the dmg
+#   RZ_WITH_RAR            set to 1 for an opt-in RAR build and association
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 out="${1:-$root/dist}"
 target="${TARGET:-}"
+case "${RZ_WITH_RAR:-0}" in
+    0|1) ;;
+    *) echo "RZ_WITH_RAR must be 0 or 1" >&2; exit 2 ;;
+esac
+set --
+rar_document_type=""
+if [ "${RZ_WITH_RAR:-0}" = "1" ]; then
+    set -- --features rar
+    rar_document_type="<string>rar</string>"
+fi
 version="$(awk -F'"' '/^version *=/ {print $2; exit}' "$root/Cargo.toml")"
 
 cd "$root"
 if [ -n "$target" ]; then
-    cargo build --release -p rustzip-gui --target "$target"
+    cargo build --release -p rustzip-gui --target "$target" "$@"
     bin="target/$target/release/rustzip"
     arch="${target%%-*}"
 else
-    cargo build --release -p rustzip-gui
+    cargo build --release -p rustzip-gui "$@"
     bin="target/release/rustzip"
     arch="$(uname -m)"
 fi
@@ -33,7 +44,11 @@ rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$bin" "$app/Contents/MacOS/rustzip"
 cp packaging/icons/RustZIP.icns "$app/Contents/Resources/RustZIP.icns"
-sed "s/@VERSION@/$version/g" packaging/macos/Info.plist.in > "$app/Contents/Info.plist"
+if [ "${RZ_WITH_RAR:-0}" = "1" ]; then
+    cp packaging/licenses/unrar.txt "$app/Contents/Resources/unrar-license.txt"
+fi
+sed -e "s/@VERSION@/$version/g" -e "s|@RAR_DOCUMENT_TYPE@|$rar_document_type|" \
+    packaging/macos/Info.plist.in > "$app/Contents/Info.plist"
 plutil -lint "$app/Contents/Info.plist"
 
 identity="${MACOS_SIGN_IDENTITY:--}"

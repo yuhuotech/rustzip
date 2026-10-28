@@ -27,7 +27,7 @@
             <array>
                 <string>zip</string>
                 <string>7z</string>
-                <string>rar</string>
+                @RAR_DOCUMENT_TYPE@
                 <string>tar</string>
                 <string>gz</string>
                 <string>tgz</string>

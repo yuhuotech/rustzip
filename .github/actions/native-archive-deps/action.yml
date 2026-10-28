@@ -24,3 +24,10 @@ runs:
         "$env:ProgramFiles\LLVM\bin" >> $env:GITHUB_PATH
         vcpkg install zlib:x64-windows bzip2:x64-windows liblzma:x64-windows `
           zstd:x64-windows lz4:x64-windows openssl:x64-windows
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        # libarchive2-sys links zlib.lib; the vcpkg zlib port names its import library z.lib.
+        $vcpkgLib = Join-Path $env:VCPKG_INSTALLATION_ROOT "installed\x64-windows\lib"
+        $zlibImport = Join-Path $vcpkgLib "z.lib"
+        if (-not (Test-Path $zlibImport)) { throw "vcpkg z.lib is missing" }
+        Copy-Item $zlibImport (Join-Path $vcpkgLib "zlib.lib") -Force
+        (Join-Path $env:VCPKG_INSTALLATION_ROOT "installed\x64-windows\bin") >> $env:GITHUB_PATH

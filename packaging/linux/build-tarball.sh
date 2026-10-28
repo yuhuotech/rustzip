@@ -3,6 +3,7 @@
 # manager menu entries and an install script that needs no root (installs under ~/.local).
 #
 #   packaging/linux/build-tarball.sh [output-dir]
+#   RZ_WITH_RAR=1 packaging/linux/build-tarball.sh [output-dir]
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -12,12 +13,29 @@ arch="$(uname -m)"
 name="RustZIP-$version-linux-$arch"
 
 cd "$root"
-cargo build --release -p rustzip-gui
+case "${RZ_WITH_RAR:-0}" in
+    0|1) ;;
+    *) echo "RZ_WITH_RAR must be 0 or 1" >&2; exit 2 ;;
+esac
+set --
+if [ "${RZ_WITH_RAR:-0}" = "1" ]; then
+    set -- --features rar
+fi
+cargo build --release -p rustzip-gui "$@"
 
 stage="$(mktemp -d)/$name"
 mkdir -p "$stage/icons"
 cp target/release/rustzip "$stage/"
 cp packaging/linux/*.desktop packaging/linux/*.nemo_action packaging/linux/rustzip-nautilus-* "$stage/"
+if [ "${RZ_WITH_RAR:-0}" = "1" ]; then
+    sed 's|MimeType=|MimeType=application/vnd.rar;application/x-rar;|' \
+        "$stage/rustzip.desktop" > "$stage/rustzip.desktop.tmp"
+    mv "$stage/rustzip.desktop.tmp" "$stage/rustzip.desktop"
+    sed 's|Mimetypes=|Mimetypes=application/vnd.rar;|' \
+        "$stage/rustzip-extract.nemo_action" > "$stage/rustzip-extract.nemo_action.tmp"
+    mv "$stage/rustzip-extract.nemo_action.tmp" "$stage/rustzip-extract.nemo_action"
+    cp packaging/licenses/unrar.txt "$stage/unrar-license.txt"
+fi
 cp packaging/icons/hicolor/*.png "$stage/icons/"
 cat > "$stage/install.sh" <<'EOF'
 #!/usr/bin/env sh
@@ -36,6 +54,7 @@ if [ "${1:-}" = "--uninstall" ]; then
           "$prefix/share/nemo/actions/rustzip-extract.nemo_action" \
           "$nautilus_scripts/RustZIP - Compress selected items" \
           "$nautilus_scripts/RustZIP - Extract archives here"
+    rm -f "$prefix/share/doc/rustzip/unrar-license.txt"
     rm -f "$nautilus_binary"
     rmdir "$nautilus_scripts/.rustzip" 2>/dev/null || true
     for s in 16 32 48 64 128 256 512; do
@@ -45,6 +64,9 @@ if [ "${1:-}" = "--uninstall" ]; then
     exit 0
 fi
 install -Dm755 "$here/rustzip" "$prefix/bin/rustzip"
+if [ -f "$here/unrar-license.txt" ]; then
+    install -Dm644 "$here/unrar-license.txt" "$prefix/share/doc/rustzip/unrar-license.txt"
+fi
 install -Dm644 "$here/rustzip.desktop" "$apps/rustzip.desktop"
 install -Dm755 "$here/rustzip-servicemenu.desktop" \
     "$prefix/share/kservices5/ServiceMenus/rustzip-servicemenu.desktop"

@@ -285,6 +285,40 @@ fn pictures_and_plain_text_are_previewed_in_the_details_panel(cx: &mut TestAppCo
     });
 }
 
+#[cfg(feature = "rar")]
+#[gpui_kit::test]
+fn rar_build_opens_archive_but_explains_preview_restriction(cx: &mut TestAppContext) {
+    let archive = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../crates/rz-formats/tests/fixtures/container.rar");
+    let (handle, view) = open_window(cx, None);
+    open_sync(cx, handle, &view, &archive, None);
+    cx.update(|cx| assert_eq!(view.read(cx).current().unwrap().format, "rar"));
+    assert_eq!(row_names(cx, &view), ["container"]);
+    let table = cx.update(|cx| view.read(cx).table.clone());
+    cx.update_window(handle.into(), |_, _, cx| {
+        table.update(cx, |_, cx| cx.emit(TableEvent::SelectRow(1)));
+    })
+    .unwrap();
+    with_view(cx, handle, &view, |v, _, cx| v.open_selected(cx));
+    wait_until(cx, handle, |cx| {
+        cx.update(|cx| {
+            matches!(
+                &view.read(cx).notice,
+                Some(Notice::Info(text)) if text.contains("RAR 暂不支持安全预览")
+            )
+        })
+    });
+    cx.update(|cx| {
+        assert!(
+            matches!(
+                &view.read(cx).notice,
+                Some(Notice::Info(text)) if text.contains("RAR 暂不支持安全预览")
+            ),
+            "RAR preview must explain how to view the entry"
+        );
+    });
+}
+
 #[gpui_kit::test]
 fn the_recent_page_lists_archives_and_opening_one_returns_to_the_files(cx: &mut TestAppContext) {
     use rustzip_gui::view::Page;
@@ -2217,6 +2251,35 @@ fn settings_changes_are_saved_and_the_theme_follows_the_choice(cx: &mut TestAppC
         cx.update(|cx| cx.theme().primary),
         Palette::themed(false).accent
     );
+}
+
+#[gpui_kit::test]
+fn settings_switch_responds_to_pointer_and_keyboard(cx: &mut TestAppContext) {
+    let (handle, view) = open_window(cx, None);
+    with_view(cx, handle, &view, |v, _, cx| v.open_settings(cx));
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.click("set-smart", cx);
+    })
+    .unwrap();
+    cx.update(|cx| assert!(!view.read(cx).settings.smart_extract));
+    draw(cx, handle);
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.press("space", cx);
+    })
+    .unwrap();
+    cx.update(|cx| assert!(view.read(cx).settings.smart_extract));
+    draw(cx, handle);
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.press("enter", cx);
+    })
+    .unwrap();
+    cx.update(|cx| assert!(!view.read(cx).settings.smart_extract));
+    draw(cx, handle);
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.click("row-smart", cx);
+    })
+    .unwrap();
+    cx.update(|cx| assert!(view.read(cx).settings.smart_extract));
 }
 
 #[gpui_kit::test]

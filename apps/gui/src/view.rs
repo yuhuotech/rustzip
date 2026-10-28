@@ -336,6 +336,20 @@ fn format_eta(secs: u64, language: &str) -> String {
     }
 }
 
+fn deliver_task_notification(message: &str) {
+    #[cfg(target_os = "macos")]
+    {
+        static READY: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        if !*READY.get_or_init(|| notify_rust::set_application("com.yuhuotech.rustzip").is_ok()) {
+            return;
+        }
+    }
+    let _ = notify_rust::Notification::new()
+        .summary("RustZIP")
+        .body(message)
+        .show();
+}
+
 pub(crate) fn kind_label(kind: JobKind, language: &str) -> &'static str {
     match kind {
         JobKind::Compress => crate::text::tr(language, "kind_compress"),
@@ -2158,10 +2172,7 @@ impl MainView {
             let _ = cx
                 .background_executor()
                 .spawn(async move {
-                    let _ = notify_rust::Notification::new()
-                        .summary("RustZIP")
-                        .body(&message)
-                        .show();
+                    deliver_task_notification(&message);
                 })
                 .await;
         })
@@ -4803,8 +4814,16 @@ impl MainView {
                 .child(body)
         };
         // One switch per row, with a line that says what turning it on does.
-        let toggle = |id: &'static str, title: &'static str, hint: &'static str, on: bool| {
+        let toggle = |id: &'static str,
+                      row_id: &'static str,
+                      title: &'static str,
+                      hint: &'static str,
+                      on: bool,
+                      set: fn(&mut Settings, bool),
+                      cx: &mut Context<Self>| {
             h_flex()
+                .id(row_id)
+                .test_support()
                 .gap_3()
                 .items_center()
                 .child(
@@ -4813,7 +4832,15 @@ impl MainView {
                         .child(div().child(title))
                         .child(div().text_size(px(12.)).text_color(p.fg3).child(hint)),
                 )
-                .child(Switch::new(id).checked(on))
+                .child(
+                    Switch::new(id)
+                        .checked(on)
+                        .accessibility_label(title)
+                        .on_change(cx.listener(move |this, value: &bool, _, cx| {
+                            this.change_settings(|settings| set(settings, *value), cx);
+                            cx.stop_propagation();
+                        })),
+                )
         };
         let (theme, conflict) = (s.theme, s.on_conflict);
         let body =
@@ -4901,11 +4928,13 @@ impl MainView {
                         .child(
                             toggle(
                                 "set-smart",
+                                "row-smart",
                                 self.tool_text("settings_smart_extract"),
                                 self.tool_text("settings_smart_extract_hint"),
                                 s.smart_extract,
+                                |settings, value| settings.smart_extract = value,
+                                cx,
                             )
-                            .id("row-smart")
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.change_settings(|s| s.smart_extract = !s.smart_extract, cx);
                             })),
@@ -4913,11 +4942,13 @@ impl MainView {
                         .child(
                             toggle(
                                 "set-open-after-extract",
+                                "row-open-after-extract",
                                 self.tool_text("open_after_extract"),
                                 self.tool_text("open_after_extract_hint"),
                                 s.open_folder_when_done,
+                                |settings, value| settings.open_folder_when_done = value,
+                                cx,
                             )
-                            .id("row-open-after-extract")
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.change_settings(
                                     |s| s.open_folder_when_done = !s.open_folder_when_done,
@@ -4928,11 +4959,13 @@ impl MainView {
                         .child(
                             toggle(
                                 "set-task-notifications",
+                                "row-task-notifications",
                                 self.tool_text("task_notifications"),
                                 self.tool_text("task_notifications_hint"),
                                 s.task_notifications,
+                                |settings, value| settings.task_notifications = value,
+                                cx,
                             )
-                            .id("row-task-notifications")
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.change_settings(
                                     |s| s.task_notifications = !s.task_notifications,
@@ -4943,11 +4976,13 @@ impl MainView {
                         .child(
                             toggle(
                                 "set-updates",
+                                "row-updates",
                                 self.tool_text("settings_check_updates"),
                                 self.tool_text("settings_check_updates_hint"),
                                 s.check_updates,
+                                |settings, value| settings.check_updates = value,
+                                cx,
                             )
-                            .id("row-updates")
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.change_settings(|s| s.check_updates = !s.check_updates, cx);
                             })),
@@ -4955,11 +4990,13 @@ impl MainView {
                         .child(
                             toggle(
                                 "set-passwords",
+                                "row-passwords",
                                 self.tool_text("settings_remember_passwords"),
                                 self.tool_text("settings_remember_passwords_hint"),
                                 s.remember_passwords,
+                                |settings, value| settings.remember_passwords = value,
+                                cx,
                             )
-                            .id("row-passwords")
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.change_settings(
                                     |s| s.remember_passwords = !s.remember_passwords,
@@ -4983,11 +5020,13 @@ impl MainView {
                         .child(
                             toggle(
                                 "set-stats",
+                                "row-stats",
                                 self.tool_text("settings_install_stats"),
                                 self.tool_text("settings_install_stats_hint"),
                                 s.send_install_stats,
+                                |settings, value| settings.send_install_stats = value,
+                                cx,
                             )
-                            .id("row-stats")
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.change_settings(
                                     |s| s.send_install_stats = !s.send_install_stats,
