@@ -163,7 +163,7 @@ impl SingleOut {
             ));
         }
         Ok(Self {
-            sink: comp.writer(file, opts.level, opts.threads)?,
+            sink: comp.writer(file, opts.level, opts.threads, opts.memory_budget)?,
             added: false,
         })
     }

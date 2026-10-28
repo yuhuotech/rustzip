@@ -1,12 +1,12 @@
 //! Changing an archive that already exists: adding files and deleting entries.
 //!
-//! No supported format can be edited in place in a way that is safe against a crash
-//! halfway, so the archive is unpacked into a scratch folder next to it, changed
-//! there, packed into a new file, checked, and only then swapped in for the original.
-//! A failure or a cancel at any point leaves the original archive untouched.
+//! Edits are staged beside the original, checked, and only then swapped in.
+//! Eligible ZIP deletions, renames and replacements reuse compressed entries; other edits unpack
+//! into a scratch folder and repack. Failure or cancellation preserves the original.
 
 use rz_core::{
-    clean_path, CancelToken, CreateOptions, EntryKind, Error, Progress, ProgressSink, Result,
+    clean_path, is_within, CancelToken, CreateOptions, Entry, EntryKind, Error, NoProgress,
+    Progress, ProgressSink, Result,
 };
 use rz_engine::{compress, extract, safe_join, ExtractOptions};
 use rz_formats::OutputFormat;
@@ -200,6 +200,23 @@ pub fn edit_archive(
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
 
+    if format == OutputFormat::Zip
+        && encoding.is_none()
+        && opts.password.as_deref().is_none_or(str::is_empty)
+        && opts.only.is_none()
+        && rz_formats::volumes::zip_volume_paths(archive)?.is_none()
+    {
+        let entries = reader.entries_with_progress(cancel, &mut NoProgress)?;
+        if let Some(mut plan) = zip_copy_plan(&entries, edit, opts, parent) {
+            let names: Vec<String> = entries.iter().map(|entry| entry.path.clone()).collect();
+            if rz_formats::zip_edit::names_match(File::open(archive)?, &names, cancel)? {
+                drop(reader);
+                plan.level = level;
+                return edit_zip_copy(archive, &entries, plan, cancel, progress);
+            }
+        }
+    }
+
     // Same folder as the archive, so the final swap is a rename on one disk.
     let scratch = Scratch(parent.join(format!(
         ".{name}.rz-edit-{}-{}",
@@ -352,19 +369,312 @@ pub fn edit_archive(
     Ok(report)
 }
 
+struct ZipEditPlan {
+    names: Vec<Option<String>>,
+    replacement: Option<(usize, PathBuf)>,
+    level: u32,
+}
+
+fn zip_copy_plan(
+    entries: &[Entry],
+    edit: &Edit,
+    opts: &ExtractOptions,
+    root: &Path,
+) -> Option<ZipEditPlan> {
+    use std::collections::HashMap;
+    let mut paths = HashMap::new();
+    let mut total = 0u64;
+    for entry in entries {
+        let path = clean_path(&entry.path);
+        if entry.path.contains('\\')
+            || path != entry.path.trim_end_matches('/')
+            || entry.encrypted
+            || entry.kind == EntryKind::Symlink
+            || safe_join(root, &entry.path).is_err()
+            || paths.insert(path.to_lowercase(), entry.kind).is_some()
+        {
+            return None;
+        }
+        total = total.checked_add(entry.size)?;
+        if total > opts.max_total
+            || (entry.kind == EntryKind::File
+                && entry.size > opts.ratio_check_above
+                && entry.size > entry.packed_size?.max(1).saturating_mul(opts.max_ratio))
+        {
+            return None;
+        }
+    }
+    for path in paths.keys() {
+        let mut prefix = path.as_str();
+        while let Some((parent, _)) = prefix.rsplit_once('/') {
+            if paths.get(parent) == Some(&EntryKind::File) {
+                return None;
+            }
+            prefix = parent;
+        }
+    }
+    match edit {
+        Edit::Delete(selected) if !selected.is_empty() => {
+            let selected: Vec<String> = selected.iter().map(|path| clean_path(path)).collect();
+            if selected
+                .iter()
+                .any(|path| path.is_empty() || safe_join(root, path).is_err())
+            {
+                return None;
+            }
+            let plan: Vec<_> = entries
+                .iter()
+                .map(|entry| {
+                    let path = clean_path(&entry.path);
+                    (!selected.iter().any(|target| is_within(&path, target)))
+                        .then(|| entry.path.clone())
+                })
+                .collect();
+            plan.iter().any(Option::is_none).then_some(ZipEditPlan {
+                names: plan,
+                replacement: None,
+                level: 0,
+            })
+        }
+        Edit::Rename { path, new_name } if valid_name(new_name) => {
+            let target = clean_path(path);
+            if target.is_empty() || safe_join(root, &target).is_err() {
+                return None;
+            }
+            let parent = target.rsplit_once('/').map_or("", |(parent, _)| parent);
+            let next = if parent.is_empty() {
+                new_name.clone()
+            } else {
+                format!("{parent}/{new_name}")
+            };
+            let lower = next.to_lowercase();
+            let child_prefix = format!("{lower}/");
+            if paths.contains_key(&lower)
+                || paths.keys().any(|path| path.starts_with(&child_prefix))
+            {
+                return None;
+            }
+            let mut changed = false;
+            let plan = entries
+                .iter()
+                .map(|entry| {
+                    let old = clean_path(&entry.path);
+                    if is_within(&old, &target) {
+                        changed = true;
+                        let suffix = &old[target.len()..];
+                        let trailing = if entry.path.ends_with('/') { "/" } else { "" };
+                        Some(format!("{next}{suffix}{trailing}"))
+                    } else {
+                        Some(entry.path.clone())
+                    }
+                })
+                .collect();
+            changed.then_some(ZipEditPlan {
+                names: plan,
+                replacement: None,
+                level: 0,
+            })
+        }
+        Edit::Replace { entry, with } => {
+            let target = clean_path(entry);
+            if target.is_empty()
+                || safe_join(root, &target).is_err()
+                || safe_join(root, entry).is_err()
+            {
+                return None;
+            }
+            let source = fs::symlink_metadata(with).ok()?;
+            if !source.is_file() || source.file_type().is_symlink() || source.len() > opts.max_total
+            {
+                return None;
+            }
+            let matched = entries
+                .iter()
+                .find(|entry| clean_path(&entry.path) == target && entry.kind == EntryKind::File)?;
+            let plan = entries
+                .iter()
+                .map(|entry| Some(entry.path.clone()))
+                .collect();
+            Some(ZipEditPlan {
+                names: plan,
+                replacement: Some((matched.index, with.clone())),
+                level: 0,
+            })
+        }
+        _ => None,
+    }
+}
+
+struct StagedFile(PathBuf);
+
+impl Drop for StagedFile {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.0);
+    }
+}
+
+struct EditPhase<'a> {
+    phase: u64,
+    files_per_phase: u64,
+    progress: &'a mut dyn ProgressSink,
+}
+
+impl ProgressSink for EditPhase<'_> {
+    fn update(&mut self, progress: Progress) {
+        let part = progress
+            .bytes_done
+            .min(progress.bytes_total)
+            .saturating_mul(1_000_000)
+            .checked_div(progress.bytes_total)
+            .unwrap_or(0);
+        self.progress.update(Progress {
+            files_done: self.phase * self.files_per_phase
+                + progress.files_done.min(self.files_per_phase),
+            files_total: self.files_per_phase * 3,
+            bytes_done: self.phase * 1_000_000 + part,
+            bytes_total: 3_000_000,
+        });
+    }
+}
+
+fn edit_zip_copy(
+    archive: &Path,
+    entries: &[Entry],
+    plan: ZipEditPlan,
+    cancel: &CancelToken,
+    progress: &mut dyn ProgressSink,
+) -> Result<EditReport> {
+    let parent = archive
+        .parent()
+        .filter(|path| !path.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let name = archive.file_name().unwrap_or_default().to_string_lossy();
+    let replacement = plan
+        .replacement
+        .map(|(index, path)| (index, path, plan.level));
+    let plan = &plan.names;
+    let original_size = entries
+        .iter()
+        .fold(0u64, |n, entry| n.saturating_add(entry.size));
+    let mut kept_size = entries
+        .iter()
+        .zip(plan)
+        .filter(|(_, name)| name.is_some())
+        .fold(0u64, |n, (entry, _)| n.saturating_add(entry.size));
+    if let Some((index, path, _)) = &replacement {
+        let old = entries
+            .get(*index)
+            .ok_or_else(|| Error::Corrupt("invalid ZIP replacement index".into()))?;
+        kept_size = kept_size
+            .saturating_sub(old.size)
+            .saturating_add(fs::metadata(path)?.len());
+    }
+    let source = File::open(archive)?;
+    let original_metadata = source.metadata()?;
+    verify_progress(
+        archive,
+        None,
+        cancel,
+        original_size,
+        entries.len() as u64,
+        &mut EditPhase {
+            phase: 0,
+            files_per_phase: entries.len() as u64,
+            progress,
+        },
+    )?;
+    let staged_path = parent.join(format!(
+        ".{name}.rz-new-{}-{}",
+        std::process::id(),
+        unique_seq()
+    ));
+    let output = OpenOptions::new()
+        .write(true)
+        .read(true)
+        .create_new(true)
+        .open(&staged_path)?;
+    let staged = StagedFile(staged_path);
+    rz_formats::zip_edit::copy_entries(
+        source.try_clone()?,
+        output,
+        plan,
+        replacement,
+        cancel,
+        &mut EditPhase {
+            phase: 1,
+            files_per_phase: entries.len() as u64,
+            progress,
+        },
+    )?;
+    let report = verify_progress(
+        &staged.0,
+        None,
+        cancel,
+        kept_size,
+        plan.iter().filter(|name| name.is_some()).count() as u64,
+        &mut EditPhase {
+            phase: 2,
+            files_per_phase: entries.len() as u64,
+            progress,
+        },
+    )?;
+    cancel.check()?;
+    let current = fs::metadata(archive)?;
+    let held = source.metadata()?;
+    #[cfg(unix)]
+    let same_identity = {
+        use std::os::unix::fs::MetadataExt;
+        current.dev() == held.dev() && current.ino() == held.ino()
+    };
+    #[cfg(not(unix))]
+    let same_identity = true;
+    if !same_identity
+        || current.len() != original_metadata.len()
+        || current.modified().ok() != original_metadata.modified().ok()
+        || held.len() != original_metadata.len()
+        || held.modified().ok() != original_metadata.modified().ok()
+    {
+        return Err(Error::Io(std::io::Error::other(
+            "archive changed during editing",
+        )));
+    }
+    drop(source);
+    fs::rename(&staged.0, archive)?;
+    progress.update(Progress {
+        files_done: entries.len() as u64 * 3,
+        files_total: entries.len() as u64 * 3,
+        bytes_done: 3_000_000,
+        bytes_total: 3_000_000,
+    });
+    Ok(report)
+}
+
 /// Reads the new archive from end to end, so a damaged result never replaces a good one.
 fn verify(path: &Path, password: Option<&str>, cancel: &CancelToken) -> Result<EditReport> {
+    verify_progress(path, password, cancel, 0, 0, &mut NoProgress)
+}
+
+fn verify_progress(
+    path: &Path,
+    password: Option<&str>,
+    cancel: &CancelToken,
+    bytes_total: u64,
+    files_total: u64,
+    progress: &mut dyn ProgressSink,
+) -> Result<EditReport> {
     let mut reader = rz_formats::open(path)?;
     if let Some(pw) = password {
         reader.set_password(pw)?;
     }
     let mut report = EditReport::default();
     let mut buf = vec![0u8; 256 * 1024];
+    let mut last = None::<std::time::Instant>;
     reader.for_each(&mut |e, data| {
         cancel.check()?;
         if e.kind == EntryKind::File {
             let mut seen = 0u64;
             loop {
+                cancel.check()?;
                 let n = data
                     .read(&mut buf)
                     .map_err(|err| Error::Corrupt(format!("{}: {err}", e.path)))?;
@@ -372,12 +682,37 @@ fn verify(path: &Path, password: Option<&str>, cancel: &CancelToken) -> Result<E
                     break;
                 }
                 seen += n as u64;
+                if last.is_none_or(|time| time.elapsed() >= Duration::from_millis(50)) {
+                    progress.update(Progress {
+                        files_done: report.files,
+                        files_total,
+                        bytes_done: report.bytes.saturating_add(seen),
+                        bytes_total,
+                    });
+                    last = Some(std::time::Instant::now());
+                }
             }
             report.bytes += seen;
         }
         report.files += 1;
+        if last.is_none_or(|time| time.elapsed() >= Duration::from_millis(50)) {
+            progress.update(Progress {
+                files_done: report.files,
+                files_total,
+                bytes_done: report.bytes,
+                bytes_total,
+            });
+            last = Some(std::time::Instant::now());
+        }
         Ok(())
     })?;
+    progress.update(Progress {
+        files_done: report.files,
+        files_total,
+        bytes_done: report.bytes,
+        bytes_total,
+    });
+    cancel.check()?;
     Ok(report)
 }
 
@@ -653,6 +988,321 @@ mod tests {
                 .collect();
             assert!(left.is_empty(), "{name}: {left:?}");
         }
+    }
+
+    #[test]
+    fn deleting_one_zip_file_preserves_untouched_compressed_entries() {
+        use std::io::Write;
+        use zip::write::SimpleFileOptions;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let archive = tmp.path().join("mixed.zip");
+        let mut writer = zip::ZipWriter::new(File::create(&archive).unwrap());
+        writer
+            .start_file(
+                "keep.txt",
+                SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored),
+            )
+            .unwrap();
+        writer.write_all(b"keep original encoding").unwrap();
+        writer
+            .start_file("delete.txt", SimpleFileOptions::default())
+            .unwrap();
+        writer.write_all(b"remove me").unwrap();
+        writer.finish().unwrap();
+
+        run(&archive, &Edit::Delete(vec!["delete.txt".into()]), None).unwrap();
+        let mut result = zip::ZipArchive::new(File::open(&archive).unwrap()).unwrap();
+        let entry = result.by_name("keep.txt").unwrap();
+        assert_eq!(entry.compression(), zip::CompressionMethod::Stored);
+    }
+
+    #[test]
+    fn renaming_one_zip_file_preserves_stored_data() {
+        use std::io::Write;
+        use zip::write::SimpleFileOptions;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let archive = tmp.path().join("rename.zip");
+        let mut writer = zip::ZipWriter::new(File::create(&archive).unwrap());
+        writer
+            .start_file(
+                "old.txt",
+                SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored),
+            )
+            .unwrap();
+        writer.write_all(b"preserved").unwrap();
+        writer.finish().unwrap();
+
+        run(
+            &archive,
+            &Edit::Rename {
+                path: "old.txt".into(),
+                new_name: "new.txt".into(),
+            },
+            None,
+        )
+        .unwrap();
+        let mut result = zip::ZipArchive::new(File::open(&archive).unwrap()).unwrap();
+        let entry = result.by_name("new.txt").unwrap();
+        assert_eq!(entry.compression(), zip::CompressionMethod::Stored);
+    }
+
+    #[test]
+    fn zip_copy_edits_implicit_folders_without_recompressing() {
+        use std::io::Write;
+        use zip::write::SimpleFileOptions;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let archive = tmp.path().join("folders.zip");
+        let mut writer = zip::ZipWriter::new(File::create(&archive).unwrap());
+        for name in ["folder/one.txt", "folder/sub/two.txt", "other.txt"] {
+            writer
+                .start_file(
+                    name,
+                    SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored),
+                )
+                .unwrap();
+            writer.write_all(name.as_bytes()).unwrap();
+        }
+        writer.finish().unwrap();
+        run(
+            &archive,
+            &Edit::Rename {
+                path: "folder".into(),
+                new_name: "moved".into(),
+            },
+            None,
+        )
+        .unwrap();
+        {
+            let mut result = zip::ZipArchive::new(File::open(&archive).unwrap()).unwrap();
+            for name in ["moved/one.txt", "moved/sub/two.txt", "other.txt"] {
+                assert_eq!(
+                    result.by_name(name).unwrap().compression(),
+                    zip::CompressionMethod::Stored
+                );
+            }
+        }
+        run(
+            &archive,
+            &Edit::Delete(vec!["moved/sub".into(), "other.txt".into()]),
+            None,
+        )
+        .unwrap();
+        assert_eq!(names(&archive, None), ["moved/one.txt"]);
+        let mut result = zip::ZipArchive::new(File::open(&archive).unwrap()).unwrap();
+        assert_eq!(
+            result.by_name("moved/one.txt").unwrap().compression(),
+            zip::CompressionMethod::Stored
+        );
+    }
+
+    #[test]
+    fn zip_copy_keeps_utf8_names_and_directory_attributes() {
+        use std::io::Write;
+        use zip::write::SimpleFileOptions;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let archive = tmp.path().join("unicode.zip");
+        let mut writer = zip::ZipWriter::new(File::create(&archive).unwrap());
+        writer
+            .add_directory(
+                "资料/",
+                SimpleFileOptions::default().unix_permissions(0o755),
+            )
+            .unwrap();
+        writer
+            .start_file(
+                "资料/保留.txt",
+                SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored),
+            )
+            .unwrap();
+        writer.write_all("内容".as_bytes()).unwrap();
+        writer
+            .start_file("删除.txt", SimpleFileOptions::default())
+            .unwrap();
+        writer.write_all(b"remove").unwrap();
+        writer.finish().unwrap();
+
+        run(&archive, &Edit::Delete(vec!["删除.txt".into()]), None).unwrap();
+        let mut result = zip::ZipArchive::new(File::open(&archive).unwrap()).unwrap();
+        let dir = result.by_name("资料/").unwrap();
+        assert_eq!(dir.unix_mode().unwrap() & 0o170000, 0o040000);
+        drop(dir);
+        assert_eq!(
+            result.by_name("资料/保留.txt").unwrap().compression(),
+            zip::CompressionMethod::Stored
+        );
+    }
+
+    #[test]
+    fn zip_replacement_only_recompresses_the_changed_file() {
+        use std::io::{Read, Write};
+        use zip::write::SimpleFileOptions;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let archive = tmp.path().join("replace.zip");
+        let mut writer = zip::ZipWriter::new(File::create(&archive).unwrap());
+        for name in ["keep.txt", "change.txt"] {
+            writer
+                .start_file(
+                    name,
+                    SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored),
+                )
+                .unwrap();
+            writer.write_all(b"original").unwrap();
+        }
+        writer.finish().unwrap();
+        let source = tmp.path().join("new.txt");
+        fs::write(&source, b"new content").unwrap();
+        run(
+            &archive,
+            &Edit::Replace {
+                entry: "change.txt".into(),
+                with: source,
+            },
+            None,
+        )
+        .unwrap();
+        let mut result = zip::ZipArchive::new(File::open(&archive).unwrap()).unwrap();
+        assert_eq!(
+            result.by_name("keep.txt").unwrap().compression(),
+            zip::CompressionMethod::Stored
+        );
+        let mut changed = result.by_name("change.txt").unwrap();
+        assert_eq!(changed.compression(), zip::CompressionMethod::Deflated);
+        let mut content = Vec::new();
+        changed.read_to_end(&mut content).unwrap();
+        assert_eq!(content, b"new content");
+    }
+
+    #[test]
+    fn zip_copy_cancel_and_corruption_leave_original_unchanged() {
+        use std::io::{Seek, SeekFrom, Write};
+        use zip::write::SimpleFileOptions;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let archive = tmp.path().join("failure.zip");
+        let mut writer = zip::ZipWriter::new(File::create(&archive).unwrap());
+        for name in ["keep.txt", "delete.txt"] {
+            writer
+                .start_file(
+                    name,
+                    SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored),
+                )
+                .unwrap();
+            writer.write_all(b"valid data").unwrap();
+        }
+        writer.finish().unwrap();
+        let before = fs::read(&archive).unwrap();
+        let token = CancelToken::new();
+        let mut progress = |p: Progress| {
+            if p.bytes_done > 1_000_000 && p.files_done * 3 == p.files_total && p.files_total > 0 {
+                token.cancel();
+            }
+        };
+        let result = edit_archive(
+            &archive,
+            &Edit::Delete(vec!["delete.txt".into()]),
+            &opts(None),
+            6,
+            None,
+            &token,
+            &mut progress,
+        );
+        assert!(matches!(result, Err(Error::Cancelled)));
+        assert_eq!(fs::read(&archive).unwrap(), before);
+        assert!(!fs::read_dir(tmp.path())
+            .unwrap()
+            .filter_map(|entry| entry.ok())
+            .any(|entry| entry.file_name().to_string_lossy().contains(".rz-new-")));
+
+        let mut reader = zip::ZipArchive::new(File::open(&archive).unwrap()).unwrap();
+        let offset = reader.by_name("delete.txt").unwrap().data_start();
+        drop(reader);
+        let mut file = OpenOptions::new().write(true).open(&archive).unwrap();
+        file.seek(SeekFrom::Start(offset)).unwrap();
+        file.write_all(b"X").unwrap();
+        drop(file);
+        let damaged = fs::read(&archive).unwrap();
+        assert!(run(&archive, &Edit::Delete(vec!["delete.txt".into()]), None).is_err());
+        assert_eq!(fs::read(&archive).unwrap(), damaged);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn zip_copy_does_not_replace_a_changed_archive() {
+        let tmp = tempfile::tempdir().unwrap();
+        let archive = make(tmp.path(), "race.zip", None);
+        let replacement = tmp.path().join("replacement.zip");
+        fs::copy(&archive, &replacement).unwrap();
+        let original = fs::read(&replacement).unwrap();
+        let mut swapped = false;
+        let mut progress = |p: Progress| {
+            if !swapped && p.bytes_done >= 2_000_000 {
+                fs::rename(&replacement, &archive).unwrap();
+                swapped = true;
+            }
+        };
+        let result = edit_archive(
+            &archive,
+            &Edit::Delete(vec!["data/a.txt".into()]),
+            &opts(None),
+            6,
+            None,
+            &CancelToken::new(),
+            &mut progress,
+        );
+        assert!(swapped);
+        assert!(result.is_err());
+        assert_eq!(fs::read(&archive).unwrap(), original);
+    }
+
+    #[test]
+    fn zip_copy_progress_is_monotonic_and_complete() {
+        let tmp = tempfile::tempdir().unwrap();
+        let archive = make(tmp.path(), "progress.zip", None);
+        let mut events = Vec::new();
+        edit_archive(
+            &archive,
+            &Edit::Delete(vec!["data/a.txt".into()]),
+            &opts(None),
+            6,
+            None,
+            &CancelToken::new(),
+            &mut |progress| events.push(progress),
+        )
+        .unwrap();
+        assert!(events.windows(2).all(|pair| {
+            pair[0].bytes_done <= pair[1].bytes_done && pair[0].files_done <= pair[1].files_done
+        }));
+        let last = events.last().unwrap();
+        assert_eq!(last.bytes_done, last.bytes_total);
+        assert_eq!(last.files_done, last.files_total);
+    }
+
+    #[test]
+    fn encrypted_zip_edits_keep_using_the_existing_safe_path() {
+        let tmp = tempfile::tempdir().unwrap();
+        let archive = make(tmp.path(), "encrypted.zip", Some("pw"));
+        run(
+            &archive,
+            &Edit::Delete(vec!["data/a.txt".into()]),
+            Some("pw"),
+        )
+        .unwrap();
+        assert_eq!(
+            names(&archive, Some("pw")),
+            ["data/sub/b.txt", "data/sub/c.txt"]
+        );
+        let mut reader = rz_formats::open(&archive).unwrap();
+        assert!(reader
+            .entries()
+            .unwrap()
+            .iter()
+            .filter(|entry| entry.kind == EntryKind::File)
+            .all(|entry| entry.encrypted));
     }
 
     #[test]

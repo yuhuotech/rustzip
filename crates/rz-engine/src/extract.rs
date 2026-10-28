@@ -2,7 +2,7 @@ use crate::progress::Tracker;
 use crate::safe_path::safe_join;
 use rz_core::{
     clean_path, is_within, resolve_threads, ArchiveReader, CancelToken, Entry, EntryKind, Error,
-    ProgressSink, Result,
+    ParallelBlocks, ProgressSink, Result,
 };
 use rz_platform::{apply_mode, set_mtime};
 use std::collections::{HashMap, HashSet};
@@ -35,6 +35,8 @@ pub struct ExtractOptions {
     pub password: Option<String>,
     /// Worker threads for formats that allow parallel extraction; 0 means one per CPU.
     pub threads: usize,
+    /// Memory budget for independent decoder workers.
+    pub memory_budget: u64,
     /// Extract only these paths (and everything inside the folders among them).
     /// Paths are as listed by the archive; `None` extracts everything.
     pub only: Option<Vec<String>>,
@@ -50,6 +52,7 @@ impl std::fmt::Debug for ExtractOptions {
             .field("max_total", &self.max_total)
             .field("password", &self.password.as_ref().map(|_| "<redacted>"))
             .field("threads", &self.threads)
+            .field("memory_budget", &self.memory_budget)
             .field("only", &self.only)
             .finish()
     }
@@ -64,6 +67,7 @@ impl Default for ExtractOptions {
             max_total: 1 << 40,
             password: None,
             threads: 0,
+            memory_budget: 256 << 20,
             only: None,
         }
     }
@@ -182,7 +186,17 @@ fn extract_with_metadata(
 
     let file_count = entries.iter().filter(|e| e.kind == EntryKind::File).count();
     let threads = resolve_threads(opts.threads).min(file_count);
-    let ran = if reader.caps().random_access && threads > 1 && !duplicates {
+    let block_plan = if threads > 1 && !duplicates {
+        reader.parallel_blocks(opts.memory_budget)?
+    } else {
+        None
+    };
+    let ran = if let Some(plan) = block_plan {
+        match run_blocks(reader, &entries, &ctx, threads, plan) {
+            Parallel::Done(res) => res,
+            Parallel::Unavailable => run_sequential(reader, &ctx),
+        }
+    } else if reader.caps().random_access && threads > 1 && !duplicates {
         match run_parallel(reader, &entries, &ctx, threads) {
             Parallel::Done(res) => res,
             Parallel::Unavailable => run_sequential(reader, &ctx),
@@ -413,6 +427,99 @@ enum Parallel {
     Done(Result<()>),
     /// The format cannot open independent readers; fall back to one pass.
     Unavailable,
+}
+
+fn run_blocks(
+    reader: &dyn ArchiveReader,
+    entries: &[Entry],
+    ctx: &Ctx<'_>,
+    threads: usize,
+    plan: ParallelBlocks,
+) -> Parallel {
+    let selected: HashSet<usize> = entries
+        .iter()
+        .filter(|entry| entry.kind == EntryKind::File)
+        .map(|entry| entry.index)
+        .collect();
+    let mapped: HashSet<usize> = plan.entries.iter().flatten().copied().collect();
+    let groups: Vec<usize> = plan
+        .entries
+        .iter()
+        .enumerate()
+        .filter(|(_, group)| group.iter().any(|index| selected.contains(index)))
+        .map(|(index, _)| index)
+        .collect();
+    let workers = threads.min(plan.max_workers).min(groups.len());
+    if workers < 2 {
+        return Parallel::Unavailable;
+    }
+    let mut readers = Vec::with_capacity(workers);
+    for _ in 0..workers {
+        match reader.reopen() {
+            Some(Ok(reader)) => readers.push(reader),
+            Some(Err(error)) => return Parallel::Done(Err(error)),
+            None => return Parallel::Unavailable,
+        }
+    }
+    let mut buf = vec![0u8; BUF];
+    for entry in entries {
+        if entry.kind != EntryKind::File || !mapped.contains(&entry.index) {
+            if let Err(error) = handle(ctx, entry, || Ok(std::io::empty()), &mut buf) {
+                return Parallel::Done(Err(error));
+            }
+        }
+    }
+    let failure = Mutex::new(None);
+    let abort = AtomicBool::new(false);
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    std::thread::scope(|scope| {
+        for mut reader in readers {
+            let (failure, abort, next, groups, selected, mapped) =
+                (&failure, &abort, &next, &groups, &selected, &mapped);
+            scope.spawn(move || {
+                let mut buf = vec![0u8; BUF];
+                loop {
+                    if abort.load(Ordering::Acquire) {
+                        break;
+                    }
+                    let Some(&block) = groups.get(next.fetch_add(1, Ordering::Relaxed)) else {
+                        break;
+                    };
+                    let result = reader.for_each_block(block, &mut |entry, data| {
+                        ctx.tracker.check()?;
+                        if abort.load(Ordering::Acquire) {
+                            return Err(Error::Cancelled);
+                        }
+                        if entry.kind == EntryKind::File
+                            && selected.contains(&entry.index)
+                            && mapped.contains(&entry.index)
+                        {
+                            handle(ctx, entry, || Ok(&mut *data), &mut buf)?;
+                        }
+                        loop {
+                            ctx.tracker.check()?;
+                            if abort.load(Ordering::Acquire) {
+                                return Err(Error::Cancelled);
+                            }
+                            if data.read(&mut buf)? == 0 {
+                                break;
+                            }
+                        }
+                        Ok(())
+                    });
+                    if let Err(error) = result {
+                        if let Ok(mut first) = failure.lock() {
+                            first.get_or_insert(error);
+                        }
+                        abort.store(true, Ordering::Release);
+                        break;
+                    }
+                }
+            });
+        }
+    });
+    let error = failure.lock().ok().and_then(|mut first| first.take());
+    Parallel::Done(error.map_or(Ok(()), Err))
 }
 
 /// Splits the files over `threads` readers, biggest first onto the least loaded.

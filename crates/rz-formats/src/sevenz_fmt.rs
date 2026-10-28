@@ -1,11 +1,12 @@
 use rz_core::{
     resolve_threads, ArchiveReader, ArchiveWriter, CancelToken, Caps, CreateOptions, Entry,
-    EntryKind, Error, FileSource, NewEntry, NoProgress, Progress, ProgressSink, Result,
+    EntryKind, Error, FileSource, NewEntry, NoProgress, ParallelBlocks, Progress, ProgressSink,
+    Result,
 };
 use sevenz_rust2::encoder_options::{AesEncoderOptions, Lzma2Options};
 use sevenz_rust2::{
-    ArchiveEntry, ArchiveReader as SzReader, ArchiveWriter as SzWriter, EncoderConfiguration,
-    EncoderMethod, NtTime, Password, SourceReader,
+    ArchiveEntry, ArchiveReader as SzReader, ArchiveWriter as SzWriter, BlockDecoder,
+    EncoderConfiguration, EncoderMethod, NtTime, Password, SourceReader,
 };
 use std::fs::File;
 use std::io::{BufWriter, Read, Write};
@@ -201,14 +202,16 @@ impl ArchiveReader for SevenReader {
         &mut self,
         visit: &mut dyn FnMut(&Entry, &mut dyn Read) -> Result<()>,
     ) -> Result<()> {
-        let mut r = self.archive()?;
-        r.set_thread_count(resolve_threads(0) as u32);
+        let r = self.archive()?;
+        let archive = r.archive();
+        let mut source = crate::volumes::MultipartReader::open(&self.paths, 0, Default::default())?;
+        let password = Password::new(self.password.as_deref().unwrap_or(""));
         // The decoder hands out `&ArchiveEntry` without its index; recover it from the address.
-        let base = r.archive().files.as_ptr() as usize;
+        let base = archive.files.as_ptr() as usize;
         let stride = std::mem::size_of::<ArchiveEntry>();
         let has_password = self.password.is_some();
         let mut failure: Option<Error> = None;
-        let outcome = r.for_each_entries(|f, data| {
+        let mut visit_entry = |f: &ArchiveEntry, data: &mut dyn Read| {
             let index = (f as *const ArchiveEntry as usize - base) / stride;
             match visit(&describe(index, f), data) {
                 Ok(()) => {
@@ -221,7 +224,43 @@ impl ArchiveReader for SevenReader {
                     Ok(false)
                 }
             }
-        });
+        };
+        let mut outcome = Ok(());
+        let mut stopped = false;
+        for index in 0..archive.blocks.len() {
+            let decoder = BlockDecoder::new(
+                resolve_threads(0) as u32,
+                index,
+                archive,
+                &password,
+                &mut source,
+            );
+            match decoder.for_each_entries(&mut visit_entry) {
+                Ok(true) => {}
+                Ok(false) => {
+                    stopped = true;
+                    break;
+                }
+                Err(error) => {
+                    outcome = Err(error);
+                    break;
+                }
+            }
+        }
+        if outcome.is_ok() && !stopped {
+            for (index, file) in archive.files.iter().enumerate() {
+                if archive.stream_map.file_block_index[index].is_none() {
+                    match visit_entry(file, &mut std::io::empty()) {
+                        Ok(true) => {}
+                        Ok(false) => break,
+                        Err(error) => {
+                            outcome = Err(error);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
         if let Some(e) = failure {
             return Err(match e {
                 // With a password set, a decode failure is most likely a wrong password.
@@ -232,6 +271,105 @@ impl ArchiveReader for SevenReader {
             });
         }
         outcome.map_err(map_err)
+    }
+
+    fn parallel_blocks(&self, memory_budget: u64) -> Result<Option<ParallelBlocks>> {
+        let reader = self.archive()?;
+        let archive = reader.archive();
+        if archive.blocks.len() < 2 {
+            return Ok(None);
+        }
+        let mut per_worker = 32u64 << 20;
+        for block in &archive.blocks {
+            let mut memory = 32u64 << 20;
+            for coder in &block.coders {
+                match coder.encoder_method_id() {
+                    EncoderMethod::ID_COPY | EncoderMethod::ID_AES256_SHA256 => {}
+                    EncoderMethod::ID_LZMA2 => {
+                        let Some(&property) = coder.properties().first() else {
+                            return Ok(None);
+                        };
+                        if property > 40 {
+                            return Ok(None);
+                        }
+                        let dictionary = if property == 40 {
+                            u64::from(u32::MAX)
+                        } else {
+                            u64::from(2 | (property & 1)) << (u32::from(property / 2) + 11)
+                        };
+                        memory = memory.saturating_add(dictionary);
+                    }
+                    _ => return Ok(None),
+                }
+            }
+            per_worker = per_worker.max(memory);
+        }
+        let max_workers = usize::try_from(memory_budget / per_worker).unwrap_or(usize::MAX);
+        if max_workers < 2 {
+            return Ok(None);
+        }
+        let mut entries = vec![Vec::new(); archive.blocks.len()];
+        for (index, block) in archive.stream_map.file_block_index.iter().enumerate() {
+            if let Some(block) = block {
+                let Some(group) = entries.get_mut(*block) else {
+                    return Err(Error::Corrupt("invalid 7z block index".into()));
+                };
+                group.push(index);
+            }
+        }
+        Ok(Some(ParallelBlocks {
+            entries,
+            max_workers,
+        }))
+    }
+
+    fn for_each_block(
+        &mut self,
+        block: usize,
+        visit: &mut dyn FnMut(&Entry, &mut dyn Read) -> Result<()>,
+    ) -> Result<()> {
+        let reader = self.archive()?;
+        let archive = reader.archive();
+        if block >= archive.blocks.len() {
+            return Err(Error::Corrupt("invalid 7z block index".into()));
+        }
+        let mut source = crate::volumes::MultipartReader::open(&self.paths, 0, Default::default())?;
+        let password = Password::new(self.password.as_deref().unwrap_or(""));
+        let base = archive.files.as_ptr() as usize;
+        let stride = std::mem::size_of::<ArchiveEntry>();
+        let mut failure = None;
+        let decoder = BlockDecoder::new(1, block, archive, &password, &mut source);
+        let outcome = decoder.for_each_entries(&mut |file, data| {
+            let index = (file as *const ArchiveEntry as usize - base) / stride;
+            match visit(&describe(index, file), data) {
+                Ok(()) => {
+                    std::io::copy(data, &mut std::io::sink())?;
+                    Ok(true)
+                }
+                Err(error) => {
+                    failure = Some(error);
+                    Ok(false)
+                }
+            }
+        });
+        if let Some(error) = failure {
+            return Err(match error {
+                Error::Io(io)
+                    if self.password.is_some() && io.kind() == std::io::ErrorKind::InvalidData =>
+                {
+                    Error::Password
+                }
+                other => other,
+            });
+        }
+        outcome.map(|_| ()).map_err(map_err)
+    }
+
+    fn reopen(&self) -> Option<Result<Box<dyn ArchiveReader>>> {
+        Some(Ok(Box::new(Self {
+            paths: self.paths.clone(),
+            password: self.password.clone(),
+        })))
     }
 }
 

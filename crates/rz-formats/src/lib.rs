@@ -3,6 +3,7 @@
 
 mod codec;
 mod libarchive_fmt;
+mod parallel_bzip2;
 #[cfg(feature = "rar")]
 mod rar_fmt;
 pub mod recovery;
@@ -12,6 +13,7 @@ mod sniff;
 mod tar_fmt;
 mod timeutil;
 pub mod volumes;
+pub mod zip_edit;
 mod zip_fmt;
 mod zip_out;
 

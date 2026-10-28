@@ -52,7 +52,7 @@ fn die(what: &str, e: impl std::fmt::Display) -> ! {
 }
 
 /// Confirms an extraction reproduced the source tree: same files, same sizes,
-/// and byte-equal content for a sample file. The archive holds the source
+/// and byte-equal content for every file. The archive holds the source
 /// folder itself, so the files reappear one level below `out`.
 fn verify_extraction(out: &Path, src: &Path, files: usize) {
     let base = out.join(src.file_name().unwrap_or_default());
@@ -63,12 +63,11 @@ fn verify_extraction(out: &Path, src: &Path, files: usize) {
         if a.len() != b.len() {
             die(&name, format!("size {} != {}", a.len(), b.len()));
         }
-    }
-    let sample = "f0000.txt";
-    match (fs::read(src.join(sample)), fs::read(base.join(sample))) {
-        (Ok(a), Ok(b)) if a == b => {}
-        (Err(e), _) | (_, Err(e)) => die(sample, e),
-        _ => die(sample, "content differs from the source"),
+        match (fs::read(src.join(&name)), fs::read(base.join(&name))) {
+            (Ok(a), Ok(b)) if a == b => {}
+            (Err(e), _) | (_, Err(e)) => die(&name, e),
+            _ => die(&name, "content differs from the source"),
+        }
     }
 }
 
@@ -92,18 +91,19 @@ fn main() {
         "format", "level", "threads", "pack MB/s", "unpack MB/s", "size"
     );
 
-    let cases: [(&str, u32); 9] = [
-        ("zip", 6),
-        ("tar.gz", 6),
-        ("tar.zst", 3),
-        ("tar.zst", 9),
-        ("tar.xz", 6),
-        ("7z", 3),
-        ("7z", 6),
-        ("tar.bz2", 6),
-        ("tar.lz4", 6),
+    let cases: [(&str, &str, u32, Option<u64>); 10] = [
+        ("zip", "zip", 6, None),
+        ("tar.gz", "tar.gz", 6, None),
+        ("tar.zst", "tar.zst", 3, None),
+        ("tar.zst", "tar.zst", 9, None),
+        ("tar.xz", "tar.xz", 6, None),
+        ("7z", "7z", 3, None),
+        ("7z", "7z", 6, None),
+        ("7z-block", "7z", 3, Some(1 << 20)),
+        ("tar.bz2", "tar.bz2", 6, None),
+        ("tar.lz4", "tar.lz4", 6, None),
     ];
-    for (ext, level) in cases {
+    for (label, ext, level, solid_block_size) in cases {
         let Some(format) = OutputFormat::from_path(Path::new(&format!("a.{ext}"))) else {
             continue;
         };
@@ -115,6 +115,7 @@ fn main() {
             let opts = CreateOptions {
                 level,
                 threads,
+                solid_block_size,
                 ..CreateOptions::default()
             };
             let t = Instant::now();
@@ -146,7 +147,7 @@ fn main() {
             verify_extraction(&out, &src, files);
             println!(
                 "{:<9} {:>5} {:>7} {:>11.0} {:>13.0} {:>6.1}%",
-                ext,
+                label,
                 level,
                 threads,
                 mbps(total, pack),

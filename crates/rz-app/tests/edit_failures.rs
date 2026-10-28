@@ -262,9 +262,9 @@ fn an_edit_killed_midway_never_replaces_the_archive() {
         "edit-mid",
         dir.path(),
     );
-    // The scratch folder appearing means the edit is in flight.
-    wait_for_entry(dir.path(), "the scratch folder", |n| {
-        n.starts_with(".kill.zip.rz-edit-")
+    // Either editing path creates its own staged output before replacing the archive.
+    wait_for_entry(dir.path(), "the staged edit", |n| {
+        n.starts_with(".kill.zip.rz-edit-") || n.starts_with(".kill.zip.rz-new-")
     });
     child.kill().unwrap();
     let _ = child.wait();

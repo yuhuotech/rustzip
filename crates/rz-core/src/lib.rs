@@ -59,6 +59,13 @@ pub struct Caps {
     pub writable: bool,
 }
 
+/// Independent compressed blocks and a conservative bound on parallel workers.
+pub struct ParallelBlocks {
+    /// Entry indexes per block; entries absent from all blocks have no data stream.
+    pub entries: Vec<Vec<usize>>,
+    pub max_workers: usize,
+}
+
 pub trait ArchiveReader: Send {
     /// Bounds work done before an entry stream can be exposed (for example, measuring
     /// a gzip stream whose uncompressed size is not stored in its header).
@@ -116,6 +123,20 @@ pub trait ArchiveReader: Send {
             visit(&entry, &mut data)?;
         }
         Ok(())
+    }
+
+    /// Returns a parallel plan when the format can bound decoder working memory.
+    fn parallel_blocks(&self, _memory_budget: u64) -> Result<Option<ParallelBlocks>> {
+        Ok(None)
+    }
+
+    /// Visits a single independent block in archive order.
+    fn for_each_block(
+        &mut self,
+        _block: usize,
+        _visit: &mut dyn FnMut(&Entry, &mut dyn Read) -> Result<()>,
+    ) -> Result<()> {
+        Err(Error::Unsupported("independent blocks".into()))
     }
 
     /// Opens an independent reader on the same archive, so several threads can

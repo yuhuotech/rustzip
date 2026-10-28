@@ -29,3 +29,7 @@ rar = ["rz-formats/rar", "rz-engine/rar"]
 [dev-dependencies]
 tempfile = "3.27.0"
 zip = { version = "2", default-features = false, features = ["deflate"] }
+
+[[bench]]
+name = "zip_edit"
+harness = false

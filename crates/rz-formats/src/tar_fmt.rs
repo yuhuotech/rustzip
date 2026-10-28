@@ -200,7 +200,7 @@ impl TarOut {
                 "tar archives cannot be encrypted; use zip or 7z".into(),
             ));
         }
-        let sink = comp.writer(file, opts.level, opts.threads)?;
+        let sink = comp.writer(file, opts.level, opts.threads, opts.memory_budget)?;
         Ok(Self {
             builder: tar::Builder::new(sink),
             portable: opts.portable,
