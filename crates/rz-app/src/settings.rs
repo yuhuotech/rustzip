@@ -338,6 +338,15 @@ mod tests {
         move |k| m.get(k).map(OsString::from)
     }
 
+    fn logical_path(path: Option<PathBuf>) -> Option<String> {
+        path.map(|path| {
+            path.to_string_lossy()
+                .replace('\\', "/")
+                .trim_end_matches('/')
+                .to_string()
+        })
+    }
+
     #[test]
     fn config_dir_follows_each_platforms_convention() {
         assert_eq!(
@@ -348,29 +357,27 @@ mod tests {
             Some(PathBuf::from(r"C:\Users\a\AppData\Roaming").join("RustZIP"))
         );
         assert_eq!(
-            config_dir_for(Os::MacOs, &env(&[("HOME", "/Users/a")])),
-            Some(PathBuf::from(
-                "/Users/a/Library/Application Support/RustZIP"
-            ))
+            logical_path(config_dir_for(Os::MacOs, &env(&[("HOME", "/Users/a")]))),
+            Some("/Users/a/Library/Application Support/RustZIP".into())
         );
         assert_eq!(
-            config_dir_for(Os::Linux, &env(&[("HOME", "/home/a")])),
-            Some(PathBuf::from("/home/a/.config/rustzip"))
+            logical_path(config_dir_for(Os::Linux, &env(&[("HOME", "/home/a")]))),
+            Some("/home/a/.config/rustzip".into())
         );
         assert_eq!(
-            config_dir_for(
+            logical_path(config_dir_for(
                 Os::Linux,
                 &env(&[("XDG_CONFIG_HOME", "/x/cfg"), ("HOME", "/home/a")])
-            ),
-            Some(PathBuf::from("/x/cfg/rustzip"))
+            )),
+            Some("/x/cfg/rustzip".into())
         );
         // A relative XDG path is invalid per the spec and must be ignored.
         assert_eq!(
-            config_dir_for(
+            logical_path(config_dir_for(
                 Os::Linux,
                 &env(&[("XDG_CONFIG_HOME", "rel"), ("HOME", "/home/a")])
-            ),
-            Some(PathBuf::from("/home/a/.config/rustzip"))
+            )),
+            Some("/home/a/.config/rustzip".into())
         );
         assert_eq!(config_dir_for(Os::Linux, &env(&[])), None);
         assert_eq!(config_dir_for(Os::MacOs, &env(&[("HOME", "")])), None);
