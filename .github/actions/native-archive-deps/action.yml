@@ -51,3 +51,9 @@ runs:
         if (-not $zlib) { throw "vcpkg static zlib library is missing" }
         $libarchiveZlib = Join-Path $vcpkgLib "zlib.lib"
         if ($zlib -ne $libarchiveZlib) { Copy-Item $zlib $libarchiveZlib -Force }
+        # libarchive2-sys does not track VCPKG_DEFAULT_TRIPLET as a build-script input.
+        cargo clean -p libarchive2-sys
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        $vcpkgPrefix = Join-Path $env:VCPKG_INSTALLATION_ROOT "installed\$env:VCPKG_DEFAULT_TRIPLET"
+        "CMAKE_PREFIX_PATH=$vcpkgPrefix" >> $env:GITHUB_ENV
+        "ZLIB_ROOT=$vcpkgPrefix" >> $env:GITHUB_ENV
