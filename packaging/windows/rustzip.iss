@@ -75,7 +75,7 @@ Name: "{autodesktop}\RustZIP"; Filename: "{app}\rustzip.exe"; Tasks: desktopicon
 [Registry]
 ; The program itself, so Windows can list it under "Open with".
 Root: HKCU; Subkey: "Software\Classes\Applications\rustzip.exe\shell\open\command"; ValueType: string; ValueData: """{app}\rustzip.exe"" ""%1"""; Tasks: openwith; Flags: uninsdeletekey
-Root: HKCU; Subkey: "Software\Classes\Applications\rustzip.exe"; ValueType: string; ValueName: "FriendlyAppName"; ValueData: "RustZIP"; Tasks: openwith
+Root: HKCU; Subkey: "Software\Classes\Applications\rustzip.exe"; ValueType: string; ValueName: "FriendlyAppName"; ValueData: "RustZIP"; Tasks: openwith; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Classes\.7z\OpenWithProgids"; ValueType: string; ValueName: "RustZIP.Archive"; ValueData: ""; Tasks: openwith; Flags: uninsdeletevalue
 Root: HKCU; Subkey: "Software\Classes\.zip\OpenWithProgids"; ValueType: string; ValueName: "RustZIP.Archive"; ValueData: ""; Tasks: openwith; Flags: uninsdeletevalue
 #if RarEnabled == 1
