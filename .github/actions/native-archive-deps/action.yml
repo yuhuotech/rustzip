@@ -1,5 +1,9 @@
 name: Install native archive build dependencies
 description: Install the static libarchive prerequisites used by rz-ffi.
+outputs:
+  vcpkg-revision:
+    description: Installed vcpkg checkout revision used for the Windows binary cache key
+    value: ${{ steps.vcpkg-version.outputs.version }}
 runs:
   using: composite
   steps:
