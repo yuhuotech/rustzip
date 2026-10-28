@@ -57,7 +57,7 @@ Vercel build 会在部署期间自动应用 Neon Postgres migrations;检查部�
 
 Windows 使用 `x64-windows-static-md` vcpkg triplet 静态链接原生归档库，避免 libarchive 与 Rust LZMA 后端的 DLL 导入符号冲突。安装器从 `VCPKG_INSTALLATION_ROOT` 收集原生依赖许可证；原生安装与卸载仍待 Windows runner 验收。
 
-Windows MSVC 构建通过 CI 的 `native-archive-deps` action 安装 `x64-windows-static-md` vcpkg 库，并将 zlib 的库文件名适配为 `libarchive2-sys` 使用的 `zlib.lib`。原生链接和测试仍需 Windows runner 实测。
+Windows MSVC 构建通过 CI 的 `native-archive-deps` action 安装 `x64-windows-static-md` vcpkg 库，并将 zlib 的 `zs.lib` 适配为 `libarchive2-sys` 使用的 `zlib.lib`。原生链接和测试仍需 Windows runner 实测。
 
 ## 系统集成现状
 

@@ -18,7 +18,7 @@
 - 手动 CI [40679232598](https://github.com/yuhuotech/rustzip/actions/runs/40679232598) 测试提交 `9f7f9cb`：加入 vcpkg LZMA 导入库后与 Rust 静态 LZMA 实现出现 LNK2005 重复符号，Windows GUI / 核心测试失败，安装器步骤未执行。
 - 手动 CI [40678318735](https://github.com/yuhuotech/rustzip/actions/runs/40678318735) 测试提交 `115bdba`：vcpkg 缓存目录未初始化，Windows 依赖准备提前失败；基准、macOS 与 Ubuntu 项通过。
 - 手动 CI [40683032301](https://github.com/yuhuotech/rustzip/actions/runs/40683032301) 测试提交 `2bcdca5`：Windows 测试发现重复 LZMA 符号；随后切换静态 triplet 时，依赖安装完成但 zlib 兼容脚本未识别静态库文件名，Windows 编译未启动。
-- 当前 action 会识别 vcpkg 静态 zlib 库的多个文件名并适配为 `zlib.lib`；仍需 Windows runner 复测。
+- 当前 action 会识别 vcpkg `x64-windows-static-md` 的 `zs.lib` 并适配为 `zlib.lib`；这个 triplet 的具体库名由 vcpkg zlib 上游 CMake 输出确认，仍需 Windows runner 复测。
 - Windows 安装器包含 vcpkg 原生库许可证、格式关联和条件化 RAR 关联；手动 CI 有隔离安装 / 卸载冒烟脚本，但尚未成功执行。安装器编译、运行和实际文件关联仍待 Windows 原生验证。
 - macOS 27.0.1 / Apple Silicon：使用隔离配置和测试数据构建 ad-hoc 签名的 `.app` / DMG；默认和 `RZ_WITH_RAR=1` 两种模式的 plist、签名和 DMG 校验通过。默认包没有 RAR 关联与许可证，RAR 测试包有两者；只读挂载 RAR DMG 后再次检查其中应用签名、关联和许可证并卸载。启用 feature 的无头 GUI 用例实际打开 RAR fixture 并验证预览限制提示。
 - macOS 真实钥匙串读写测试使用唯一临时服务名和索引，完成写入、读取、列表、删除，并确认测试索引清理。该测试复用生产后端，但未修改用户原有 `RustZIP` 服务的索引。
