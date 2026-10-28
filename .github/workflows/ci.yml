@@ -26,6 +26,13 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - uses: ./.github/actions/native-archive-deps
+        id: native-deps
+      - name: Save vcpkg binary packages before tests
+        if: runner.os == 'Windows'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}\rustzip-vcpkg-cache
+          key: rustzip-vcpkg-x64-windows-static-md-${{ steps.native-deps.outputs.vcpkg-revision }}-v2
       - run: cargo fmt --all --check
       # The GUI crates need a graphics stack; they are built in their own job.
       - run: cargo clippy --workspace --exclude rustzip-gui --exclude gpui-probe --all-targets -- -D warnings
@@ -50,6 +57,13 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
       - uses: ./.github/actions/native-archive-deps
+        id: native-deps
+      - name: Save vcpkg binary packages before tests
+        if: runner.os == 'Windows'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}\rustzip-vcpkg-cache
+          key: rustzip-vcpkg-x64-windows-static-md-${{ steps.native-deps.outputs.vcpkg-revision }}-v2
       - run: cargo clippy -p rustzip-gui --all-targets -- -D warnings
       - run: cargo test -p rustzip-gui
       - name: Windows installer smoke test
