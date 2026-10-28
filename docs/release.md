@@ -57,6 +57,8 @@ Vercel build 会在部署期间自动应用 Neon Postgres migrations;检查部�
 
 Windows 安装器需要 `VCPKG_INSTALLATION_ROOT` 指向包含 `installed\x64-windows\bin` 和 `share` 的 vcpkg；也可以分别用 `/DVcpkgBin=...`、`/DVcpkgShare=...` 指定。安装器只打包列出的归档后端运行时 DLL 和相应许可文件；这些文件名及依赖加载尚待 Windows 原生打包和卸载验收。
 
+Windows MSVC 的 `libarchive2-sys` 需要 vcpkg 导入库。安装依赖后，按 CI 的 `native-archive-deps` action 将 `z.lib` 复制为 `zlib.lib`，并将 `lzma.lib` 复制为 `rustzip_lzma_import.lib`；后者避免被 Rust 编码器的同名静态库遮蔽。构建和运行测试时还需将 vcpkg 的 `installed\x64-windows\bin` 加入 `PATH`。这些步骤仍需在 Windows runner 完整复测。
+
 ## 系统集成现状
 
 | 能力 | macOS | Windows | Linux |

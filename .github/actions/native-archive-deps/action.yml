@@ -16,12 +16,29 @@ runs:
       shell: bash
       run: brew install cmake pkg-config libb2 libxml2 zlib bzip2 xz zstd lz4
 
+    - name: Identify Windows vcpkg version
+      if: runner.os == 'Windows'
+      id: vcpkg-version
+      shell: pwsh
+      run: |
+        $version = git -C $env:VCPKG_INSTALLATION_ROOT rev-parse HEAD
+        if ($LASTEXITCODE -ne 0 -or -not $version) { throw "Unable to identify vcpkg version" }
+        "version=$version" >> $env:GITHUB_OUTPUT
+
+    - name: Cache Windows vcpkg packages
+      if: runner.os == 'Windows'
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}\rustzip-vcpkg-cache
+        key: rustzip-vcpkg-x64-windows-${{ steps.vcpkg-version.outputs.version }}-v1
+
     - name: Install Windows libraries
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
         choco install llvm -y --no-progress
         "$env:ProgramFiles\LLVM\bin" >> $env:GITHUB_PATH
+        $env:VCPKG_DEFAULT_BINARY_CACHE = Join-Path $env:RUNNER_TEMP "rustzip-vcpkg-cache"
         vcpkg install zlib:x64-windows bzip2:x64-windows liblzma:x64-windows `
           zstd:x64-windows lz4:x64-windows openssl:x64-windows
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -30,4 +47,7 @@ runs:
         $zlibImport = Join-Path $vcpkgLib "z.lib"
         if (-not (Test-Path $zlibImport)) { throw "vcpkg z.lib is missing" }
         Copy-Item $zlibImport (Join-Path $vcpkgLib "zlib.lib") -Force
+        $lzmaImport = Join-Path $vcpkgLib "lzma.lib"
+        if (-not (Test-Path $lzmaImport)) { throw "vcpkg lzma.lib is missing" }
+        Copy-Item $lzmaImport (Join-Path $vcpkgLib "rustzip_lzma_import.lib") -Force
         (Join-Path $env:VCPKG_INSTALLATION_ROOT "installed\x64-windows\bin") >> $env:GITHUB_PATH

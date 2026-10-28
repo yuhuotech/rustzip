@@ -14,6 +14,7 @@
 
 - 手动 CI [40662760211](https://github.com/yuhuotech/rustzip/actions/runs/40662760211) 测试提交 `d5bf75d`：macOS GUI、macOS 核心和 Ubuntu 核心通过；Windows GUI / 核心均在链接时报 `LNK1181: cannot open input file 'zlib.lib'`；Ubuntu 基准因 `unable to find library -lacl` 失败。该结果不包含之后的工作区改动。
 - CI 基准任务补用已有原生依赖 action；Windows action 为 `libarchive2-sys` 要求的 `zlib.lib` 提供 vcpkg `z.lib` 导入库别名，并将 vcpkg DLL 目录加入运行时 PATH。修复尚未在 Windows / GitHub Actions 重跑，不能视作通过。
+- 手动 CI [40674063269](https://github.com/yuhuotech/rustzip/actions/runs/40674063269) 测试提交 `8c7ea55`：macOS 两项、Ubuntu 核心及基准通过；Windows 依赖准备和 Clippy 通过，但测试链接阶段报 `__imp_lzma_stream_decoder` / `__imp_lzma_alone_decoder` 未解析，安装器步骤未执行。日志显示 Rust 静态 `lzma.lib` 遮蔽了 vcpkg 动态导入库；本轮增加独立导入库名称及 vcpkg 二进制缓存，修复尚待新一轮 Windows 验证。
 - Windows 安装器补充 vcpkg 运行时 DLL 与许可证、现有长尾格式关联以及条件化的 RAR 关联；新增静态一致性测试和手动 CI 中的隔离安装 / 卸载冒烟脚本。脚本检查默认程序、文件、Open With 和注册表清理，但尚未在 Windows 执行；DLL 名称、安装器编译、加载和真实交互仍需原生验证。
 - macOS 27.0.1 / Apple Silicon：使用隔离配置和测试数据构建 ad-hoc 签名的 `.app` / DMG；默认和 `RZ_WITH_RAR=1` 两种模式的 plist、签名和 DMG 校验通过。默认包没有 RAR 关联与许可证，RAR 测试包有两者；只读挂载 RAR DMG 后再次检查其中应用签名、关联和许可证并卸载。启用 feature 的无头 GUI 用例实际打开 RAR fixture 并验证预览限制提示。
 - macOS 真实钥匙串读写测试使用唯一临时服务名和索引，完成写入、读取、列表、删除，并确认测试索引清理。该测试复用生产后端，但未修改用户原有 `RustZIP` 服务的索引。
