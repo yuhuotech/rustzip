@@ -34,8 +34,16 @@
                 <string>xz</string>
                 <string>txz</string>
                 <string>zst</string>
+                <string>tzst</string>
                 <string>bz2</string>
                 <string>tbz2</string>
+                <string>lz4</string>
+                <string>iso</string>
+                <string>cab</string>
+                <string>cpio</string>
+                <string>ar</string>
+                <string>deb</string>
+                <string>rpm</string>
                 <string>lha</string>
                 <string>lzh</string>
                 <string>xar</string>
