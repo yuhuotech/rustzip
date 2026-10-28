@@ -5,6 +5,7 @@ use std::collections::BTreeSet;
 const WINDOWS: &str = include_str!("../../../packaging/windows/rustzip.iss");
 const LINUX_DESKTOP: &str = include_str!("../../../packaging/linux/rustzip.desktop");
 const LINUX_NEMO: &str = include_str!("../../../packaging/linux/rustzip-extract.nemo_action");
+const WINDOWS_INSTALLER: &str = include_str!("../../../packaging/windows/rustzip.iss");
 
 #[test]
 fn windows_open_with_and_extract_support_the_same_archive_extensions() {
@@ -56,6 +57,19 @@ fn optional_rar_is_not_advertised_in_default_linux_descriptors() {
         assert!(!descriptor.contains("application/x-rar"));
         assert!(descriptor.contains("application/zip"));
     }
+}
+
+#[test]
+fn windows_installer_uses_the_bundled_simplified_chinese_language_file() {
+    let language = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../packaging/windows/ChineseSimplified.isl");
+    assert!(language.is_file());
+    assert!(WINDOWS_INSTALLER.contains(r#"MessagesFile: "ChineseSimplified.isl""#));
+    assert!(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../packaging/licenses/inno-chinese-translation.txt")
+            .is_file()
+    );
 }
 
 #[cfg(not(feature = "rar"))]

@@ -46,7 +46,8 @@ WizardStyle=modern
 ChangesAssociations=yes
 
 [Languages]
-Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+; MIT translation pinned from kira-96/Inno-Setup-Chinese-Simplified-Translation.
+Name: "chinesesimplified"; MessagesFile: "ChineseSimplified.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
@@ -62,6 +63,7 @@ Source: "{#VcpkgShare}\liblzma\copyright"; DestDir: "{app}\licenses"; DestName: 
 Source: "{#VcpkgShare}\zstd\copyright"; DestDir: "{app}\licenses"; DestName: "zstd.txt"; Flags: ignoreversion
 Source: "{#VcpkgShare}\lz4\copyright"; DestDir: "{app}\licenses"; DestName: "lz4.txt"; Flags: ignoreversion
 Source: "{#VcpkgShare}\openssl\copyright"; DestDir: "{app}\licenses"; DestName: "openssl.txt"; Flags: ignoreversion
+Source: "..\licenses\inno-chinese-translation.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
 #if RarEnabled == 1
 Source: "..\licenses\unrar.txt"; DestDir: "{app}"; DestName: "unrar-license.txt"; Flags: ignoreversion
 #endif
