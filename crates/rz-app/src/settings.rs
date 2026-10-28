@@ -315,7 +315,7 @@ pub fn config_dir_for(os: Os, env: &dyn Fn(&str) -> Option<OsString>) -> Option<
         Os::Windows => non_empty("APPDATA").map(|d| d.join("RustZIP")),
         Os::MacOs => non_empty("HOME").map(|h| h.join("Library/Application Support/RustZIP")),
         Os::Linux => non_empty("XDG_CONFIG_HOME")
-            .filter(|d| d.is_absolute())
+            .filter(|d| d.as_os_str().to_string_lossy().starts_with('/'))
             .or_else(|| non_empty("HOME").map(|h| h.join(".config")))
             .map(|d| d.join("rustzip")),
     }
