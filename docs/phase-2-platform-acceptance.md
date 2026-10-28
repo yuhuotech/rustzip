@@ -18,10 +18,10 @@
 - 手动 CI [40679232598](https://github.com/yuhuotech/rustzip/actions/runs/40679232598) 测试提交 `9f7f9cb`：加入 vcpkg LZMA 导入库后与 Rust 静态 LZMA 实现出现 LNK2005 重复符号，Windows GUI / 核心测试失败，安装器步骤未执行。
 - 手动 CI [40678318735](https://github.com/yuhuotech/rustzip/actions/runs/40678318735) 测试提交 `115bdba`：vcpkg 缓存目录未初始化，Windows 依赖准备提前失败；基准、macOS 与 Ubuntu 项通过。
 - 手动 CI [40683032301](https://github.com/yuhuotech/rustzip/actions/runs/40683032301) 测试提交 `2bcdca5`：Windows 测试发现重复 LZMA 符号；随后切换静态 triplet 时，依赖安装完成但 zlib 兼容脚本未识别静态库文件名，Windows 编译未启动。
-- 当前 action 会识别 vcpkg `x64-windows-static-md` 的 `zs.lib` 并适配为 `zlib.lib`；这个 triplet 的具体库名由 vcpkg zlib 上游 CMake 输出确认，仍需 Windows runner 复测。
+- CI 当前使用 vcpkg `x64-windows-static-md` 静态 triplet，按上游实际库名将 zlib `zs.lib` 映射为 `zlib.lib`；切换 triplet 后会清除旧 `libarchive2-sys` 构建缓存。
 - 手动 CI [40688806047](https://github.com/yuhuotech/rustzip/actions/runs/40688806047) 的 Windows 核心编译通过，但 RPM gzip fixture 未解压。定位到 `libarchive2-sys` 不跟踪 vcpkg triplet 环境变量，Cargo 缓存复用了旧 CMake 检测结果；action 现加入针对该 crate 的 `cargo clean`，强制按当前依赖重新检测。
 - 手动 CI [40694889926](https://github.com/yuhuotech/rustzip/actions/runs/40694889926) 的 Windows 编译通过，普通核心测试、核心 Clippy 及 GUI 测试通过；Inno Setup 编译因 runner 缺少 `ChineseSimplified.isl` 失败，改为随源码固定这份 MIT 翻译后继续验证。安装器随后成功编译、安装并卸载，但冒烟脚本把卸载后无值且无子项的空 `Applications\\rustzip.exe` 键误判为残留；脚本已改为检查注册值和子键，不将空键视为有效关联。
-- Inno Setup CI 编译发现 runner 缺少可选的 `ChineseSimplified.isl`。仓库现在固定带入 MIT 翻译文件及许可证，并让安装器从仓库路径读取；静态资源测试通过，新的 Windows 安装器编译仍待 CI 验证。
+- Inno Setup CI 编译发现 runner 缺少可选的 `ChineseSimplified.isl`。仓库现在固定带入 MIT 翻译文件及许可证，并让安装器从仓库路径读取；Windows 冒烟已验证编译和安装。
 - Windows 安装器包含 vcpkg 原生库许可证、格式关联和条件化 RAR 关联；手动 CI 冒烟已在 runner 上编译安装包、安装、核对关联和默认程序、卸载并确认清理。
 - macOS 27.0.1 / Apple Silicon：使用隔离配置和测试数据构建 ad-hoc 签名的 `.app` / DMG；默认和 `RZ_WITH_RAR=1` 两种模式的 plist、签名和 DMG 校验通过。默认包没有 RAR 关联与许可证，RAR 测试包有两者；只读挂载 RAR DMG 后再次检查其中应用签名、关联和许可证并卸载。启用 feature 的无头 GUI 用例实际打开 RAR fixture 并验证预览限制提示。
 - macOS 真实钥匙串读写测试使用唯一临时服务名和索引，完成写入、读取、列表、删除，并确认测试索引清理。该测试复用生产后端，但未修改用户原有 `RustZIP` 服务的索引。
@@ -31,11 +31,14 @@
 - macOS Launch Services：`/tmp` 下的包被标记为不可启动，不能作为“打开方式”候选。将两种包复制到工作区隔离目录并使用独立测试 bundle ID 注册后，ZIP 候选包含两种测试包，RAR 候选只包含启用 RAR 的测试包；ZIP 原默认程序保持不变。测试后注销两个临时 bundle，查询确认候选项已清理。该结果验证 Launch Services 查询，尚未逐项点击 Finder 菜单。
 - 本轮工作区通过默认与 all-features 工作区测试、全工作区两种 Clippy 检查及格式检查；按定义忽略的真实钥匙串测试已在 macOS 单独运行并通过。CI YAML 解析和 macOS / Linux 打包脚本语法检查通过。
 - 手动 CI [40705566104](https://github.com/yuhuotech/rustzip/actions/runs/40705566104) 测试提交 `e54dcdd` 六个任务全部通过，包括 Windows 核心 default / all-features 测试、Windows GUI 测试和安装 / 注册 / 卸载冒烟。
-- Windows runner 实际编译了静态 libarchive、GUI 和 Inno 安装器，并验证了关联清理。依赖准备约 7–10 分钟，首次 GUI Clippy 约 6–7 分钟，Release 安装器构建约 12 分钟；这些是首次冷构建耗时，vcpkg 缓存命中后的耗时尚未验证。
+- Windows runner 实际编译了静态 libarchive、GUI 和 Inno 安装器，并验证了注册表默认值未变、安装关联、卸载后的关联清理。首次 Windows Release 安装器构建约 12 分钟；vcpkg 包缓存命中后的依赖准备约 30 秒。
+- 最终验收分支提交 `30c4201` 的手动 CI [40721476174](https://github.com/yuhuotech/rustzip/actions/runs/40721476174) 六个任务全部通过：Windows 核心 default / all-features 测试、Windows GUI 测试和安装器冒烟均成功，macOS、Ubuntu 和基准也通过。
+- 最终 HEAD `30c4201` 的 Windows vcpkg revision 输出和提前缓存保存配置得到实际运行验证：core 依赖准备约 62 秒，GUI 约 30 秒。另在验收分支的后续 Windows 修复提交 `e54dcdd` 上再次通过 GUI / Inno Setup 安装器冒烟，确认安装、默认关联保护和卸载清理。
+- 最终工作区默认及 all-features 的格式检查、Clippy、全工作区测试均通过；每套测试有三项按环境条件忽略。Windows 和 macOS 的原生编译及桌面测试也在最终 CI 通过。
 
 ## 未完成的验收
 
 - Windows CI 与安装器自动化验收通过；原生 GUI 的输入法、渲染、钥匙串、通知和人工交互仍待验收。
-- macOS Finder“打开方式”实际展示、公证、通知横幅投递与权限、屏幕阅读器及真实输入法仍未验收。
+- macOS Finder 菜单人工点击、公证、通知横幅投递与权限、屏幕阅读器及真实输入法仍未验收。
 - Dolphin / Nemo 的真实桌面点击、Linux 低图形能力设备、三平台百万条真实归档列表仍待验收。
 - 目前的默认安装包不启用 RAR。正式发行版要求的 RAR 安全边界、许可证与发行策略须在发布前闭环，参见 D35 / D36。
