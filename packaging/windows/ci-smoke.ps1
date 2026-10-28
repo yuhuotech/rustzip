@@ -10,7 +10,6 @@ if (-not (Test-Path $iscc)) { throw "Inno Setup compiler is unavailable" }
 $classes = "Registry::HKEY_CURRENT_USER\Software\Classes"
 $owned = @(
     "$classes\RustZIP.Archive",
-    "$classes\Applications\rustzip.exe",
     "$classes\*\shell\RustZIP.Compress",
     "$classes\Directory\shell\RustZIP.Compress",
     "$classes\SystemFileAssociations\.zip\shell\RustZIP.Extract"
@@ -48,6 +47,14 @@ try {
     foreach ($key in $owned) {
         if (-not (Test-Path -LiteralPath $key)) { throw "Expected registry key missing: $key" }
     }
+    $application = Get-Item -LiteralPath "$classes\Applications\rustzip.exe"
+    if ($application.GetValue("FriendlyAppName") -ne "RustZIP") {
+        throw "Open With application name is missing"
+    }
+    $openCommand = Get-Item -LiteralPath "$classes\Applications\rustzip.exe\shell\open\command"
+    if ($openCommand.GetValue("") -notlike "*$install*rustzip.exe*") {
+        throw "Open With application command is incorrect"
+    }
     $zipOpen = Get-Item -LiteralPath "$classes\.zip\OpenWithProgids"
     if ($zipOpen.GetValueNames() -notcontains "RustZIP.Archive") {
         throw "ZIP Open With registration is missing"
@@ -69,6 +76,10 @@ try {
 }
 foreach ($key in $owned) {
     if (Test-Path -LiteralPath $key) { throw "Registry key survived uninstall: $key" }
+}
+$application = Get-Item -LiteralPath "$classes\Applications\rustzip.exe" -ErrorAction SilentlyContinue
+if ($application -and ($application.GetValueNames().Count -gt 0 -or $application.GetSubKeyNames().Count -gt 0)) {
+    throw "Open With application registration survived uninstall"
 }
 if (Test-Path -LiteralPath (Join-Path $install "rustzip.exe")) {
     throw "Executable survived uninstall"
