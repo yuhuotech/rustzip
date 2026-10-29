@@ -254,6 +254,7 @@
 
 - D1 规划正式发行版附带 RAR，但默认构建仍关闭该 feature。D38 已为 RAR 解码增加逐块输出上限和取消；正式发行前仍必须在三平台验证启用 feature 的构建、安装包和 unRAR 许可声明。
 - 桌面应用暴露默认关闭的 `rar` feature；本地打包默认不启用 RAR，也不注册 RAR 专属文件关联。显式启用 RAR 的本地测试包可同时注册相应关联，并继续遵守 unRAR 许可证。三平台的设置方式在发布文档中说明。
+- CI [40939090908](https://github.com/yuhuotech/rustzip/actions/runs/40939090908) 已在 Windows、macOS、Ubuntu/Xvfb 运行 all-features GUI Clippy / 测试并通过；这验证源码 feature 组合，不替代正式 RAR 安装包中的 unRAR 许可证与关联验收。
 
 ## D37 长尾格式后端准入
 
