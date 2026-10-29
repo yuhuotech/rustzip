@@ -27,6 +27,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: ./.github/actions/native-archive-deps
         id: native-deps
+      - name: Smoke test Linux desktop integration installer
+        if: runner.os == 'Linux'
+        run: bash packaging/linux/test-install.sh
       - name: Save vcpkg binary packages before tests
         if: runner.os == 'Windows'
         uses: actions/cache/save@v4

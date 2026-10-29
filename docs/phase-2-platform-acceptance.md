@@ -34,6 +34,8 @@
 - Windows runner 实际编译了静态 libarchive、GUI 和 Inno 安装器，并验证了注册表默认值未变、安装关联、卸载后的关联清理。首次 Windows Release 安装器构建约 12 分钟；vcpkg 包缓存命中后的依赖准备约 30 秒。
 - 最终验收分支提交 `30c4201` 的手动 CI [40721476174](https://github.com/yuhuotech/rustzip/actions/runs/40721476174) 六个任务全部通过：Windows 核心 default / all-features 测试、Windows GUI 测试和安装器冒烟均成功，macOS、Ubuntu 和基准也通过。
 - 最终 HEAD `30c4201` 的 Windows vcpkg revision 输出和提前缓存保存配置得到实际运行验证：core 依赖准备约 62 秒，GUI 约 30 秒。另在验收分支的后续 Windows 修复提交 `e54dcdd` 上再次通过 GUI / Inno Setup 安装器冒烟，确认安装、默认关联保护和卸载清理。
+- 最新跨平台 CI run [40914277975](https://github.com/yuhuotech/rustzip/actions/runs/40914277975) 对提交 `37f7d26`：Ubuntu core、macOS core / GUI、Windows GUI / installer smoke 和基准通过；Windows core 因 checkout 将 CHM HTML fixture 的 LF 转为 CRLF 而失败。已在 `da02032` 为该 fixture 增加 `.gitattributes` 固定 LF，最新提交的三平台 CI 仍待复跑。
+- CI [40920442634](https://github.com/yuhuotech/rustzip/actions/runs/40920442634) 对提交 `da02032`：Ubuntu / macOS core、macOS GUI、Windows GUI / 安装器及基准通过；Windows core 暴露便携 ZIP 权限受 runner 平台默认值影响（`0o100664`，预期 `0o100644`）。ZIP 写入器现明确标注 Unix creator 和 ZIP / tar 兼容权限（目录 `0755`、普通文件 `0644`），大条目分块路径也已固定写入该权限。Linux 安装器隔离安装 / 卸载冒烟已在本机配合 GNU `install` 通过，并已加入 Ubuntu core CI；修复后的三平台 CI 待运行。
 - 最终工作区默认及 all-features 的格式检查、Clippy、全工作区测试均通过；每套测试有三项按环境条件忽略。Windows 和 macOS 的原生编译及桌面测试也在最终 CI 通过。
 
 ## 未完成的验收

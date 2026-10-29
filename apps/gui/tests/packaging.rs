@@ -5,10 +5,12 @@ use std::collections::BTreeSet;
 const WINDOWS: &str = include_str!("../../../packaging/windows/rustzip.iss");
 const LINUX_DESKTOP: &str = include_str!("../../../packaging/linux/rustzip.desktop");
 const LINUX_NEMO: &str = include_str!("../../../packaging/linux/rustzip-extract.nemo_action");
+const LINUX_DOLPHIN: &str = include_str!("../../../packaging/linux/rustzip-servicemenu.desktop");
 const WINDOWS_INSTALLER: &str = include_str!("../../../packaging/windows/rustzip.iss");
 const MACOS_INFO: &str = include_str!("../../../packaging/macos/Info.plist.in");
 const MACOS_BUILD: &str = include_str!("../../../packaging/macos/build-app.sh");
 const LINUX_TARBALL: &str = include_str!("../../../packaging/linux/build-tarball.sh");
+const LINUX_INSTALL: &str = include_str!("../../../packaging/linux/install.sh");
 
 #[test]
 fn windows_open_with_and_extract_support_the_same_archive_extensions() {
@@ -67,6 +69,16 @@ fn chm_is_advertised_in_linux_descriptors() {
     for descriptor in [LINUX_DESKTOP, LINUX_NEMO] {
         assert!(descriptor.contains("application/vnd.ms-htmlhelp"));
     }
+}
+
+#[test]
+fn linux_installer_targets_modern_and_legacy_dolphin_service_menu_paths() {
+    assert!(LINUX_TARBALL.contains("cp packaging/linux/install.sh \"$stage/install.sh\""));
+    assert!(LINUX_INSTALL.contains("$data_home/kio/servicemenus"));
+    assert!(LINUX_INSTALL.contains("$data_home/kservices5/ServiceMenus"));
+    assert!(LINUX_INSTALL.contains("$kde6_service_menus/rustzip-servicemenu.desktop"));
+    assert!(LINUX_INSTALL.contains("$kde5_service_menus/rustzip-servicemenu.desktop"));
+    assert!(LINUX_DOLPHIN.contains("ServiceTypes=KonqPopupMenu/Plugin"));
 }
 
 #[test]
@@ -231,6 +243,7 @@ fn linux_packaging_keeps_rar_features_and_descriptors_in_sync() {
             .unwrap()
             .unwrap()
             .path();
+        assert!(package.join("install.sh").is_file());
         for name in ["rustzip.desktop", "rustzip-extract.nemo_action"] {
             let descriptor = fs::read_to_string(package.join(name)).unwrap();
             assert_eq!(
@@ -240,5 +253,59 @@ fn linux_packaging_keeps_rar_features_and_descriptors_in_sync() {
             );
         }
         assert_eq!(package.join("unrar-license.txt").exists(), enabled);
+
+        #[cfg(target_os = "linux")]
+        {
+            let prefix = root.join(if enabled {
+                "rar-install-prefix"
+            } else {
+                "default-install-prefix"
+            });
+            let xdg = root.join(if enabled {
+                "rar-install-xdg"
+            } else {
+                "default-install-xdg"
+            });
+            let install = Command::new("sh")
+                .arg(package.join("install.sh"))
+                .env("PREFIX", &prefix)
+                .env("XDG_DATA_HOME", &xdg)
+                .output()
+                .unwrap();
+            assert!(
+                install.status.success(),
+                "{}",
+                String::from_utf8_lossy(&install.stderr)
+            );
+            let installed = [
+                xdg.join("kio/servicemenus/rustzip-servicemenu.desktop"),
+                xdg.join("kservices5/ServiceMenus/rustzip-servicemenu.desktop"),
+                xdg.join("nemo/actions/rustzip-compress.nemo_action"),
+                xdg.join("nemo/actions/rustzip-extract.nemo_action"),
+            ];
+            for path in &installed {
+                assert!(path.is_file(), "{} was not installed", path.display());
+            }
+
+            let uninstall = Command::new("sh")
+                .arg(package.join("install.sh"))
+                .arg("--uninstall")
+                .env("PREFIX", &prefix)
+                .env("XDG_DATA_HOME", &xdg)
+                .output()
+                .unwrap();
+            assert!(
+                uninstall.status.success(),
+                "{}",
+                String::from_utf8_lossy(&uninstall.stderr)
+            );
+            for path in installed {
+                assert!(
+                    !path.exists(),
+                    "{} remained after uninstall",
+                    path.display()
+                );
+            }
+        }
     }
 }
