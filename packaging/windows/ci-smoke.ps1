@@ -27,6 +27,8 @@ foreach ($key in $owned) {
 
 $work = Join-Path $env:RUNNER_TEMP ("rustzip-installer-" + [guid]::NewGuid().ToString("N"))
 $install = Join-Path $work "app"
+$installLog = Join-Path $work "install.log"
+$uninstallLog = Join-Path $work "uninstall.log"
 $dist = if ([string]::IsNullOrWhiteSpace($OutputDir)) { Join-Path $work "dist" } else { $OutputDir }
 New-Item -ItemType Directory -Path $dist | Out-Null
 $exe = Join-Path $PWD "target\release\rustzip.exe"
@@ -48,9 +50,12 @@ if (-not (Test-Path $installer)) { throw "Windows installer was not created" }
 try {
     $process = Start-Process -FilePath $installer -ArgumentList @(
         "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART",
-        "/DIR=`"$install`"", "/TASKS=contextmenu,openwith", "/LOG=`"$work\install.log`""
+        "/DIR=`"$install`"", "/TASKS=contextmenu,openwith", "/LOG=`"$installLog`""
     ) -Wait -PassThru
-    if ($process.ExitCode -ne 0) { throw "Installer failed: $($process.ExitCode)" }
+    if ($process.ExitCode -ne 0) {
+        if (Test-Path $installLog) { Get-Content $installLog | ForEach-Object { Write-Host $_ } }
+        throw "Installer failed: $($process.ExitCode)"
+    }
     $installedFiles = @("rustzip.exe", "licenses\zlib.txt", "licenses\libchm.txt", "licenses\pbz2.txt", "licenses\pbz2-notice.txt", "licenses\inno-chinese-translation.txt")
     if ($RarEnabled) { $installedFiles += "unrar-license.txt" }
     foreach ($file in $installedFiles) {
@@ -90,9 +95,12 @@ try {
     $uninstaller = Join-Path $install "unins000.exe"
     if (Test-Path $uninstaller) {
         $process = Start-Process -FilePath $uninstaller -ArgumentList @(
-            "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/LOG=`"$work\uninstall.log`""
+            "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/LOG=`"$uninstallLog`""
         ) -Wait -PassThru
-        if ($process.ExitCode -ne 0) { throw "Uninstaller failed: $($process.ExitCode)" }
+        if ($process.ExitCode -ne 0) {
+            if (Test-Path $uninstallLog) { Get-Content $uninstallLog | ForEach-Object { Write-Host $_ } }
+            throw "Uninstaller failed: $($process.ExitCode)"
+        }
     }
 }
 foreach ($key in $owned) {
