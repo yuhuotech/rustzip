@@ -19,7 +19,7 @@ fn windows_open_with_and_extract_support_the_same_archive_extensions() {
     let mut rar_enabled = false;
     let mut rar_entries = 0;
     for line in WINDOWS.lines() {
-        if line.trim() == r#"#if RarEnabled == "1""# {
+        if line.trim() == "#ifdef RarEnabled" {
             rar_enabled = true;
         } else if line.trim() == "#endif" {
             rar_enabled = false;

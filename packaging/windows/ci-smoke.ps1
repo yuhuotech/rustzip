@@ -37,8 +37,10 @@ $buildArgs = @("build", "--release", "-p", "rustzip-gui")
 if ($RarEnabled) { $buildArgs += @("--features", "rar") }
 & cargo @buildArgs
 if ($LASTEXITCODE -ne 0) { throw "Windows GUI build failed: $LASTEXITCODE" }
-$rarEnabledDefine = if ($RarEnabled) { '/DRarEnabled="1"' } else { '/DRarEnabled="0"' }
-& $iscc "/DAppVersion=0.1.0" "/DSourceExe=$exe" "/DOutDir=$dist" $rarEnabledDefine "packaging\windows\rustzip.iss"
+$compilerArgs = @("/DAppVersion=0.1.0", "/DSourceExe=$exe", "/DOutDir=$dist")
+if ($RarEnabled) { $compilerArgs += "/DRarEnabled" }
+$compilerArgs += "packaging\windows\rustzip.iss"
+& $iscc @compilerArgs
 if ($LASTEXITCODE -ne 0) { throw "Windows installer compilation failed: $LASTEXITCODE" }
 $installer = Join-Path $dist "RustZIP-0.1.0-windows-x86_64.exe"
 if (-not (Test-Path $installer)) { throw "Windows installer was not created" }
