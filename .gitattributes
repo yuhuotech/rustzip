@@ -1,0 +1,2 @@
+crates/rz-formats/tests/fixtures/chm_basic_sources/*.htm text eol=lf
+crates/rz-formats/tests/fixtures/chm_basic_sources/*.css text eol=lf
