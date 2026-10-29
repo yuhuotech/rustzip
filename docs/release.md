@@ -56,7 +56,7 @@ Vercel build 会在部署期间自动应用 Neon Postgres migrations;检查部�
 
 图标由 `cargo run --release -p rustzip-gui --example make_icons -- packaging/icons` 生成(`.icns`、`.ico`、各尺寸 PNG)。
 
-默认包不启用 RAR，也不注册 RAR 专属关联。macOS / Linux 可设置 `RZ_WITH_RAR=1` 打包测试版；Windows 需用 `cargo build --release -p rustzip-gui --features rar` 构建，并给 Inno Setup 增加 `/DRarEnabled=1`。启用时安装包附带 unRAR 许可证。RAR 解码现由 `rz-ffi` 逐块执行并受选中输出总量、条目声明大小和取消控制；启用 RAR 的正式发行仍需完成三平台构建、许可证与真实安装包验收，见 D36 / D38。
+默认包不启用 RAR，也不注册 RAR 专属关联。macOS / Linux 可设置 `RZ_WITH_RAR=1` 打包测试版；Windows 需用 `cargo build --release -p rustzip-gui --features rar` 构建，并给 Inno Setup 增加 `/DRarEnabled="1"`。启用时安装包附带 unRAR 许可证。RAR 解码现由 `rz-ffi` 逐块执行并受选中输出总量、条目声明大小和取消控制；启用 RAR 的正式发行仍需完成三平台构建、许可证与真实安装包验收，见 D36 / D38。
 
 在手动触发 Release dry-run 时，可将 `validate_rar_packages=true`，额外构建 macOS arm64 / x86_64、Linux x86_64 和 Windows x86_64 的 RAR 测试安装包。此验证会检查 unRAR 许可证、macOS 类型声明、Linux MIME 声明以及 Windows 安装 / 卸载后的 RAR 关联；生成的 `rar-package-validation-bundle` 单独保存 14 天，不进入更新清单或公开 Release。该选项默认关闭。
 

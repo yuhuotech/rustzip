@@ -14,7 +14,7 @@
   #define OutDir "..\..\dist"
 #endif
 #ifndef RarEnabled
-  #define RarEnabled 0
+  #define RarEnabled "0"
 #endif
 #define VcpkgRoot GetEnv("VCPKG_INSTALLATION_ROOT")
 #ifndef VcpkgShare
@@ -67,7 +67,7 @@ Source: "{#VcpkgShare}\lz4\copyright"; DestDir: "{app}\licenses"; DestName: "lz4
 Source: "{#VcpkgShare}\openssl\copyright"; DestDir: "{app}\licenses"; DestName: "openssl.txt"; Flags: ignoreversion
 Source: "..\licenses\libchm.txt"; DestDir: "{app}\licenses"; DestName: "libchm.txt"; Flags: ignoreversion
 Source: "..\licenses\inno-chinese-translation.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
-#if RarEnabled == 1
+#if RarEnabled == "1"
 Source: "..\licenses\unrar.txt"; DestDir: "{app}"; DestName: "unrar-license.txt"; Flags: ignoreversion
 #endif
 
@@ -81,7 +81,7 @@ Root: HKCU; Subkey: "Software\Classes\Applications\rustzip.exe\shell\open\comman
 Root: HKCU; Subkey: "Software\Classes\Applications\rustzip.exe"; ValueType: string; ValueName: "FriendlyAppName"; ValueData: "RustZIP"; Tasks: openwith; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Classes\.7z\OpenWithProgids"; ValueType: string; ValueName: "RustZIP.Archive"; ValueData: ""; Tasks: openwith; Flags: uninsdeletevalue
 Root: HKCU; Subkey: "Software\Classes\.zip\OpenWithProgids"; ValueType: string; ValueName: "RustZIP.Archive"; ValueData: ""; Tasks: openwith; Flags: uninsdeletevalue
-#if RarEnabled == 1
+#if RarEnabled == "1"
 Root: HKCU; Subkey: "Software\Classes\.rar\OpenWithProgids"; ValueType: string; ValueName: "RustZIP.Archive"; ValueData: ""; Tasks: openwith; Flags: uninsdeletevalue
 #endif
 Root: HKCU; Subkey: "Software\Classes\.tar\OpenWithProgids"; ValueType: string; ValueName: "RustZIP.Archive"; ValueData: ""; Tasks: openwith; Flags: uninsdeletevalue
@@ -121,7 +121,7 @@ Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.zip\shell\RustZIP.
 Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.zip\shell\RustZIP.Extract\command"; ValueType: string; ValueData: """{app}\rustzip.exe"" --extract-here ""%1"""; Tasks: contextmenu
 Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.7z\shell\RustZIP.Extract"; ValueType: string; ValueData: "用 RustZIP 解压到此处"; Tasks: contextmenu; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.7z\shell\RustZIP.Extract\command"; ValueType: string; ValueData: """{app}\rustzip.exe"" --extract-here ""%1"""; Tasks: contextmenu
-#if RarEnabled == 1
+#if RarEnabled == "1"
 Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.rar\shell\RustZIP.Extract"; ValueType: string; ValueData: "用 RustZIP 解压到此处"; Tasks: contextmenu; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.rar\shell\RustZIP.Extract\command"; ValueType: string; ValueData: """{app}\rustzip.exe"" --extract-here ""%1"""; Tasks: contextmenu
 #endif
