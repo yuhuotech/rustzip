@@ -79,8 +79,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: macos-14, platform: macos-aarch64, target: aarch64-apple-darwin, experimental: false }
-          - { os: macos-14, platform: macos-x86_64, target: x86_64-apple-darwin, experimental: false }
+          - { os: macos-15, platform: macos-aarch64, target: aarch64-apple-darwin, experimental: false }
+          - { os: macos-15-intel, platform: macos-x86_64, target: x86_64-apple-darwin, experimental: false }
           - { os: windows-latest, platform: windows-x86_64, target: x86_64-pc-windows-msvc, experimental: false }
           # The Linux desktop build has not been verified on real hardware yet.
           - { os: ubuntu-22.04, platform: linux-x86_64, target: x86_64-unknown-linux-gnu, experimental: true }
