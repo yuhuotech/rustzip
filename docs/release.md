@@ -76,4 +76,7 @@ macOS 的“打开方式”声明包含已接入的常见只读格式及 LZ4，R
 
 **验证状态**：macOS arm64 `.app` / DMG 的打包、签名校验和启动通过，尚未公证；Linux x86_64 tarball 已在 Ubuntu 26.04 构建，并通过隔离安装 / 卸载和 Nautilus Scripts 菜单验收。Windows runner 已编译 GUI / Inno 安装器并完成自动安装 / 卸载冒烟；原生 GUI 人工验收和完整 release 工作流仍未完成。当前 GitHub Actions 只允许手动触发 CI；Release 需在 `v*` tag 上手动运行。仓库截至 2026-10-27 尚无公开 GitHub Release。
 
+- 2026-10-29 Release dry-run [40950855468](https://github.com/yuhuotech/rustzip/actions/runs/40950855468)：Linux、macOS arm64、macOS x86_64 与 Windows x86_64 产物均构建并签名成功；汇总验签 job 在构建 `rz-release` 时因 runner 未安装 `libacl` 开发库而失败，因此未生成验证 bundle，正式发布步骤跳过。已在汇总 job 加入 `native-archive-deps`；修复后的 dry-run 待重新运行。
+- 2026-10-30 核对 GitHub Actions 运行记录：Fuzz 的手动 run [40912070562](https://github.com/yuhuotech/rustzip/actions/runs/40912070562) 四个 target 通过；尚未找到 `schedule` 事件的运行记录，定时运行仍待确认。
+
 2026-10-28 的手动 CI、macOS 钥匙串 / Launch Services 检查与 Windows 修复见[第二阶段验收](phase-2-platform-acceptance.md)：提交 `30c4201` 的六个 CI 任务全部通过。之后的 CHM 和 RAR 回调改动仍需在最新提交上完成三平台 CI 与打包验收。

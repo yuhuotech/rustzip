@@ -49,3 +49,4 @@
 - macOS Finder 菜单人工点击、公证、通知横幅投递与权限、屏幕阅读器及真实输入法仍未验收。
 - Dolphin / Nemo 的真实桌面点击、Linux 低图形能力设备、三平台百万条真实归档列表仍待验收。
 - 该阶段的默认安装包不启用 RAR。之后 D38 已为 RAR 增加可取消且受 `max_total` 限制的逐块输出；正式发行仍需在三平台验证启用 RAR 的构建、许可证和发行策略，默认包继续关闭 RAR。
+- Release dry-run [40950855468](https://github.com/yuhuotech/rustzip/actions/runs/40950855468) 的四个平台包均构建并签名成功；汇总验签 job 因 runner 缺少 `libacl` 开发库失败。修复已加入 `.github/workflows/release.yml`，需推送后复跑才算验收完成。
