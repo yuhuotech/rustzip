@@ -20,6 +20,7 @@ pub fn kind_key(kind: JobKind) -> &'static str {
         JobKind::Compress => "compress",
         JobKind::Extract => "extract",
         JobKind::Test => "test",
+        JobKind::Compare => "compare",
         JobKind::Edit => "edit",
         JobKind::Convert => "convert",
         JobKind::Repair => "repair",
@@ -184,6 +185,7 @@ impl MainView {
                     false,
                     None,
                     None,
+                    None,
                     &mono,
                     cx,
                 )
@@ -213,6 +215,11 @@ impl MainView {
                         t.id == *id && t.summary.as_ref().is_some_and(|s| s.recovery.is_some())
                     })
                 });
+                let comparison = r.task.filter(|id| {
+                    self.task_view.iter().any(|t| {
+                        t.id == *id && t.summary.as_ref().is_some_and(|s| s.comparison.is_some())
+                    })
+                });
                 let reveal = r.task.and_then(|id| {
                     self.task_view
                         .iter()
@@ -232,6 +239,7 @@ impl MainView {
                     crate::local_time(r.at),
                     !r.seen,
                     report,
+                    comparison,
                     reveal,
                     &mono,
                     cx,
@@ -272,6 +280,7 @@ impl MainView {
         when: String,
         fresh: bool,
         report: Option<rz_app::tasks::TaskId>,
+        comparison: Option<rz_app::tasks::TaskId>,
         reveal: Option<(rz_app::tasks::TaskId, PathBuf)>,
         mono: &SharedString,
         cx: &mut Context<Self>,
@@ -336,6 +345,18 @@ impl MainView {
                         })),
                 )
             })
+            .when_some(comparison, |d, id| {
+                d.child(
+                    Button::new(("history-compare", id as usize))
+                        .outline()
+                        .xsmall()
+                        .label(self.tool_text("compare_view"))
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.overlay = Some(crate::view::Overlay::ComparisonReport(id));
+                            cx.notify();
+                        })),
+                )
+            })
             .when_some(reveal, |d, (id, path)| {
                 d.child(
                     Button::new(("history-reveal", id as usize))
@@ -364,6 +385,7 @@ fn kind_from_key(key: &str) -> JobKind {
     match key {
         "compress" => JobKind::Compress,
         "test" => JobKind::Test,
+        "compare" => JobKind::Compare,
         "edit" => JobKind::Edit,
         "convert" => JobKind::Convert,
         "repair" => JobKind::Repair,

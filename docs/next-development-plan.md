@@ -6,7 +6,7 @@
 
 ## 1. 结论
 
-RustZIP 的主要归档与桌面主流程已实现，Windows CI / 安装器自动化验收通过，macOS 和 Ubuntu 有部分实机证据。ZIP 大条目并行 Deflate 已接入，仍需跨平台性能和外部工具矩阵验收；合格 ZIP 编辑快路径现在保留归档 / 条目注释与扩展字段。未完成项包括 ZIP 真正原地增量编辑的 D11 决策、WIM / DMG / NSIS 安全 reader、PDF / 音视频预览；跨平台手工验收和正式 release 流程也未闭环。压缩包对比、虚拟挂载、云端按需解压、WASM 插件和 SFX 仍列为远期需求。
+RustZIP 的主要归档与桌面主流程已实现，Windows CI / 安装器自动化验收通过，macOS 和 Ubuntu 有部分实机证据。ZIP 大条目并行 Deflate 已接入，仍需跨平台性能和外部工具矩阵验收；合格 ZIP 编辑快路径现在保留归档 / 条目注释与扩展字段。2026-10-30 已实现 CLI 与 GUI 的压缩包对比。未完成项包括 ZIP 真正原地增量编辑的 D11 决策、WIM / DMG / NSIS 安全 reader、PDF / 音视频预览；跨平台手工验收和正式 release 流程也未闭环。虚拟挂载、云端按需解压、WASM 插件和 SFX 仍列为远期需求。
 
 四个曾经占位的侧栏功能——常用位置、密码本、格式转换、压缩包修复——在当前代码中已经实现，不能继续列为“未开发”。转换与修复的符号链接和损坏数据边界见 [侧栏实现记录](sidebar-implementation.md) 与 [决策 D9](decisions.md#d9-左栏工具的数据安全与恢复边界)。
 
@@ -28,12 +28,13 @@ RustZIP 的主要归档与桌面主流程已实现，Windows CI / 安装器自�
 | P1 | 完成后动作与通知 | 设置可控解压完成后显示目录；历史记录为本次运行内成功任务提供本次运行结果定位，不持久化结果路径；可选系统通知只发通用成功 / 失败信息，默认关闭。Ubuntu GNOME 开启时实际投递、关闭时静默均已通过 | 验收 macOS / Windows 通知实际投递与设置切换；关机等高影响动作暂不纳入 |
 | P1 | 压缩预设 | 极速 / 均衡 / 最小体积、邮件分享（20 MiB 默认分卷）和跨平台兼容预设已接入；自定义分卷、权限规范化用例与 8 MiB 基准通过 | 无；用户指定的分卷大小会直接覆盖预设值 |
 | P1 | 重复文件检测 | GUI 压缩前按内容 BLAKE3 检查同大小普通文件，任务可取消并报告进度；发现重复后可继续压缩或取消，不自动删除；超过 100,000 个文件时可明确选择继续 | 扩充大目录压力样本；自动去重另行评估 |
-| P1 | 多语言和无障碍 | 十种语言的 365 个界面资源键已实现；八种新增语言各有完整词条包，覆盖及占位符测试通过。十种菜单选项逐项切换测试通过；设置和窗口顶栏共用语言下拉菜单，系统首选语言读取可用，侧栏使用简短本地化标签并保留省略保护 | Windows 原生语言设置、真实屏幕阅读器、阿拉伯语 RTL 整页布局仍待平台验收 |
+| P1 | 多语言和无障碍 | 十种语言的 378 个界面资源键已实现；八种新增语言各有完整词条包，覆盖及占位符测试通过。十种菜单选项逐项切换测试通过；设置和窗口顶栏共用语言下拉菜单，系统首选语言读取可用，侧栏使用简短本地化标签并保留省略保护 | Windows 原生语言设置、真实屏幕阅读器、阿拉伯语 RTL 整页布局仍待平台验收 |
 | P1 | 文件关联与系统菜单 | Nautilus 50.2.2 的 Scripts 子菜单在 Ubuntu 26.04 / Xvfb 显示并实际点击验收；解压两个 Unicode 文件后逐字节比对一致，压缩入口启动 RustZIP 创建窗口。Linux 安装器现将 Dolphin 菜单装入 `$XDG_DATA_HOME/kio/servicemenus`，并保留旧版 KDE Frameworks 的 `kservices5/ServiceMenus`；Nemo 动作随 XDG 数据目录安装。Dolphin / Nemo 实机点击仍待验收；macOS 增加已支持格式的“打开方式”声明，尚未实机验证 | 验收 Plasma 6 / KDE Frameworks Dolphin、旧版 Dolphin 和 Nemo 的真实菜单点击；验收 Windows 菜单与 macOS 格式关联；评估 Finder 右键及 Quick Look |
-| P1 | 持续 fuzz | nightly ASan 定时工作流覆盖 ZIP recovery、CHM、bzip2、RAR；GitHub 手动 run `40912070562` 四个 target 全部通过并保存 corpus cache，分别执行 467k / 47k / 7k / 182k 次，无 crash | 观察每日 schedule 运行和 corpus 增长；如出现 crash，确认 14 天 artifact 保存并 triage |
+| P1 | 持续 fuzz | nightly ASan 工作流覆盖 ZIP recovery、CHM、bzip2、RAR；GitHub 手动 run `40912070562` 四个 target 全部通过并保存 corpus cache，分别执行 467k / 47k / 7k / 182k 次，无 crash。2026-10-30 尚未找到 schedule 事件记录 | 确认每日 schedule 开始运行并观察 corpus 增长；如出现 crash，确认 14 天 artifact 保存并 triage |
 | P1 | 跨平台桌面与打包 | macOS `.app` / DMG arm64 签名与启动通过，尚未公证。Ubuntu 26.04.1 x86_64 的全工作区 all-features 测试与 Clippy 通过（3 项环境条件测试忽略）；Linux tarball 构建、隔离安装 / 卸载、Nautilus 菜单点击通过。真实 Wayland GUI 启动、GNOME Secret Service 唯一标签往返、通知启用投递 / 关闭静默通过。CI [40931063454](https://github.com/yuhuotech/rustzip/actions/runs/40931063454) 七个 job 全部通过，包含 Ubuntu/Xvfb GUI、Windows GUI/安装器和三平台 core。桌面人工验收仍缺。详细证据见 [第二阶段验收](phase-2-platform-acceptance.md) | Windows 原生输入法 / 渲染 / 钥匙串 / 通知、macOS 公证 / Finder / 通知、Dolphin / Nemo 点击、屏幕阅读器、正式三平台发布流程仍需验收 |
-| P1 | 自动更新 | 有安装包签名校验、更新发现和下载后交给系统安装器的流程；产品规格已按决策 D8 统一为用户操作安装器。交接在后台执行，通过自动化用例验证签名成功后才启动、篡改内容拒绝启动及启动失败提示 | 用正式签名 Release 在三平台验证清单下载、安装包校验和系统安装器交接；安装器的替换和回滚不由应用实现 |
-| P2 | 压缩包对比、虚拟磁盘挂载、云端按需解压、WASM 插件、自解压包 | 均未开始，属于远期需求 | 暂缓；根据用户需求和安全 / 平台成本分别立项 |
+| P1 | 自动更新与 Release | 有安装包签名校验、更新发现和下载后交给系统安装器的流程；自动化用例覆盖验签后才启动、篡改内容拒绝启动及启动失败提示。dry-run [40950855468](https://github.com/yuhuotech/rustzip/actions/runs/40950855468) 的四个平台构建 / 签名通过，汇总 job 缺少 libacl 开发库而失败；已给汇总 job 加入原生依赖安装 action，尚待重跑 | 通过修复后的 dry-run 并检查 bundle；之后再用正式签名 Release 在三平台验证清单、包校验和安装器交接 |
+| P2 | 压缩包对比 | 已接入 GUI 已打开标签对比和 CLI `rz diff`；按路径 / 类型识别新增、删除和类型变化，同路径同大小普通文件流式计算 BLAKE3；遵守取消、进度、总输出和压缩比限制。单包最多 1,000,000 条目；符号链接目标标记未比较 | 扩展外部格式样本和大归档性能采样；验证加密、固实 7z 与目录隐式项边界 |
+| P2 | 虚拟磁盘挂载、云端按需解压、WASM 插件、自解压包 | 尚未实现，仍属远期需求 | 分别评估平台成本、威胁模型与许可后再立项 |
 
 格式范围的依据：产品规格承诺 LZ4 读写及一组只读长尾格式；当前识别枚举已包含 ZIP、tar、gzip、7z、RAR、xz、zstd、bzip2、LZ4、ISO 9660、CAB、CPIO、AR、LHA/LZH、XAR、CHM、WIM 和 DMG。CHM 可读；WIM / DMG 仅识别并明确不支持。NSIS 暂不从通用 PE / `.exe` 扩展名识别。RAR 仍只通过可选 `unrar` 后端只读。
 
@@ -73,7 +74,7 @@ RustZIP 的主要归档与桌面主流程已实现，Windows CI / 安装器自�
 
 1. ~~让 CLI 经 `rz-app` 调用核心能力。~~ `rz-app::cli` 提供创建、列表、解压和完整性测试门面；CLI crate 已移除 `rz-engine` / `rz-formats` 直接依赖，并通过共享应用 API 接收取消与进度。
 2. ~~为格式转换和压缩包修复增加 CLI 命令。~~ `rz c` / `rz convert` 与 `rz r` / `rz repair` 已经由 `rz-app::cli` 调用流式转换 / 恢复；支持源与目标分别输入密码、隐藏提示 / 密码文件、Ctrl+C、限频进度和修复问题报告。转换 / 修复暂不支持分卷输出。列表枚举也已接入各格式的可取消进度回调。
-3. P2 的对比、挂载、云读取、插件和 SFX 按用户需求分别评估；在许可、威胁模型、平台成本明确前不进入实现。
+3. ~~实现首批压缩包对比。~~ GUI 可选择另一个已打开的标签，结果从任务面板或历史记录查看；CLI `rz diff` 支持共用或分开的归档密码。虚拟挂载、云读取、插件和 SFX 仍按许可、威胁模型和平台成本分别评估。
 
 **退出条件：** GUI 与 CLI 的能力边界有明确说明；CLI 只通过应用层使用核心；每项远期能力有单独的安全与维护成本评估。
 

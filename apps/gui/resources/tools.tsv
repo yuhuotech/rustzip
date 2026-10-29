@@ -362,3 +362,17 @@ sidebar_convert	转换	Convert
 sidebar_repair	修复	Repair
 sidebar_passwords	密码本	Passwords
 sidebar_history	任务记录	Tasks
+kind_compare	压缩包对比	Compare
+compare_archives	与另一个已打开的压缩包对比	Compare with another open archive
+compare_view	查看差异	View differences
+compare_complete	对比完成：新增 {added}，删除 {removed}，内容变化 {changed}，类型变化 {type_changed}，未比较 {not_compared} 项	Comparison finished: {added} added, {removed} removed, {changed} changed, {type_changed} type changes, {not_compared} not compared
+compare_report	压缩包对比结果	Archive comparison
+compare_pair	{left}（{left_format}）与 {right}（{right_format}）	{left} ({left_format}) vs {right} ({right_format})
+compare_summary	新增 {added} · 删除 {removed} · 内容变化 {changed} · 类型变化 {type_changed} · 未比较 {not_compared}	{added} added · {removed} removed · {changed} changed · {type_changed} type changes · {not_compared} not compared
+compare_no_differences	路径和文件内容一致。	Archive paths and file contents match.
+compare_added	新增	Added
+compare_removed	已删除	Removed
+compare_changed	内容变化	Content changed
+compare_type_changed	类型变化	Type changed
+compare_not_compared	符号链接目标未比较	Link target not compared
+compare_more	还有 {count} 项未显示（最多显示 500 项）	{count} more differences are not shown (500 item display limit)

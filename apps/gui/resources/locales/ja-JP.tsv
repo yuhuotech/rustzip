@@ -363,3 +363,17 @@ sidebar_convert	変換
 sidebar_repair	修復
 sidebar_passwords	パスワード
 sidebar_history	タスク
+kind_compare	アーカイブ比較
+compare_archives	開いている別のアーカイブと比較
+compare_view	差分を表示
+compare_complete	比較完了：追加 {added} 件、削除 {removed} 件、内容変更 {changed} 件、種類変更 {type_changed} 件、未比較 {not_compared} 件
+compare_report	アーカイブ比較結果
+compare_pair	{left}（{left_format}）と {right}（{right_format}）
+compare_summary	追加 {added} · 削除 {removed} · 内容変更 {changed} · 種類変更 {type_changed} · 未比較 {not_compared}
+compare_no_differences	アーカイブ内のパスとファイル内容は一致しています。
+compare_added	追加
+compare_removed	削除
+compare_changed	内容変更
+compare_type_changed	種類変更
+compare_not_compared	シンボリックリンクのリンク先は未比較
+compare_more	ほかに {count} 件の差分があります（表示上限は500件）

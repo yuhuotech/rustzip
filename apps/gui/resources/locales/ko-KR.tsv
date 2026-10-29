@@ -363,3 +363,17 @@ sidebar_convert	변환
 sidebar_repair	복구
 sidebar_passwords	비밀번호
 sidebar_history	작업
+kind_compare	압축 파일 비교
+compare_archives	열려 있는 다른 압축 파일과 비교
+compare_view	차이 보기
+compare_complete	비교 완료: 추가 {added}, 삭제 {removed}, 내용 변경 {changed}, 유형 변경 {type_changed}, 미비교 {not_compared}
+compare_report	압축 파일 비교 결과
+compare_pair	{left} ({left_format}) 대 {right} ({right_format})
+compare_summary	추가 {added} · 삭제 {removed} · 내용 변경 {changed} · 유형 변경 {type_changed} · 미비교 {not_compared}
+compare_no_differences	압축 파일 경로와 파일 내용이 일치합니다.
+compare_added	추가
+compare_removed	삭제
+compare_changed	내용 변경
+compare_type_changed	유형 변경
+compare_not_compared	심볼릭 링크 대상 미비교
+compare_more	표시되지 않은 차이 {count}개가 더 있습니다 (최대 500개 표시)

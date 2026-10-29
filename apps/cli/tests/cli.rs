@@ -30,6 +30,89 @@ fn sample(root: &Path) {
     fs::write(root.join("proj/empty.bin"), "").unwrap();
 }
 
+fn write_zip(path: &Path, files: &[(&str, &[u8])]) {
+    let mut writer = zip::ZipWriter::new(fs::File::create(path).unwrap());
+    for (name, data) in files {
+        writer
+            .start_file(*name, zip::write::SimpleFileOptions::default())
+            .unwrap();
+        writer.write_all(data).unwrap();
+    }
+    writer.finish().unwrap();
+}
+
+#[test]
+fn diff_reports_added_removed_and_content_changed_paths() {
+    let tmp = tempfile::tempdir().unwrap();
+    let left = tmp.path().join("left.zip");
+    let right = tmp.path().join("right.zip");
+    write_zip(
+        &left,
+        &[
+            ("same.txt", b"same"),
+            ("change.txt", b"left"),
+            ("gone.txt", b"gone"),
+        ],
+    );
+    write_zip(
+        &right,
+        &[
+            ("same.txt", b"same"),
+            ("change.txt", b"rght"),
+            ("new.txt", b"new"),
+        ],
+    );
+
+    let output = rz(&["diff", p(&left), p(&right)]);
+    let (stdout, stderr) = s(&output);
+    assert!(output.status.success(), "{stderr}");
+    assert!(stdout.contains("ADDED  new.txt"), "{stdout}");
+    assert!(stdout.contains("REMOVED  gone.txt"), "{stdout}");
+    assert!(stdout.contains("CHANGED  change.txt"), "{stdout}");
+    assert!(!stdout.contains("same.txt"), "{stdout}");
+    assert!(stdout.contains("1 added, 1 removed, 1 changed"), "{stdout}");
+}
+
+#[test]
+fn diff_accepts_different_archive_passwords_without_printing_them() {
+    let tmp = tempfile::tempdir().unwrap();
+    let left_source = tmp.path().join("left/proj");
+    let right_source = tmp.path().join("right/proj");
+    fs::create_dir_all(&left_source).unwrap();
+    fs::create_dir_all(&right_source).unwrap();
+    fs::write(left_source.join("same.txt"), b"same").unwrap();
+    fs::write(right_source.join("same.txt"), b"same").unwrap();
+    let left_password = password_file(tmp.path(), "left-password", "left-secret");
+    let right_password = password_file(tmp.path(), "right-password", "right-secret");
+    let left = tmp.path().join("left.zip");
+    let right = tmp.path().join("right.zip");
+
+    for (archive, source, password) in [
+        (&left, &left_source, &left_password),
+        (&right, &right_source, &right_password),
+    ] {
+        let output = rz(&["a", p(archive), p(source), "-p", password]);
+        assert!(output.status.success(), "{}", s(&output).1);
+    }
+
+    let output = rz(&[
+        "diff",
+        p(&left),
+        p(&right),
+        "--left-password",
+        &left_password,
+        "--right-password",
+        &right_password,
+    ]);
+    let (stdout, stderr) = s(&output);
+    assert!(output.status.success(), "{stderr}");
+    assert!(stdout.contains("0 added, 0 removed, 0 changed"), "{stdout}");
+    assert!(!stdout.contains("left-secret"));
+    assert!(!stdout.contains("right-secret"));
+    assert!(!stderr.contains("left-secret"));
+    assert!(!stderr.contains("right-secret"));
+}
+
 #[test]
 fn chm_fixture_lists_tests_and_extracts_through_the_cli() {
     let tmp = tempfile::tempdir().unwrap();

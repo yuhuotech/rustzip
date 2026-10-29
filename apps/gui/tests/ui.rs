@@ -1042,6 +1042,63 @@ fn extracting_runs_a_task_and_reports_the_result(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn open_archives_can_be_compared_from_the_toolbar_and_history(cx: &mut TestAppContext) {
+    let tmp = tempfile::tempdir().unwrap();
+    let left = make_archive(tmp.path(), "left.zip", None);
+    let right = make_archive(tmp.path(), "right.zip", None);
+    let (handle, view) = open_window(cx, None);
+    open_sync(cx, handle, &view, &left, None);
+    open_sync(cx, handle, &view, &right, None);
+
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.click("compare", cx);
+    })
+    .unwrap();
+    draw(cx, handle);
+    cx.update_window(handle.into(), |_, window, cx| {
+        assert!(window.find("popup-menu").visible());
+        window.within("popup-menu").click(0usize, cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    wait_for_tasks(cx, handle, &view);
+
+    let task_id = cx.update(|cx| {
+        let v = view.read(cx);
+        assert_eq!(v.task_view.len(), 1);
+        assert_eq!(v.task_view[0].kind, rz_app::tasks::JobKind::Compare);
+        assert_eq!(
+            v.task_view[0]
+                .summary
+                .as_ref()
+                .unwrap()
+                .comparison
+                .as_ref()
+                .unwrap()
+                .differences
+                .len(),
+            0
+        );
+        v.history.records[0].task.unwrap()
+    });
+    with_view(cx, handle, &view, |v, _, cx| {
+        v.show_page(rustzip_gui::view::Page::History, cx);
+    });
+    cx.update_window(handle.into(), |_, window, cx| {
+        assert!(window.find(("history-compare", task_id as usize)).visible());
+        window.click(("history-compare", task_id as usize), cx);
+    })
+    .unwrap();
+    draw(cx, handle);
+    cx.update(|cx| {
+        assert!(matches!(
+            view.read(cx).overlay,
+            Some(Overlay::ComparisonReport(id)) if id == task_id
+        ));
+    });
+}
+
+#[gpui_kit::test]
 fn extracting_only_the_selection_leaves_the_rest(cx: &mut TestAppContext) {
     let tmp = tempfile::tempdir().unwrap();
     let archive = make_archive(tmp.path(), "a.7z", None);

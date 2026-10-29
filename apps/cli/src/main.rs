@@ -1,4 +1,4 @@
-//! `rz` command line. Mirrors the 7z verbs and adds convert, repair and hash.
+//! `rz` command line. Mirrors the 7z verbs and adds compare, convert, repair and hash.
 
 use rz_app::cli as archive_ops;
 use rz_app::hash::HashAlgorithm;
@@ -17,6 +17,7 @@ rz a <archive> <path>... [-l 0-9] [-p -|@file] [-t threads] [-v size] [-d size] 
 rz l <archive> [-p -|@file] [-e charset]                        list contents\n  \
 rz x <archive> [-o dir] [-p -|@file] [-t threads] [-e charset] [-y|-n]\n                                                                  extract (-y replace, -n skip existing)\n  \
 rz t <archive> [-p -|@file] [-e charset]                        test integrity\n  \
+rz diff <left> <right> [-p -|@file] [--left-password -|@file] [--right-password -|@file] [-e charset]\n                                                                  compare archive paths and file contents\n  \
 rz c|convert <archive> <output> [-p -|@file] [-q -|@file] [-e charset] [-l 0-9] [-t threads] [-d size] [-s size|off]\n                                                                  convert to output format\n  \
 rz r|repair <archive> <output> [-p -|@file] [-q -|@file] [-e charset] [-l 0-9] [-t threads] [-d size] [-s size|off]\n                                                                  repair ZIP / 7z into a new archive\n\n\
 rz h <file>... [-a sha256|blake3]                             calculate hashes\n\n\
@@ -24,6 +25,7 @@ rz h <file>... [-a sha256|blake3]                             calculate hashes\n
 -a selects SHA-256 or BLAKE3; omitting it prints both.\n\n\
 -p - prompts for a password without echoing it; -p @file reads its first line from a file.\n\
 -p is the source password for c / r; -q is the output password for c / r.\n\
+-p applies to both archives in diff; side-specific options override one archive.\n\
 -q accepts '-' for a hidden prompt or '@file' for the first line of a password file.\n\n\
 -v sets the maximum volume size, e.g. 700M or 2G (ZIP / 7z only).\n\n\
 -d sets the LZMA2 dictionary size, e.g. 8M (7z only; bounded by the memory budget).\n\
@@ -40,6 +42,8 @@ struct Args {
     out: Option<PathBuf>,
     password: Option<Zeroizing<String>>,
     password_source: Option<PasswordSource>,
+    left_password_source: Option<PasswordSource>,
+    right_password_source: Option<PasswordSource>,
     output_password: Option<Zeroizing<String>>,
     output_password_source: Option<PasswordSource>,
     level: Option<u32>,
@@ -171,13 +175,15 @@ fn parse(args: &[String]) -> std::result::Result<Args, String> {
             "-o" => a.out = Some(PathBuf::from(value("-o")?)),
             "-p" => {
                 let value = value("-p")?;
-                a.password_source = Some(if value == "-" {
-                    PasswordSource::Prompt
-                } else if let Some(path) = value.strip_prefix('@').filter(|path| !path.is_empty()) {
-                    PasswordSource::File(PathBuf::from(path))
-                } else {
-                    return Err("-p accepts '-' for a hidden prompt or '@file' for a password file; literal passwords are not accepted".into());
-                });
+                a.password_source = Some(parse_password_source(&value, "-p")?);
+            }
+            "--left-password" => {
+                let value = value("--left-password")?;
+                a.left_password_source = Some(parse_password_source(&value, "--left-password")?);
+            }
+            "--right-password" => {
+                let value = value("--right-password")?;
+                a.right_password_source = Some(parse_password_source(&value, "--right-password")?);
             }
             "-q" => {
                 let value = value("-q")?;
@@ -241,6 +247,18 @@ fn parse(args: &[String]) -> std::result::Result<Args, String> {
     Ok(a)
 }
 
+fn parse_password_source(value: &str, flag: &str) -> std::result::Result<PasswordSource, String> {
+    if value == "-" {
+        Ok(PasswordSource::Prompt)
+    } else if let Some(path) = value.strip_prefix('@').filter(|path| !path.is_empty()) {
+        Ok(PasswordSource::File(PathBuf::from(path)))
+    } else {
+        Err(format!(
+            "{flag} accepts '-' for a hidden prompt or '@file' for a password file; literal passwords are not accepted"
+        ))
+    }
+}
+
 fn parse_size(flag: &str, value: &str) -> std::result::Result<u64, String> {
     let split = value
         .find(|c: char| !c.is_ascii_digit())
@@ -284,10 +302,20 @@ fn run(args: &[String]) -> std::result::Result<(), String> {
     }
     let mut a = parse(rest)?;
     if cmd == "h" {
-        if a.password_source.is_some() || a.output_password_source.is_some() {
+        if a.password_source.is_some()
+            || a.left_password_source.is_some()
+            || a.right_password_source.is_some()
+            || a.output_password_source.is_some()
+        {
             return Err("hashing does not use an archive password".into());
         }
         return hash_cmd(&a);
+    }
+    if cmd == "diff" {
+        return compare_cmd(&mut a);
+    }
+    if a.left_password_source.is_some() || a.right_password_source.is_some() {
+        return Err("side-specific passwords are only used by diff".into());
     }
     let recover = match cmd.as_str() {
         "c" | "convert" => Some(false),
@@ -332,6 +360,77 @@ fn run(args: &[String]) -> std::result::Result<(), String> {
         _ => Err(Error::Unsupported(format!("unknown command {cmd}"))),
     };
     result.map_err(|e| e.to_string())
+}
+
+fn compare_cmd(args: &mut Args) -> std::result::Result<(), String> {
+    if args.out.is_some()
+        || args.output_password_source.is_some()
+        || args.level.is_some()
+        || args.threads.is_some()
+        || args.volume_size.is_some()
+        || args.dictionary_size.is_some()
+        || args.solid_block_size.is_some()
+        || args.overwrite.is_some()
+    {
+        return Err("diff accepts only password and encoding options".into());
+    }
+    if args.positional.len() != 2 {
+        return Err(format!("diff requires two archive paths\n\n{USAGE}"));
+    }
+    let has_specific_password =
+        args.left_password_source.is_some() || args.right_password_source.is_some();
+    let (left_password, right_password) = if has_specific_password {
+        let shared = args.password_source.take();
+        let left_source = args.left_password_source.take().or_else(|| shared.clone());
+        let right_source = args.right_password_source.take().or(shared);
+        (
+            resolve_password(left_source, "Left archive password: ")?,
+            resolve_password(right_source, "Right archive password: ")?,
+        )
+    } else {
+        let left = resolve_password(args.password_source.take(), "Archive password: ")?;
+        let right = left
+            .as_ref()
+            .map(|password| Zeroizing::new(password.as_str().to_owned()));
+        (left, right)
+    };
+    let cancel = cancel_token()?;
+    let mut progress = TerminalProgress::default();
+    let report = rz_app::compare::compare_archives(
+        Path::new(&args.positional[0]),
+        Path::new(&args.positional[1]),
+        rz_app::compare::CompareOptions {
+            left_password,
+            right_password,
+            encoding: args.encoding.clone(),
+            limits: rz_app::Settings::default().extract_options(None),
+        },
+        &cancel,
+        &mut progress,
+    )
+    .map_err(|error| error.to_string())?;
+    for difference in &report.differences {
+        let status = match difference.kind {
+            rz_app::compare::DifferenceKind::Added => "ADDED",
+            rz_app::compare::DifferenceKind::Removed => "REMOVED",
+            rz_app::compare::DifferenceKind::Changed => "CHANGED",
+            rz_app::compare::DifferenceKind::TypeChanged => "TYPE CHANGED",
+            rz_app::compare::DifferenceKind::NotCompared => "NOT COMPARED",
+        };
+        println!("{status}  {}", difference.path);
+    }
+    println!(
+        "Compared {} with {}: {} added, {} removed, {} changed, {} type changes, {} not compared; {} bytes hashed",
+        report.left_format,
+        report.right_format,
+        report.counts.added,
+        report.counts.removed,
+        report.counts.changed,
+        report.counts.type_changed,
+        report.counts.not_compared,
+        report.bytes_hashed
+    );
+    Ok(())
 }
 
 fn hash_cmd(args: &Args) -> std::result::Result<(), String> {
@@ -557,6 +656,31 @@ mod tests {
         assert_eq!(a.volume_size, Some(700 * 1024 * 1024));
         assert_eq!(a.dictionary_size, Some(8 * 1024 * 1024));
         assert_eq!(a.solid_block_size, Some(256 * 1024 * 1024));
+    }
+
+    #[test]
+    fn parses_compare_password_overrides() {
+        let args = parse(&s(&[
+            "left.zip",
+            "right.zip",
+            "-p",
+            "@shared",
+            "--right-password",
+            "@right",
+            "-e",
+            "gbk",
+        ]))
+        .unwrap_or_default();
+        assert_eq!(args.positional, vec!["left.zip", "right.zip"]);
+        assert_eq!(
+            args.password_source,
+            Some(PasswordSource::File(PathBuf::from("shared")))
+        );
+        assert_eq!(
+            args.right_password_source,
+            Some(PasswordSource::File(PathBuf::from("right")))
+        );
+        assert_eq!(args.encoding.as_deref(), Some("gbk"));
     }
 
     #[test]

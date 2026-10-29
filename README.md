@@ -26,7 +26,7 @@ RustZIP 是一个用 Rust 开发的压缩管理软件，支持 Windows、macOS �
 项目包括桌面应用、命令行和官网 / 服务端三部分：
 
 - **桌面应用 `rustzip`**：标签页浏览压缩包、拖拽压缩与解压、任务队列、深浅色主题。
-- **命令行 `rz`**：支持创建、列表、解压、校验、转换、修复和文件哈希，适合脚本和服务器。
+- **命令行 `rz`**：支持创建、列表、解压、校验、压缩包对比、转换、修复和文件哈希，适合脚本和服务器。
 - **官网与轻量统计接收服务 `web/`**：Next.js 网站和 Vercel API；匿名统计需用户同意后才发送。
 
 桌面应用与命令行共用同一套核心库，行为一致。
@@ -112,6 +112,7 @@ macOS 的 `.app / .dmg`、Windows 安装脚本和 Linux 压缩包的打包文件
 rz l <archive> [-p -|@file]                                    列出内容
 rz x <archive> [-o dir] [-p -|@file] [-t threads] [-y|-n]      解压
 rz t <archive> [-p -|@file]                                    校验完整性
+rz diff <left> <right> [-p -|@file] [-e charset]               对比路径与文件内容
 rz c <archive> <output> [-p -|@file] [-q -|@file]               转换格式
 rz r <archive> <output> [-p -|@file] [-q -|@file]               修复 ZIP / 7z
 	rz h <file>... [-a sha256|blake3]                              计算 SHA-256 / BLAKE3
@@ -122,6 +123,7 @@ rz r <archive> <output> [-p -|@file] [-q -|@file]               修复 ZIP / 7z
 - `-e` 指定文件名编码。
 - 加密压缩包密码使用 `-p -` 隐藏提示输入，或 `-p @文件路径` 读取该文件的第一行；不接受命令行明文密码。
 - 转换和修复中，`-p` 指输入包密码，`-q` 指输出包密码；两者也可用隐藏提示或密码文件提供。
+- `rz diff` 比较两个压缩包的路径、条目类型和文件内容；两包密码相同时用 `-p`，不同则用 `--left-password` 和 `--right-password`。不解压到磁盘。
 - `-v` 为 ZIP / 7z 设置最大分卷大小，如 `700M` 或 `2G`；留空时创建单文件归档。
 - `-d` 为 7z 指定 LZMA2 字典大小；`-s` 指定固实块最大解压大小，`-s 0` 或 `-s off` 为每个文件分别编码。
 - 只读长尾格式包括 ISO 9660、CAB、CPIO、AR（DEB 容器）、LHA / LZH、RPM、XAR 和 CHM；CHM 支持浏览、测试和提取。RAR 仅在启用可选 `rar` feature 的构建中可读。WIM、DMG 已按内容识别但暂不支持读取；NSIS 不从普通 `.exe` 扩展名推断。候选审查见 [`docs/phase-3-format-assessment.md`](docs/phase-3-format-assessment.md)。
@@ -187,7 +189,8 @@ RZ_SHOT_DIR=/某个文件夹 cargo run --release -p rustzip-gui --example screen
 | 取消、进度回调、原子写入（失败不留半成品） | 已完成 |
 | 权限与修改时间保留 | 已完成 |
 | zip 多线程压缩 / 解压；ZIP 大条目分块 Deflate；xz / zstd / 7z（LZMA2）内部多线程压缩 | 已完成，本机往返与 Info-ZIP 校验通过 |
-| 命令行 `rz a / l / x / t / c / r / h`（含取消、进度、编码和分开的源 / 目标密码入口） | 已完成 |
+| 命令行 `rz a / l / x / t / diff / c / r / h`（含取消、进度、编码和密码入口） | 已完成 |
+| 压缩包对比（GUI 已打开标签、CLI `rz diff`） | 已完成；符号链接目标不比较，最多处理每包 1,000,000 个条目 |
 | zip 中日韩文件名编码自动识别与手动指定 | 已完成 |
 | 同名不失败：保留两者并加序号（解压、压缩、转换、修复输出） | 已完成 |
 | 任务队列：并发上限、暂停 / 继续 / 取消、速度与剩余时间、密码失败后重试 | 已完成（`rz-app`） |
@@ -207,7 +210,7 @@ RZ_SHOT_DIR=/某个文件夹 cargo run --release -p rustzip-gui --example screen
 | 匿名安装统计（激活 + 每日心跳，可关闭） | 客户端已完成；接收服务见 [`web/`](web/) 和 [`web/README.md`](web/README.md)，发布前设置 `RZ_STATS_URL` |
 | 发布工具（生成签名密钥、给安装包签名、生成 `update.json`） | 已完成（`rz-release`） |
 | 桌面应用 `rustzip`（GPUI Kit） | macOS Metal 渲染与 Ubuntu 26.04 GNOME Wayland / Xvfb 启动通过；Ubuntu 和 macOS 的工作区测试通过；Windows 原生 GUI 尚未验收。侧栏工具范围见 `docs/sidebar-implementation.md` |
-| 多语言界面 | 十种语言、365 个资源键已完成；系统语言识别、菜单切换和侧栏布局在 macOS / Ubuntu 26.04 通过；Windows 语言 API、屏幕阅读器和阿拉伯语 RTL 整页布局待设备验收 |
+| 多语言界面 | 十种语言、378 个资源键已完成；系统语言识别、菜单切换和侧栏布局在 macOS / Ubuntu 26.04 通过；Windows 语言 API、屏幕阅读器和阿拉伯语 RTL 整页布局待设备验收 |
 | 应用图标与打包 | macOS `.app` / DMG 已签名并启动，尚未公证；Ubuntu x86_64 Linux tarball 构建、隔离安装和卸载通过；Windows runner 已通过安装器编译、安装 / 卸载冒烟；完整 release 流程尚未运行 |
 | 文件关联与右键菜单 | macOS 支持“打开方式”，新增的长尾格式关联待实机验收，Finder 右键 / Quick Look 未做；Nautilus 50.2.2 的 Scripts 菜单、压缩入口和逐字节解压在 Ubuntu 26.04 / Xvfb 验收；Linux 安装器写入 Dolphin 的 KIO 与旧版 KDE 菜单目录及 Nemo XDG 动作，真实桌面点击仍待验收；Windows 注册表入口未实机验收 |
 | 7z 分块并行解压 | 已接入独立固实块调度，支持选择性解压和加密；线程数受解码器字典估算及内存预算限制，其他编码方法回退顺序解压；更大样本和跨平台验收待完成 |

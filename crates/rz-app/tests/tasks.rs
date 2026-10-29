@@ -169,6 +169,39 @@ fn a_task_reports_added_started_progress_and_finished_in_order() {
 }
 
 #[test]
+fn comparison_runs_through_the_task_queue_and_keeps_its_report() {
+    let tmp = tempfile::tempdir().unwrap();
+    let left_source = tmp.path().join("left/proj");
+    let right_source = tmp.path().join("right/proj");
+    fs::create_dir_all(&left_source).unwrap();
+    fs::create_dir_all(&right_source).unwrap();
+    fs::write(left_source.join("same.txt"), "same").unwrap();
+    fs::write(left_source.join("changed.txt"), "left").unwrap();
+    fs::write(right_source.join("same.txt"), "same").unwrap();
+    fs::write(right_source.join("changed.txt"), "rght").unwrap();
+    fs::write(right_source.join("added.txt"), "new").unwrap();
+
+    let manager = TaskManager::new(1);
+    let left = tmp.path().join("left.zip");
+    let right = tmp.path().join("right.zip");
+    make_archive(&manager, vec![left_source], &left);
+    make_archive(&manager, vec![right_source], &right);
+    let id = manager.submit(JobSpec::Compare {
+        left,
+        right,
+        options: rz_app::compare::CompareOptions::default(),
+    });
+
+    let task = manager.wait_for(id, WAIT).unwrap();
+    assert_eq!(task.state, TaskState::Done, "{:?}", task.error);
+    assert_eq!(task.kind, JobKind::Compare);
+    let report = task.summary.unwrap().comparison.unwrap();
+    assert_eq!(report.counts.added, 1);
+    assert_eq!(report.counts.changed, 1);
+    assert_eq!(report.differences.len(), 2);
+}
+
+#[test]
 fn extraction_uses_a_folder_only_when_the_archive_has_loose_files() {
     let tmp = tempfile::tempdir().unwrap();
     let m = TaskManager::new(2);

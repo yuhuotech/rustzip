@@ -363,3 +363,17 @@ sidebar_convert	Umwandeln
 sidebar_repair	Reparieren
 sidebar_passwords	Passwörter
 sidebar_history	Aufgaben
+kind_compare	Archivvergleich
+compare_archives	Mit einem anderen geöffneten Archiv vergleichen
+compare_view	Unterschiede anzeigen
+compare_complete	Vergleich abgeschlossen: {added} hinzugefügt, {removed} entfernt, {changed} geändert, {type_changed} Typänderungen, {not_compared} nicht verglichen
+compare_report	Archivvergleich
+compare_pair	{left} ({left_format}) im Vergleich zu {right} ({right_format})
+compare_summary	{added} hinzugefügt · {removed} entfernt · {changed} geändert · {type_changed} Typänderungen · {not_compared} nicht verglichen
+compare_no_differences	Archivpfade und Dateiinhalte stimmen überein.
+compare_added	Hinzugefügt
+compare_removed	Entfernt
+compare_changed	Inhalt geändert
+compare_type_changed	Typ geändert
+compare_not_compared	Symlink-Ziel nicht verglichen
+compare_more	{count} weitere Unterschiede werden nicht angezeigt (maximal 500 Einträge)

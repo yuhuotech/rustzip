@@ -809,4 +809,109 @@ impl MainView {
         }
         .render(&p)
     }
+
+    pub fn compare_card(&self, id: TaskId, cx: &mut Context<Self>) -> AnyElement {
+        let p = palette(cx);
+        let report = self
+            .task_view
+            .iter()
+            .find(|task| task.id == id)
+            .and_then(|task| task.summary.as_ref())
+            .and_then(|summary| summary.comparison.as_ref());
+        let lead = report.map(|report| {
+            self.tool_text("compare_pair")
+                .replace("{left}", &report.left_name)
+                .replace("{left_format}", &report.left_format.to_uppercase())
+                .replace("{right}", &report.right_name)
+                .replace("{right_format}", &report.right_format.to_uppercase())
+        });
+        let body = v_flex().gap_2().when_some(report, |body, report| {
+            let counts = self
+                .tool_text("compare_summary")
+                .replace("{added}", &report.counts.added.to_string())
+                .replace("{removed}", &report.counts.removed.to_string())
+                .replace("{changed}", &report.counts.changed.to_string())
+                .replace("{type_changed}", &report.counts.type_changed.to_string())
+                .replace("{not_compared}", &report.counts.not_compared.to_string());
+            body.child(div().text_size(px(12.)).text_color(p.fg2).child(counts))
+                .when(report.differences.is_empty(), |body| {
+                    body.child(
+                        div()
+                            .py_3()
+                            .text_color(p.fg2)
+                            .child(self.tool_text("compare_no_differences")),
+                    )
+                })
+                .children(report.differences.iter().take(500).map(|difference| {
+                    let (label, ink, tint) = match difference.kind {
+                        rz_app::compare::DifferenceKind::Added => {
+                            ("compare_added", p.accent, p.accent_soft)
+                        }
+                        rz_app::compare::DifferenceKind::Removed => {
+                            ("compare_removed", p.danger, p.danger.opacity(0.12))
+                        }
+                        rz_app::compare::DifferenceKind::Changed => {
+                            ("compare_changed", p.warn, p.warn.opacity(0.12))
+                        }
+                        rz_app::compare::DifferenceKind::TypeChanged => {
+                            ("compare_type_changed", p.fg2, p.hover)
+                        }
+                        rz_app::compare::DifferenceKind::NotCompared => {
+                            ("compare_not_compared", p.fg3, p.panel)
+                        }
+                    };
+                    h_flex()
+                        .gap_2()
+                        .items_center()
+                        .h(px(28.))
+                        .px_1()
+                        .rounded(px(6.))
+                        .child(
+                            div()
+                                .flex_none()
+                                .rounded(px(5.))
+                                .px_1p5()
+                                .py(px(2.))
+                                .text_size(px(10.))
+                                .text_color(ink)
+                                .bg(tint)
+                                .child(self.tool_text(label)),
+                        )
+                        .child(
+                            div()
+                                .min_w_0()
+                                .flex_1()
+                                .overflow_hidden()
+                                .text_ellipsis()
+                                .font_family(cx.theme().mono_font_family.clone())
+                                .text_size(px(11.))
+                                .text_color(p.fg2)
+                                .child(difference.path.clone()),
+                        )
+                }))
+                .when(report.differences.len() > 500, |body| {
+                    body.child(
+                        div().text_size(px(11.)).text_color(p.fg3).child(
+                            self.tool_text("compare_more")
+                                .replace("{count}", &(report.differences.len() - 500).to_string()),
+                        ),
+                    )
+                })
+        });
+        Dialog {
+            tone: Tone::Neutral,
+            icon: Icon::new(gpui_kit::assets::IconName::ArrowLeftRight),
+            title: self.tool_text("compare_report").into(),
+            lead,
+            body: Some(body.into_any_element()),
+            buttons: vec![
+                Button::new("compare-report-close")
+                    .primary()
+                    .label(self.tool_text("close"))
+                    .on_click(cx.listener(|this, _, _, cx| this.close_overlay(cx)))
+                    .into_any_element(),
+            ],
+        }
+        .render(&p)
+    }
 }

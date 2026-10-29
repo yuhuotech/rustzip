@@ -363,3 +363,17 @@ sidebar_convert	تحويل
 sidebar_repair	إصلاح
 sidebar_passwords	كلمات المرور
 sidebar_history	المهام
+kind_compare	مقارنة الأرشيفات
+compare_archives	قارن مع أرشيف مفتوح آخر
+compare_view	عرض الاختلافات
+compare_complete	اكتملت المقارنة: {added} مضاف، {removed} محذوف، {changed} متغير المحتوى، {type_changed} متغير النوع، {not_compared} لم تتم مقارنته
+compare_report	نتيجة مقارنة الأرشيفات
+compare_pair	{left} ({left_format}) مقابل {right} ({right_format})
+compare_summary	{added} مضاف · {removed} محذوف · {changed} متغير المحتوى · {type_changed} متغير النوع · {not_compared} لم تتم مقارنته
+compare_no_differences	مسارات الأرشيفات ومحتويات الملفات متطابقة.
+compare_added	مضاف
+compare_removed	محذوف
+compare_changed	تغير المحتوى
+compare_type_changed	تغير النوع
+compare_not_compared	لم تتم مقارنة هدف الرابط
+compare_more	هناك {count} اختلافات أخرى غير معروضة (الحد الأقصى 500 عنصر)

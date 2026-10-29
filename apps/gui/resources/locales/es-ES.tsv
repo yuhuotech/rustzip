@@ -363,3 +363,17 @@ sidebar_convert	Convertir
 sidebar_repair	Reparar
 sidebar_passwords	Contraseñas
 sidebar_history	Tareas
+kind_compare	Comparación de archivos
+compare_archives	Comparar con otro archivo abierto
+compare_view	Ver diferencias
+compare_complete	Comparación completada: {added} añadidos, {removed} eliminados, {changed} modificados, {type_changed} cambios de tipo, {not_compared} sin comparar
+compare_report	Resultado de la comparación
+compare_pair	{left} ({left_format}) frente a {right} ({right_format})
+compare_summary	{added} añadidos · {removed} eliminados · {changed} modificados · {type_changed} cambios de tipo · {not_compared} sin comparar
+compare_no_differences	Las rutas y el contenido de los archivos coinciden.
+compare_added	Añadido
+compare_removed	Eliminado
+compare_changed	Contenido modificado
+compare_type_changed	Tipo modificado
+compare_not_compared	Destino del enlace no comparado
+compare_more	Hay {count} diferencias más sin mostrar (máximo 500 elementos)

@@ -205,6 +205,7 @@ pub enum Overlay {
     PasswordEdit(crate::tools::PasswordForm),
     PasswordDelete(String),
     RecoveryReport(TaskId),
+    ComparisonReport(TaskId),
     Password(PasswordPrompt),
     Compress(CompressForm),
     DuplicatePrompt {
@@ -355,6 +356,7 @@ pub(crate) fn kind_label(kind: JobKind, language: &str) -> &'static str {
         JobKind::Compress => crate::text::tr(language, "kind_compress"),
         JobKind::Extract => crate::text::tr(language, "kind_extract"),
         JobKind::Test => crate::text::tr(language, "kind_test"),
+        JobKind::Compare => crate::text::tr(language, "kind_compare"),
         JobKind::Edit => crate::text::tr(language, "kind_edit"),
         JobKind::Convert => crate::text::tr(language, "convert"),
         JobKind::Repair => crate::text::tr(language, "repair"),
@@ -1287,6 +1289,34 @@ impl MainView {
         self.extract_picked_to(dir, cx);
     }
 
+    /// Compares the active archive with another archive already open in a tab.
+    fn compare_with(&mut self, other: usize, cx: &mut Context<Self>) {
+        let Some(left) = self.current() else { return };
+        let Some(right) = self.archives.get(other) else {
+            return;
+        };
+        if left.path == right.path {
+            return;
+        }
+        let spec = JobSpec::Compare {
+            left: left.path.clone(),
+            right: right.path.clone(),
+            options: rz_app::compare::CompareOptions {
+                left_password: left
+                    .password
+                    .as_ref()
+                    .map(|password| zeroize::Zeroizing::new(password.clone())),
+                right_password: right
+                    .password
+                    .as_ref()
+                    .map(|password| zeroize::Zeroizing::new(password.clone())),
+                encoding: self.settings.forced_encoding().map(str::to_string),
+                limits: self.settings.extract_options(None),
+            },
+        };
+        self.submit(spec, cx);
+    }
+
     /// Next to the archive, in a folder named after it.
     pub fn extract_picked_named(&mut self, cx: &mut Context<Self>) {
         let Some(a) = self.current() else { return };
@@ -2044,6 +2074,23 @@ impl MainView {
                             .tool_text("task_test_passed")
                             .replace("{task}", what)
                             .replace("{count}", &s.files.to_string()),
+                        JobKind::Compare => s.comparison.as_ref().map_or_else(
+                            || self.tool_text("compare_complete").to_string(),
+                            |report| {
+                                self.tool_text("compare_complete")
+                                    .replace("{added}", &report.counts.added.to_string())
+                                    .replace("{removed}", &report.counts.removed.to_string())
+                                    .replace("{changed}", &report.counts.changed.to_string())
+                                    .replace(
+                                        "{type_changed}",
+                                        &report.counts.type_changed.to_string(),
+                                    )
+                                    .replace(
+                                        "{not_compared}",
+                                        &report.counts.not_compared.to_string(),
+                                    )
+                            },
+                        ),
                         JobKind::Edit => self
                             .tool_text("task_edit_complete")
                             .replace("{task}", what)
@@ -2844,6 +2891,14 @@ impl MainView {
         // Previews open one file at a time.
         let can_preview = self.selected_row().is_some_and(|r| r.kind == RowKind::File)
             && self.table.read(cx).delegate().marked().len() <= 1;
+        let compare_targets: Vec<(usize, String)> = self
+            .archives
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| *index != self.active)
+            .map(|(index, archive)| (index, duplicate_short_name(&archive.path)))
+            .collect();
+        let compare_view = cx.entity().downgrade();
         h_flex()
             .id("toolbar")
             .h(px(46.))
@@ -2880,6 +2935,26 @@ impl MainView {
                     .label(self.tool_text("toolbar_test"))
                     .disabled(!has)
                     .on_click(cx.listener(|this, _, _, cx| this.start_test(cx))),
+            )
+            .child(
+                Button::new("compare")
+                    .ghost()
+                    .icon(IconName::ArrowRight)
+                    .tooltip(self.tool_text("compare_archives"))
+                    .accessibility_label(self.tool_text("compare_archives"))
+                    .disabled(compare_targets.is_empty())
+                    .dropdown_menu(move |mut menu, _, _| {
+                        for (index, name) in compare_targets.iter().cloned() {
+                            let view = compare_view.clone();
+                            menu =
+                                menu.item(PopupMenuItem::new(name).on_click(move |_, _, app| {
+                                    let _ = view.update(app, |this, cx| {
+                                        this.compare_with(index, cx);
+                                    });
+                                }));
+                        }
+                        menu
+                    }),
             )
             .child(
                 Button::new("rename")
@@ -4402,6 +4477,21 @@ impl MainView {
                             )
                         },
                     )
+                    .when(
+                        t.summary.as_ref().is_some_and(|s| s.comparison.is_some()),
+                        |d| {
+                            d.child(
+                                Button::new(("comparison-report", id as usize))
+                                    .outline()
+                                    .xsmall()
+                                    .label(self.tool_text("compare_view"))
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        this.overlay = Some(Overlay::ComparisonReport(id));
+                                        cx.notify();
+                                    })),
+                            )
+                        },
+                    )
                     .when(!t.state.is_finished(), |d| {
                         d.child(
                             Button::new(("task-pause", id as usize))
@@ -4635,6 +4725,7 @@ impl MainView {
             Overlay::PasswordEdit(f) => self.password_edit_card(f, cx),
             Overlay::PasswordDelete(label) => self.password_delete_card(label, cx),
             Overlay::RecoveryReport(id) => self.recovery_card(*id, cx),
+            Overlay::ComparisonReport(id) => self.compare_card(*id, cx),
             Overlay::Password(prompt) => self.password_card(prompt, cx),
             Overlay::Compress(form) => self.compress_card(form, cx),
             Overlay::DuplicatePrompt {

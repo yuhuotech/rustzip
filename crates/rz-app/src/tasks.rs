@@ -42,6 +42,11 @@ pub enum JobSpec {
         password: Option<String>,
         encoding: Option<String>,
     },
+    Compare {
+        left: PathBuf,
+        right: PathBuf,
+        options: crate::compare::CompareOptions,
+    },
     /// Add files to, or delete entries from, an existing archive.
     Edit {
         archive: PathBuf,
@@ -67,6 +72,7 @@ pub enum JobKind {
     Compress,
     Extract,
     Test,
+    Compare,
     Edit,
     Hash,
     DuplicateScan,
@@ -85,6 +91,7 @@ impl JobSpec {
             JobSpec::Compress { .. } => JobKind::Compress,
             JobSpec::Extract { .. } => JobKind::Extract,
             JobSpec::Test { .. } => JobKind::Test,
+            JobSpec::Compare { .. } => JobKind::Compare,
             JobSpec::Edit { .. } => JobKind::Edit,
             JobSpec::Hash { .. } => JobKind::Hash,
             JobSpec::ScanDuplicates { .. } => JobKind::DuplicateScan,
@@ -99,6 +106,7 @@ impl JobSpec {
             JobSpec::Extract { archive, .. }
             | JobSpec::Test { archive, .. }
             | JobSpec::Edit { archive, .. } => archive,
+            JobSpec::Compare { left, .. } => left,
             JobSpec::Hash { file, .. } => file,
             JobSpec::ScanDuplicates { sources } => sources
                 .first()
@@ -148,6 +156,7 @@ impl JobSpec {
             JobSpec::Compress { .. } => None,
             JobSpec::Hash { .. } => None,
             JobSpec::ScanDuplicates { .. } => None,
+            JobSpec::Compare { .. } => None,
         }
     }
 }
@@ -223,6 +232,8 @@ pub struct Summary {
     pub hashes: Vec<crate::hash::HashResult>,
     /// Duplicate groups found by the optional pre-compression scan.
     pub duplicates: Vec<crate::duplicates::DuplicateGroup>,
+    /// Content comparison results, when this task compares two archives.
+    pub comparison: Option<crate::compare::CompareReport>,
     pub files: u64,
     pub bytes: u64,
     /// The archive that was created, or the folder files were extracted to.
@@ -720,6 +731,7 @@ fn run(
                 recovery: (*recover).then_some(rep),
                 hashes: Vec::new(),
                 duplicates: Vec::new(),
+                comparison: None,
             })
         }
         JobSpec::Compress {
@@ -749,6 +761,7 @@ fn run(
                 recovery: None,
                 hashes: Vec::new(),
                 duplicates: Vec::new(),
+                comparison: None,
             })
         }
         JobSpec::Hash { file, algorithms } => {
@@ -763,6 +776,7 @@ fn run(
                 recovery: None,
                 hashes,
                 duplicates: Vec::new(),
+                comparison: None,
             })
         }
         JobSpec::ScanDuplicates { sources } => {
@@ -783,6 +797,7 @@ fn run(
                 recovery: None,
                 hashes: Vec::new(),
                 duplicates,
+                comparison: None,
             })
         }
         JobSpec::Extract {
@@ -824,6 +839,7 @@ fn run(
                 recovery: None,
                 hashes: Vec::new(),
                 duplicates: Vec::new(),
+                comparison: None,
             })
         }
         JobSpec::Edit {
@@ -851,6 +867,7 @@ fn run(
                 recovery: None,
                 hashes: Vec::new(),
                 duplicates: Vec::new(),
+                comparison: None,
             })
         }
         JobSpec::Test {
@@ -908,6 +925,26 @@ fn run(
                 recovery: None,
                 hashes: Vec::new(),
                 duplicates: Vec::new(),
+                comparison: None,
+            })
+        }
+        JobSpec::Compare {
+            left,
+            right,
+            options,
+        } => {
+            let comparison =
+                crate::compare::compare_archives(left, right, options.clone(), token, &mut sink)?;
+            Ok(Summary {
+                files: comparison.differences.len() as u64,
+                bytes: comparison.bytes_hashed,
+                output: left.clone(),
+                reveal: left.clone(),
+                elapsed: started.elapsed(),
+                recovery: None,
+                hashes: Vec::new(),
+                duplicates: Vec::new(),
+                comparison: Some(comparison),
             })
         }
     }

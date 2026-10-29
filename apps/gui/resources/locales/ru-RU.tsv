@@ -363,3 +363,17 @@ sidebar_convert	Конвертация
 sidebar_repair	Восстановить
 sidebar_passwords	Пароли
 sidebar_history	Задачи
+kind_compare	Сравнение архивов
+compare_archives	Сравнить с другим открытым архивом
+compare_view	Показать различия
+compare_complete	Сравнение завершено: добавлено {added}, удалено {removed}, изменено {changed}, смена типа {type_changed}, не сравнено {not_compared}
+compare_report	Результат сравнения архивов
+compare_pair	{left} ({left_format}) и {right} ({right_format})
+compare_summary	Добавлено {added} · удалено {removed} · изменено {changed} · смена типа {type_changed} · не сравнено {not_compared}
+compare_no_differences	Пути и содержимое файлов архивов совпадают.
+compare_added	Добавлено
+compare_removed	Удалено
+compare_changed	Содержимое изменено
+compare_type_changed	Тип изменен
+compare_not_compared	Цель символической ссылки не сравнена
+compare_more	Еще {count} различий не показано (максимум 500 элементов)
