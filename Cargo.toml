@@ -13,6 +13,7 @@ members = [
     "apps/gpui-probe",
     "apps/gui",
 ]
+exclude = ["vendor/libchm"]
 
 [workspace.package]
 version = "0.1.0"

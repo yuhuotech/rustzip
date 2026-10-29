@@ -3,7 +3,7 @@
 mod common;
 
 use common::*;
-use rz_core::{CancelToken, CreateOptions, Error, NoProgress};
+use rz_core::{CancelToken, CreateOptions, Error, NoProgress, Progress};
 use rz_engine::{extract, ExtractOptions};
 use std::fs;
 use std::io::Write;
@@ -74,6 +74,57 @@ fn tar_slip_is_rejected() {
     let res = common::unpack(&archive, &out, &ExtractOptions::default());
     assert!(matches!(res, Err(Error::UnsafePath(_))), "{res:?}");
     assert_nothing_escaped(tmp.path(), &out);
+}
+
+#[test]
+fn chm_slip_is_rejected_before_any_output_is_written() {
+    let tmp = tempfile::tempdir().unwrap();
+    let archive = tmp.path().join("e.chm");
+    let mut bytes = include_bytes!("../../rz-formats/tests/fixtures/chm_basic.chm").to_vec();
+    let name = b"/a.htm";
+    let offset = bytes
+        .windows(name.len())
+        .position(|window| window == name)
+        .expect("CHM directory contains the expected entry name");
+    bytes[offset..offset + name.len()].copy_from_slice(b"/../ht");
+    fs::write(&archive, bytes).unwrap();
+
+    let out = tmp.path().join("out");
+    let result = common::unpack(&archive, &out, &ExtractOptions::default());
+    assert!(matches!(result, Err(Error::UnsafePath(_))), "{result:?}");
+    assert!(!out.exists());
+    assert!(!tmp.path().join("ht").exists());
+}
+
+#[test]
+fn cancelling_chm_extraction_removes_the_partial_entry() {
+    let tmp = tempfile::tempdir().unwrap();
+    let archive_path = tmp.path().join("content.chm");
+    fs::write(
+        &archive_path,
+        include_bytes!("../../rz-formats/tests/fixtures/chm_basic.chm"),
+    )
+    .unwrap();
+    let output = tmp.path().join("out");
+    let cancel = CancelToken::new();
+    let stop = cancel.clone();
+    let mut progress = move |update: Progress| {
+        if update.bytes_done > 0 {
+            stop.cancel();
+        }
+    };
+    let mut reader = rz_formats::open(&archive_path).unwrap();
+
+    let result = extract(
+        &mut *reader,
+        &output,
+        &ExtractOptions::default(),
+        &cancel,
+        &mut progress,
+    );
+    assert!(matches!(result, Err(Error::Cancelled)), "{result:?}");
+    assert!(!output.join("a.htm").exists());
+    assert!(!output.join("large.bin").exists());
 }
 
 #[test]

@@ -22,6 +22,7 @@ unrar = { version = "0.5.8", optional = true }
 tempfile = { version = "3", optional = true }
 encoding_rs = "0.8.42"
 chardetng = "1.0.0"
+libchm = { path = "../../vendor/libchm" }
 
 [dev-dependencies]
 tempfile = "3"

@@ -1,0 +1,13 @@
+[OPTIONS]
+Compiled file=chm_basic.chm
+Default topic=a.htm
+Title=RustZIP CHM fixture
+Language=0x409
+
+[FILES]
+a.htm
+b.htm
+style.css
+empty.txt
+large.bin
+项目.htm

@@ -142,6 +142,7 @@ fn extract_with_metadata(
     if let Some(pw) = &opts.password {
         reader.set_password(pw)?;
     }
+    reader.set_read_control(cancel.clone(), opts.max_total);
     let mut entries = reader.entries()?;
     // Selective extraction: keep the chosen paths and everything inside chosen folders.
     let wanted: Option<HashSet<usize>> = opts.only.as_ref().map(|only| {
@@ -761,7 +762,13 @@ fn copy_limited(
     let mut written = 0u64;
     loop {
         ctx.tracker.check()?;
-        let n = src.read(buf)?;
+        let n = match src.read(buf) {
+            Ok(n) => n,
+            Err(error) => {
+                ctx.tracker.check()?;
+                return Err(error.into());
+            }
+        };
         if n == 0 {
             return Ok(());
         }

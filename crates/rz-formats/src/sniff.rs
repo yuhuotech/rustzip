@@ -9,6 +9,9 @@ pub enum Format {
     SevenZip,
     Rar,
     Rpm,
+    Dmg,
+    Chm,
+    Wim,
     Iso9660,
     Cab,
     Cpio,
@@ -30,6 +33,9 @@ impl Format {
             Format::SevenZip => "7z",
             Format::Rar => "rar",
             Format::Rpm => "rpm",
+            Format::Dmg => "dmg",
+            Format::Chm => "chm",
+            Format::Wim => "wim",
             Format::Iso9660 => "iso",
             Format::Cab => "cab",
             Format::Cpio => "cpio",
@@ -63,6 +69,10 @@ pub fn sniff<R: Read + Seek>(r: &mut R) -> Result<Format> {
         && head.get(7).is_some_and(|kind| matches!(*kind, 0 | 1))
     {
         Some(Format::Rpm)
+    } else if head.starts_with(b"MSWIM\0\0\0") {
+        Some(Format::Wim)
+    } else if head.starts_with(b"ITSF") {
+        Some(Format::Chm)
     } else if head.starts_with(&[0xfd, b'7', b'z', b'X', b'Z', 0x00]) {
         Some(Format::Xz)
     } else if head.starts_with(&[0x28, 0xb5, 0x2f, 0xfd]) {
@@ -110,10 +120,23 @@ pub fn sniff<R: Read + Seek>(r: &mut R) -> Result<Format> {
     let iso_n = read_up_to(r, &mut iso_magic)?;
     r.seek(SeekFrom::Start(0))?;
     if iso_n == 5 && &iso_magic == b"CD001" {
-        Ok(Format::Iso9660)
-    } else {
-        Err(Error::UnknownFormat)
+        return Ok(Format::Iso9660);
     }
+
+    // UDIF stores its `koly` signature at the start of the 512-byte trailer.
+    if r.seek(SeekFrom::End(0))? >= 512 {
+        r.seek(SeekFrom::End(-512))?;
+        let mut dmg_magic = [0u8; 4];
+        let n = read_up_to(r, &mut dmg_magic)?;
+        r.seek(SeekFrom::Start(0))?;
+        if n == dmg_magic.len() && &dmg_magic == b"koly" {
+            return Ok(Format::Dmg);
+        }
+    } else {
+        r.seek(SeekFrom::Start(0))?;
+    }
+
+    Err(Error::UnknownFormat)
 }
 
 fn read_up_to<R: Read>(r: &mut R, buf: &mut [u8]) -> Result<usize> {
@@ -192,5 +215,37 @@ mod tests {
         let mut iso = vec![0u8; 32_774];
         iso[32_769..32_774].copy_from_slice(b"CD001");
         assert_eq!(sniff(&mut Cursor::new(iso)).ok(), Some(Format::Iso9660));
+    }
+
+    #[test]
+    fn detects_known_unimplemented_formats_by_magic() {
+        assert_eq!(
+            sniff(&mut Cursor::new(b"MSWIM\0\0\0".to_vec())).ok(),
+            Some(Format::Wim)
+        );
+        assert_eq!(
+            sniff(&mut Cursor::new(b"ITSF\0\0\0\0".to_vec())).ok(),
+            Some(Format::Chm)
+        );
+
+        let mut dmg = vec![0u8; 1024];
+        dmg[512..516].copy_from_slice(b"koly");
+        assert_eq!(sniff(&mut Cursor::new(dmg)).ok(), Some(Format::Dmg));
+    }
+
+    #[test]
+    fn does_not_classify_truncated_format_signatures() {
+        assert!(matches!(
+            sniff(&mut Cursor::new(b"MSWIM\0\0x".to_vec())),
+            Err(Error::UnknownFormat)
+        ));
+        assert!(matches!(
+            sniff(&mut Cursor::new(b"ITS".to_vec())),
+            Err(Error::UnknownFormat)
+        ));
+        assert!(matches!(
+            sniff(&mut Cursor::new(vec![0u8; 511])),
+            Err(Error::UnknownFormat)
+        ));
     }
 }
