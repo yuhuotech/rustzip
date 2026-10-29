@@ -9,7 +9,7 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use zip::write::SimpleFileOptions;
-use zip::{AesMode, CompressionMethod, ZipArchive, ZipWriter};
+use zip::{AesMode, CompressionMethod, System, ZipArchive, ZipWriter};
 
 /// Entries above this size stop participating in cross-entry worker batches.
 /// Eligible unencrypted Deflate entries use the bounded chunked path instead.
@@ -23,7 +23,7 @@ struct Settings {
 }
 
 impl Settings {
-    fn options(&self, e: &NewEntry) -> SimpleFileOptions {
+    fn options(&self, e: &NewEntry, is_dir: bool) -> SimpleFileOptions {
         let mut o = SimpleFileOptions::default().large_file(e.size >= u64::from(u32::MAX));
         o = if self.level == 0 {
             o.compression_method(CompressionMethod::Stored)
@@ -31,10 +31,11 @@ impl Settings {
             o.compression_method(CompressionMethod::Deflated)
                 .compression_level(Some(i64::from(self.level)))
         };
-        if !self.portable {
-            if let Some(mode) = e.unix_mode {
-                o = o.unix_permissions(mode & 0o777);
-            }
+        if self.portable {
+            let mode = if is_dir { 0o755 } else { 0o644 };
+            o = o.system(System::Unix).unix_permissions(mode);
+        } else if let Some(mode) = e.unix_mode {
+            o = o.system(System::Unix).unix_permissions(mode & 0o777);
         }
         if let Some(dt) = e.modified.and_then(unix_to_dos) {
             o = o.last_modified_time(dt);
@@ -43,7 +44,7 @@ impl Settings {
     }
 
     fn start<W: Write + std::io::Seek>(&self, w: &mut ZipWriter<W>, e: &NewEntry) -> Result<()> {
-        let opts = self.options(e);
+        let opts = self.options(e, false);
         match &self.password {
             Some(pw) => w.start_file(
                 e.name.as_str(),
@@ -120,7 +121,7 @@ fn receive_job<'a>(
 
 impl ArchiveWriter for ZipOut {
     fn add_dir(&mut self, e: &NewEntry) -> Result<()> {
-        let opts = self.settings.options(e);
+        let opts = self.settings.options(e, true);
         self.writer
             .add_directory(e.name.as_str(), opts)
             .map_err(map_err)
@@ -314,16 +315,25 @@ mod tests {
                 ..CreateOptions::default()
             },
         );
+        let directory = NewEntry {
+            name: "folder".into(),
+            size: 0,
+            unix_mode: Some(0o700),
+            modified: None,
+        };
         let entry = NewEntry {
             name: "run.sh".into(),
             size: 4,
             unix_mode: Some(0o755),
             modified: None,
         };
+        writer.add_dir(&directory).unwrap();
         writer.add_file(&entry, &mut Cursor::new(b"test")).unwrap();
         Box::new(writer).finish().unwrap();
 
         let mut reader = crate::open(&path).unwrap();
-        assert_eq!(reader.entries().unwrap()[0].unix_mode, Some(0o100644));
+        let entries = reader.entries().unwrap();
+        assert_eq!(entries[0].unix_mode, Some(0o040755));
+        assert_eq!(entries[1].unix_mode, Some(0o100644));
     }
 }

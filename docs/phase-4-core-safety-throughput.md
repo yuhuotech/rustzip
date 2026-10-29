@@ -10,8 +10,9 @@
 - **ZIP 大条目分块 Deflate**：未加密 Deflate 条目按 900,000 字节分块并行压缩，按输入顺序写入有界匿名临时 ZIP，再由 `zip` 9.1.3 合并压缩数据。worker 数与每 worker 两个待处理块按 16 MiB / worker 估算预算；Store、加密及单 worker 情况沿用顺序 writer。见决策 D41。
 - **ZIP 依赖升级**：工作区统一升级到 `zip` 9.1.3，替换受安全公告影响的 2.6.1 与旧 zstd 依赖。应用解压继续走 RustZIP 引擎安全路径。cargo-deny 配置见仓库根目录 `deny.toml`；无安全升级的上游维护状态公告保留有原因的忽略项。
 - **ZIP 编辑元数据保真**：快路径放开归档 / 条目注释输入，复制时保留归档注释、ZIP64 扩展数据及未修改条目的文件注释 / 扩展字段；拒绝带自解压前缀的快路径输入。通过删除、重命名后逐字节检查注释和自定义 extra field。见 D42。
+- **ZIP 跨平台权限**：便携模式明确写入 Unix creator 标记和目录 `0755` / 文件 `0644`，不再依赖运行平台的 ZIP 默认值；并行大条目 Deflate 使用相同的文件权限。Windows CI 曾复现为 `0o100664`，本机 `rz-formats` 全部 58 项测试及 36 MiB 并行条目往返通过，三平台复验待跑。
 - **fuzz**：新增 bzip2、RAR fuzz target 和 bzip2 seed。nightly ASan 对 bzip2、CHM、RAR、ZIP recovery 分别运行约 15 秒，约 11,000、21,000、67,000、91,000 次变异，未发现崩溃。短时结果不替代持续 fuzz runner。
-- **持续 fuzz runner**：新增 `.github/workflows/fuzz.yml`，每日运行四个 nightly ASan target，最多同时跑两个；手动运行时每 target 60 秒，定时运行每 target 180 秒；保留 14 天崩溃 artifact，并按 target 缓存 corpus。`fuzz/seeds/` 保存最小 ZIP、bzip2、CHM 和 RAR 输入。GitHub 首轮 run [40907566477](https://github.com/yuhuotech/rustzip/actions/runs/40907566477) 暴露 stable `rustc` 选择错误，第二轮 run [40908353403](https://github.com/yuhuotech/rustzip/actions/runs/40908353403) 暴露缺少 libarchive 的 bzip2 / ACL 系统库；第三轮 run [40909630152](https://github.com/yuhuotech/rustzip/actions/runs/40909630152) 中 ZIP recovery、CHM、bzip2 通过，RAR Linux 编译发现 `unrar_sys` 需要窄字符路径。nightly rustc、`native-archive-deps` 与 Linux 路径分支现均已修复；第四轮远端复验待完成。
+- **持续 fuzz runner**：新增 `.github/workflows/fuzz.yml`，每日运行四个 nightly ASan target，最多同时跑两个；手动运行时每 target 60 秒，定时运行每 target 180 秒；保留 14 天崩溃 artifact，并按 target 缓存 corpus。`fuzz/seeds/` 保存最小 ZIP、bzip2、CHM 和 RAR 输入。首三轮 run [40907566477](https://github.com/yuhuotech/rustzip/actions/runs/40907566477)、[40908353403](https://github.com/yuhuotech/rustzip/actions/runs/40908353403)、[40909630152](https://github.com/yuhuotech/rustzip/actions/runs/40909630152) 逐步发现并修复 nightly rustc、原生库和 Linux RAR 路径问题。第四轮 [40912070562](https://github.com/yuhuotech/rustzip/actions/runs/40912070562) 四个 target 全部成功，ZIP recovery / CHM / bzip2 / RAR 分别运行 467,492 / 47,736 / 7,502 / 182,570 次，四份 corpus cache 全部保存，没有崩溃 artifact。每日自动 schedule 首次触发仍待观察。
 
 ## 本机验证
 
@@ -33,7 +34,7 @@
 
 - ZIP 9.1.3 的 8 MiB 编辑对照基准已运行；仍需多尺寸、多次采样。最新代码尚未跑 Windows / macOS / Linux CI，真实安装包和系统交互验收也待完成。
 - ZIP 大条目分块 Deflate 已接入；本机 40 / 64 / 128 MiB × 3 轮基准通过内容校验，仍需 Windows / macOS 外部工具矩阵和其他文件类型性能样本。合格 ZIP 编辑快路径的注释和扩展字段保真见 D42；真正原地增量编辑仍需先处理 D11 的崩溃保全边界。
-- 持续 fuzz 工作流与种子已加入；需在仓库 Actions 上启动首次每日运行，检查所有四个 target 结果、缓存语料增量及崩溃 artifact 保存路径。
+- 持续 fuzz 已在 GitHub Actions 手动运行成功并保存四份 corpus cache；每日自动 schedule 和未来 crash artifact 流程仍需持续观察。
 - WIM、DMG、NSIS 的安全只读能力；当前只有 WIM / DMG 识别，NSIS 不推测识别。
 - PDF / 音频 / 视频应用内预览，关机等高影响完成后动作。
 - 压缩包对比、虚拟挂载、云端按需解压、WASM 插件和 SFX 仍为远期需求。

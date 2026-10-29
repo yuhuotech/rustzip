@@ -162,9 +162,13 @@ fn large_deflated_entry_round_trips_across_parallel_chunk_boundaries() {
         .cycle()
         .take(36 * 1024 * 1024)
         .collect();
-    let mut writer = create(&path, OutputFormat::Zip, &opts(4)).unwrap();
+    let mut options = opts(4);
+    options.portable = true;
+    let mut writer = create(&path, OutputFormat::Zip, &options).unwrap();
+    let mut large_entry = entry("大文件.bin", data.len() as u64);
+    large_entry.unix_mode = Some(0o755);
     let files = [Ok((
-        entry("大文件.bin", data.len() as u64),
+        large_entry,
         Box::new(Cursor::new(data.clone())) as Box<dyn Read + Send>,
     ))];
     writer.add_files(&mut files.into_iter()).unwrap();
@@ -190,6 +194,7 @@ fn large_deflated_entry_round_trips_across_parallel_chunk_boundaries() {
     let entries = archive.entries().unwrap();
     assert_eq!(entries.len(), 1);
     assert_eq!(entries[0].path, "大文件.bin");
+    assert_eq!(entries[0].unix_mode, Some(0o100644));
     let mut extracted = Vec::new();
     archive
         .open(&entries[0])

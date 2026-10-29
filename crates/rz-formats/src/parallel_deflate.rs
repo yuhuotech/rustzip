@@ -72,7 +72,7 @@ pub(crate) fn pack_entry(
 
 fn unix_mode(entry: &NewEntry, portable: bool) -> u32 {
     if portable {
-        return 0;
+        return 0o100644 << 16;
     }
     entry
         .unix_mode
