@@ -62,6 +62,9 @@ impl Reader {
         let filename = widestring::WideCString::from_os_str(path)
             .map_err(|_| Error::InvalidInput("archive path contains a NUL character"))?;
 
+        #[cfg(any(target_os = "linux", target_os = "netbsd"))]
+        let mut data = sys::OpenArchiveDataEx::new(filename.as_ptr(), mode);
+        #[cfg(not(any(target_os = "linux", target_os = "netbsd")))]
         let mut data = sys::OpenArchiveDataEx::new(filename.as_ptr().cast::<sys::WCHAR>(), mode);
         // SAFETY: `data` and its filename storage remain alive for the synchronous call.
         let data_ptr = std::ptr::from_mut(&mut data).cast_const();

@@ -11,7 +11,7 @@
 - **ZIP 依赖升级**：工作区统一升级到 `zip` 9.1.3，替换受安全公告影响的 2.6.1 与旧 zstd 依赖。应用解压继续走 RustZIP 引擎安全路径。cargo-deny 配置见仓库根目录 `deny.toml`；无安全升级的上游维护状态公告保留有原因的忽略项。
 - **ZIP 编辑元数据保真**：快路径放开归档 / 条目注释输入，复制时保留归档注释、ZIP64 扩展数据及未修改条目的文件注释 / 扩展字段；拒绝带自解压前缀的快路径输入。通过删除、重命名后逐字节检查注释和自定义 extra field。见 D42。
 - **fuzz**：新增 bzip2、RAR fuzz target 和 bzip2 seed。nightly ASan 对 bzip2、CHM、RAR、ZIP recovery 分别运行约 15 秒，约 11,000、21,000、67,000、91,000 次变异，未发现崩溃。短时结果不替代持续 fuzz runner。
-- **持续 fuzz runner**：新增 `.github/workflows/fuzz.yml`，每日运行四个 nightly ASan target，最多同时跑两个；手动运行时每 target 60 秒，定时运行每 target 180 秒；保留 14 天崩溃 artifact，并按 target 缓存 corpus。`fuzz/seeds/` 保存最小 ZIP、bzip2、CHM 和 RAR 输入。GitHub 首轮 run [40907566477](https://github.com/yuhuotech/rustzip/actions/runs/40907566477) 暴露 stable `rustc` 选择错误，后续 run [40908353403](https://github.com/yuhuotech/rustzip/actions/runs/40908353403) 确认该项修复，并暴露 fuzz job 缺少 libarchive 的 bzip2 / ACL 系统库；工作流现复用 `native-archive-deps` action 安装该依赖，远端复验仍待验收。
+- **持续 fuzz runner**：新增 `.github/workflows/fuzz.yml`，每日运行四个 nightly ASan target，最多同时跑两个；手动运行时每 target 60 秒，定时运行每 target 180 秒；保留 14 天崩溃 artifact，并按 target 缓存 corpus。`fuzz/seeds/` 保存最小 ZIP、bzip2、CHM 和 RAR 输入。GitHub 首轮 run [40907566477](https://github.com/yuhuotech/rustzip/actions/runs/40907566477) 暴露 stable `rustc` 选择错误，第二轮 run [40908353403](https://github.com/yuhuotech/rustzip/actions/runs/40908353403) 暴露缺少 libarchive 的 bzip2 / ACL 系统库；第三轮 run [40909630152](https://github.com/yuhuotech/rustzip/actions/runs/40909630152) 中 ZIP recovery、CHM、bzip2 通过，RAR Linux 编译发现 `unrar_sys` 需要窄字符路径。nightly rustc、`native-archive-deps` 与 Linux 路径分支现均已修复；第四轮远端复验待完成。
 
 ## 本机验证
 
