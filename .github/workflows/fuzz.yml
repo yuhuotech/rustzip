@@ -36,6 +36,7 @@ jobs:
             max_len: 8388608
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/native-archive-deps
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: nightly
