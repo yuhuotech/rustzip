@@ -203,13 +203,13 @@ RZ_SHOT_DIR=/某个文件夹 cargo run --release -p rustzip-gui --example screen
 | 密码本（系统钥匙串；「记住密码」默认关闭） | 已实现；macOS 和 Ubuntu 已通过隔离测试条目的真实钥匙串读写，Windows 待验收 |
 | 常用位置（系统目录 + 自动记录；列表 / 小图标视图） | 已完成 |
 | 压缩包浏览模型（目录树、自然排序、搜索、面包屑、体积统计） | 已完成（`rz-app`） |
-| 更新校验（Ed25519，绑定版本 / 平台 / 哈希） | 已完成，界面已接入，更新源为 GitHub Release；系统安装器启动失败时保留重试入口，待实机验证 |
+| 更新校验（Ed25519，绑定版本 / 平台 / 哈希） | 已完成，界面已接入，更新源为 GitHub Release；自动化用例覆盖验签后交给系统安装器、篡改拒绝及启动失败重试，正式 Release 的端到端安装仍待验收 |
 | 匿名安装统计（激活 + 每日心跳，可关闭） | 客户端已完成；接收服务见 [`web/`](web/) 和 [`web/README.md`](web/README.md)，发布前设置 `RZ_STATS_URL` |
 | 发布工具（生成签名密钥、给安装包签名、生成 `update.json`） | 已完成（`rz-release`） |
 | 桌面应用 `rustzip`（GPUI Kit） | macOS Metal 渲染与 Ubuntu 26.04 GNOME Wayland / Xvfb 启动通过；Ubuntu 和 macOS 的工作区测试通过；Windows 原生 GUI 尚未验收。侧栏工具范围见 `docs/sidebar-implementation.md` |
 | 多语言界面 | 十种语言、365 个资源键已完成；系统语言识别、菜单切换和侧栏布局在 macOS / Ubuntu 26.04 通过；Windows 语言 API、屏幕阅读器和阿拉伯语 RTL 整页布局待设备验收 |
 | 应用图标与打包 | macOS `.app` / DMG 已签名并启动，尚未公证；Ubuntu x86_64 Linux tarball 构建、隔离安装和卸载通过；Windows runner 已通过安装器编译、安装 / 卸载冒烟；完整 release 流程尚未运行 |
-| 文件关联与右键菜单 | macOS 支持“打开方式”，新增的长尾格式关联待实机验收，Finder 右键 / Quick Look 未做；Nautilus 50.2.2 的 Scripts 菜单、压缩入口和逐字节解压在 Ubuntu 26.04 / Xvfb 验收；Dolphin / Nemo 菜单已打包但未点击验收；Windows 注册表入口未实机验收 |
+| 文件关联与右键菜单 | macOS 支持“打开方式”，新增的长尾格式关联待实机验收，Finder 右键 / Quick Look 未做；Nautilus 50.2.2 的 Scripts 菜单、压缩入口和逐字节解压在 Ubuntu 26.04 / Xvfb 验收；Linux 安装器写入 Dolphin 的 KIO 与旧版 KDE 菜单目录及 Nemo XDG 动作，真实桌面点击仍待验收；Windows 注册表入口未实机验收 |
 | 7z 分块并行解压 | 已接入独立固实块调度，支持选择性解压和加密；线程数受解码器字典估算及内存预算限制，其他编码方法回退顺序解压；更大样本和跨平台验收待完成 |
 | bzip2 多线程压缩 / 解压 | 单文件及 tar.bz2 按数据块并行压缩；bzip2 单流和串接 member 并行解压；线程数按内存预算估算，预算不足时顺序回退 |
 | 大文件分块 Deflate | `.gz` / `.tar.gz` 使用标准串接 gzip member；ZIP 大条目按 900,000 字节分块并行 Deflate，按顺序合并，受内存预算限制；加密 ZIP 和低预算情况顺序回退 |
