@@ -47,7 +47,8 @@ rustzip/
 
 1. **纯 Rust 原生,读写**:zip、tar 系、gz、xz、zst、bz2、lz4、7z。基于 `zip`、`tar`、`flate2`(zlib-rs 后端)、`zstd`、`liblzma`、`lz4_flex`、`sevenz-rust2` 等 crate；LZ4 单文件流和 tar.lz4 容器使用标准 LZ4 Frame 格式。性能关键路径(7z 固实块、多线程 LZMA2)自己做调度,不直接套用单线程接口。
 2. **绑定成熟 C 库,只读**:RAR 用 `unrar`(做成 Cargo feature);ISO 9660、CAB、CPIO、AR、LHA/LZH、XAR 和 RPM 用 libarchive。安全封装放在 `rz-ffi`,只注册实际验收的格式及必要的内置滤镜，不启用 libarchive 的 RAR、ZIP 或 7z 解码器，也不调用外部解压命令。
-3. **格式嗅探**:按魔数识别,不按扩展名;支持嵌套识别。
+3. **纯 Rust 专用只读后端**:CHM 通过 MIT `libchm` 的本地补丁版读取；`rz-formats::chm_fmt` 用 64 KiB caller buffer 流式读取，并在 LZX block 边界检查取消。目录元数据、reset table 和压缩 block 都有硬上限，详情见[第三阶段评估](phase-3-format-assessment.md)。
+4. **格式嗅探**:按魔数识别,不按扩展名;支持嵌套识别。WIM、DMG 目前仅识别签名并返回“不支持”；NSIS 不由通用 PE / `.exe` 特征推断。新增 reader 必须先通过许可证、流式读取、取消、资源上限与独立样本验收。
 
 统一接口(草案):
 

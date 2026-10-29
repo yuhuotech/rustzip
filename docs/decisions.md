@@ -251,3 +251,10 @@
 
 - D1 规划正式发行版附带 RAR，但现有发布构建未启用该 feature，且 D35 记录的普通 RAR 解压临时磁盘限制仍未解决。正式发行前必须解决该安全边界和许可证声明，不能把当前默认构建称作含 RAR 的正式发行版。
 - 桌面应用暴露默认关闭的 `rar` feature；本地打包默认不启用 RAR，也不注册 RAR 专属文件关联。显式启用 RAR 的本地测试包可同时注册相应关联，并继续遵守 unRAR 许可证。三平台的设置方式在发布文档中说明。
+
+## D37 长尾格式后端准入
+
+- CHM 以只读格式接入 `rz-formats::chm_fmt`，使用 MIT `libchm` 0.3.0 的固定 vendor 副本。局部补丁提供范围读取、directory 回调和 LZX block 取消；条目读取每次最多 64 KiB、每次操作总输出按应用设置限制（未设置时为 1 TiB）、单压缩 block 4 MiB、reset table 8 MiB、目录元数据 16 MiB / 100,000 条。测试 fixture 由独立 `rustchm` 0.1.2 生成；解压路径仍统一经过引擎的 `safe_join`。
+- `fuzz/fuzz_targets/chm.rs` 会模糊测试 CHM 打开、枚举和范围读取；本轮只完成 fuzz target 编译，稳定版工具链无法运行 sanitizer fuzz session，发布前仍须在 nightly fuzz runner 实际执行。
+- WIM 和 DMG 仅按魔数 / trailer 识别并返回明确的“不支持”。已审候选只读镜像或分区元数据，或缺少对元数据、解压和取消的完整控制；WIM 完整候选还涉及 LGPL / GPL 静态链接许可及更高 MSRV。NSIS 位于 PE overlay，不以通用 `.exe` 扩展名或普通 PE 头认定为归档。
+- 新格式 reader 只有在提供流式 / 有界读取、分块取消与进度、元数据和解压输出硬上限、通用路径安全处理、损坏输入与 fuzz 覆盖，以及实际工具生成的独立 fixture 后，才可注册并宣称支持。具体候选证据见[第三阶段记录](phase-3-format-assessment.md)。

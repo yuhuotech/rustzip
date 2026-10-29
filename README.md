@@ -124,7 +124,7 @@ rz r <archive> <output> [-p -|@file] [-q -|@file]               修复 ZIP / 7z
 - 转换和修复中，`-p` 指输入包密码，`-q` 指输出包密码；两者也可用隐藏提示或密码文件提供。
 - `-v` 为 ZIP / 7z 设置最大分卷大小，如 `700M` 或 `2G`；留空时创建单文件归档。
 - `-d` 为 7z 指定 LZMA2 字典大小；`-s` 指定固实块最大解压大小，`-s 0` 或 `-s off` 为每个文件分别编码。
-- 只读长尾格式包括 ISO 9660、CAB、CPIO、AR（DEB 容器）、LHA / LZH、RPM 和 XAR；RPM 通过内置 RPM 与 CPIO reader 读取；RAR 仅在启用可选 `rar` feature 的构建中可读。
+- 只读长尾格式包括 ISO 9660、CAB、CPIO、AR（DEB 容器）、LHA / LZH、RPM、XAR 和 CHM；CHM 支持浏览、测试和提取。RAR 仅在启用可选 `rar` feature 的构建中可读。WIM、DMG 已按内容识别但暂不支持读取；NSIS 不从普通 `.exe` 扩展名推断。候选审查见 [`docs/phase-3-format-assessment.md`](docs/phase-3-format-assessment.md)。
 
 ### 桌面应用
 
@@ -168,6 +168,7 @@ RZ_SHOT_DIR=/某个文件夹 cargo run --release -p rustzip-gui --example screen
 | [`docs/tech-spec.md`](docs/tech-spec.md) | 代码、性能、安全、测试、提交规范 |
 | [`docs/ui-spec.md`](docs/ui-spec.md) | UI 风格、布局、组件、交互 |
 | [`docs/decisions.md`](docs/decisions.md) | 已做的决策与理由 |
+| [`docs/phase-3-format-assessment.md`](docs/phase-3-format-assessment.md) | WIM、DMG、CHM、NSIS 候选评估与 CHM 接入边界 |
 | [`docs/release.md`](docs/release.md) | 签名、更新源、统计服务、发布 |
 
 ## 开发进度
@@ -215,7 +216,7 @@ RZ_SHOT_DIR=/某个文件夹 cargo run --release -p rustzip-gui --example screen
 | 7z 高级压缩参数 | 字典大小、固实块大小和非固实模式已接入 CLI / GUI，并按内存预算限制并行度 |
 | 压缩预设 | 极速 / 均衡 / 最小体积 / 邮件分享 / 跨平台兼容已接入；邮件分享默认 20 MiB ZIP / 7z 分卷 |
 | 重复文件检测 | GUI 压缩前按内容哈希提示重复，可取消或继续；不自动删除文件 |
-| 只读长尾格式 | ISO 9660、CAB、CPIO、AR、LHA / LZH、RPM、XAR 已接入；DEB 作为 AR 容器读取；WIM、DMG、CHM、NSIS 尚未实现 |
+| 只读长尾格式 | ISO 9660、CAB、CPIO、AR、LHA / LZH、RPM、XAR、CHM 已接入；DEB 作为 AR 容器读取；WIM、DMG 仅识别并明确不支持；NSIS 尚未识别或读取 |
 | 任务完成动作与通知 | 可选择解压完成后显示目录；系统通知默认关闭；Ubuntu GNOME 通知开启 / 关闭行为已验收，macOS 已修复系统应用选择弹窗但实际投递未确认，Windows 待验收 |
 
 ## 参与贡献

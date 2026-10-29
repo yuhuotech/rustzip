@@ -17,7 +17,7 @@ RustZIP 的主要归档与桌面功能已经实现：ZIP、7z、tar 系列和 gz
 | P0 | 基础压缩、解压、浏览、加密、任务队列和 CLI | 主路径已完成；CLI 提供 `a / l / x / t / c / r / h`，长操作均支持 Ctrl+C 与进度 | 保持现有安全契约，继续做平台验收与性能验收 |
 | P0 | 分卷压缩与多卷解压 | ZIP / 7z 容量设置、缺卷诊断和无覆盖发布已接入；往返、取消、现有卷保护和发布竞态回滚测试通过。Linux arm64 上与 p7zip 26.02 双向互通；Ubuntu 26.04 x86_64 上与 p7zip 26.00 双向互通，Info-ZIP 3.0 创建的 split ZIP 可由 RustZIP 测试和解压 | 扩大到 Windows / macOS 官方 7-Zip、WinZip 等常用工具版本；Info-ZIP `unzip` 不支持本测试的 split ZIP，不能作为读取验收 |
 | P0 | LZ4 与 tar.lz4 | 标准 LZ4 Frame 读写、魔数识别、CLI、编辑、转换和 GUI tar.lz4 入口已接入；格式及引擎往返通过，外部 `lz4 -t` 和 `tar -tf` 通过；8 MiB 基准已记录 | 扩大外部样本和性能采样，保留 Frame 格式边界 |
-| P0 | ISO、CAB、WIM、DMG、CPIO、AR、LHA、XAR、RPM、DEB、CHM、NSIS 等只读格式 | ISO 9660、CAB、CPIO、AR、LHA/LZH、XAR、RPM 已通过隔离的 libarchive 后端接入；RPM 使用上游 BSD-2-Clause bzip2 / gzip fixtures，安全引擎提取测试通过；WIM、DMG、CHM、NSIS 尚未接入；DEB 按 AR 容器读取 | 评估 WIM、DMG、CHM、NSIS 的可靠后端与独立样本；保持 RAR 只读边界 |
+| P0 | ISO、CAB、WIM、DMG、CPIO、AR、LHA、XAR、RPM、DEB、CHM、NSIS 等只读格式 | ISO 9660、CAB、CPIO、AR、LHA/LZH、XAR、RPM 已通过隔离的 libarchive 后端接入；CHM 经独立样本验证，使用纯 Rust reader 支持只读浏览 / 测试 / 提取；WIM、DMG 仅按内容识别并返回不支持；NSIS 尚未识别或读取；DEB 按 AR 容器读取。候选审查和限制见[第三阶段记录](phase-3-format-assessment.md) | 为 WIM / DMG / NSIS 继续评估具备流式、取消、硬资源上限和独立样本的后端；未满足条件时继续明确不支持；保持 RAR 只读边界 |
 | P0 | 压缩参数 | ZIP 压缩级别 / 线程与 7z 字典大小 / 固实块大小已接入 CLI / GUI；7z 并行工作集受内存预算估算限制；自动字典下调、超预算拒绝及固实块结构用例通过 | 无；ZIP 的 deflate 字典不适用 |
 | P0 | 7z 多块并行解压 | 多个独立固实块按块调度，支持选择性解压、AES 和取消；按 LZMA2 字典估算并行内存，遇到其他编码或预算不足回退顺序解码。加密、错误密码、损坏块、取消、选择和低预算回退的本机用例通过 | 验证外部工具样本、更多字典与分卷组合，并在三平台和大数据集上对比性能 |
 | P0 | bzip2 多线程 | 单文件和 tar.bz2 按块并行压缩，标准连续流按原顺序输出，线程数和队列受内存预算估算约束；单文件、tar 往返、低预算回退及系统 bzip2 解码通过；解压仍为单线程 | 验证更多外部解码器、取消和故障边界及三平台；评估并行解压 |
@@ -33,7 +33,7 @@ RustZIP 的主要归档与桌面功能已经实现：ZIP、7z、tar 系列和 gz
 | P1 | 自动更新 | 有安装包签名校验、更新发现和下载后交给系统安装器的流程；产品规格已按决策 D8 统一为用户操作安装器。启动系统程序移至后台，启动失败时保留重试入口并提示错误；该改动尚未验证 | 正式发布时验证签名、下载及各平台安装流程；安装器的替换和回滚不由应用实现 |
 | P2 | 压缩包对比、虚拟磁盘挂载、云端按需解压、WASM 插件、自解压包 | 均未开始，属于远期需求 | 暂缓；根据用户需求和安全 / 平台成本分别立项 |
 
-格式范围的依据：产品规格承诺 LZ4 读写及一组只读长尾格式；当前识别枚举已包含 ZIP、tar、gzip、7z、RAR、xz、zstd、bzip2、LZ4、ISO 9660、CAB、CPIO、AR、LHA/LZH 和 XAR。RAR 仍只通过可选 `unrar` 后端只读。
+格式范围的依据：产品规格承诺 LZ4 读写及一组只读长尾格式；当前识别枚举已包含 ZIP、tar、gzip、7z、RAR、xz、zstd、bzip2、LZ4、ISO 9660、CAB、CPIO、AR、LHA/LZH、XAR、CHM、WIM 和 DMG。CHM 可读；WIM / DMG 仅识别并明确不支持。NSIS 暂不从通用 PE / `.exe` 扩展名识别。RAR 仍只通过可选 `unrar` 后端只读。
 
 ## 3. 分阶段计划
 
@@ -52,9 +52,9 @@ RustZIP 的主要归档与桌面功能已经实现：ZIP、7z、tar 系列和 gz
 2. ~~接入 LZ4 与 tar.lz4 读写、格式识别和转换。~~ 格式 / 引擎往返、外部 `lz4 -t`、workspace all-features 编译通过；8 MiB 本机基准已运行。新增依赖许可证已核对。
 3. ~~增加格式相关的字典大小、固实块等高级参数。~~ 7z 字典 / 固实块入口已接入，按格式隐藏；参数边界、固实块 / 非固实块、CLI / GUI 创建、workspace 测试和 Clippy 通过。8 MiB 基准矩阵完整运行并校验输出；受限样本仅用于运行路径验收，没有拿来作性能回归对比。
 4. ~~补齐文件 SHA-256 / BLAKE3 校验。~~ `rz-app` 单次流式读取同时计算算法、支持取消和进度；CLI `rz h` 与最近文件 / 常用位置的 GUI 操作入口已接入。标准向量、分块进度、取消、普通文件边界、workspace 测试、fmt 与 Clippy 通过；保留 `rz t` 的归档完整性测试语义。
-5. ISO 9660、CAB、CPIO、AR、LHA/LZH、XAR 与 RPM 只读实现已接入；RPM 用 bzip2/gzip CPIO 样本验证内置滤镜、CLI 列表/完整性/安全提取，并由 p7zip 26.00 独立测试。Vendored Libarchive 没有 WIM reader；WIM、DMG、CHM、NSIS 仍待可靠后端与独立样本，不一次性开放未经验证的格式。
+5. ISO 9660、CAB、CPIO、AR、LHA/LZH、XAR 与 RPM 只读实现已接入；RPM 用 bzip2/gzip CPIO 样本验证内置滤镜、CLI 列表/完整性/安全提取，并由 p7zip 26.00 独立测试。第三阶段新增 CHM 只读 reader，以 `rustchm` 生成的独立 fixture 验证目录、LZX 多块读取、取消、上限和路径安全。WIM / DMG 仅明确识别不支持，NSIS 不按 `.exe` 扩展名猜测；其余后端候选不满足门槛。详见[第三阶段记录](phase-3-format-assessment.md)。
 
-**退出条件：** 新格式和分卷操作具备往返、损坏、加密适用性、缺卷、取消与路径安全验收；新参数受全局内存预算约束；文档和界面格式列表与真实能力一致。
+**退出条件：** 已接入的新格式和分卷操作具备损坏输入、加密适用性、缺卷、取消与路径安全验收；候选不满足安全门槛的承诺格式在嗅探、界面提示和文档中保持明确不支持，不计入已实现能力；新参数受全局内存预算约束。
 
 ### 阶段 C：完成高频 P1 体验
 
@@ -86,7 +86,7 @@ RustZIP 的主要归档与桌面功能已经实现：ZIP、7z、tar 系列和 gz
 
 1. 优先完成 Windows 原生 GUI、安装器、文件关联及注册表菜单验收，并补上 Windows CI / 发布证据。
 2. 完成 macOS 系统钥匙串与通知验收；验证 Dolphin / Nemo 菜单点击和 Linux GUI CI。
-3. 按许可证、维护成本和独立样本评估 WIM、DMG、CHM、NSIS 等只读格式；不满足安全边界时保持明确不支持。
+3. ~~评估 WIM、DMG、CHM、NSIS 等只读格式候选并按安全门槛接入。~~ CHM 已接入只读 reader；WIM / DMG 魔数分流到明确不支持；NSIS 不依据通用 `.exe` 扩展名判定。其余格式只有后端满足流式、取消、资源上限和独立样本要求后再接入，证据见[第三阶段记录](phase-3-format-assessment.md)。
 4. 评估 PDF 原生预览的硬资源上限；音视频继续调用系统程序，直到资源和平台成本明确。
 5. 完成 Windows 安装器和三平台 release 工作流演练，验证更新的验签、下载与安装器交接后再发布首个正式版本。
 
@@ -95,8 +95,7 @@ RustZIP 的主要归档与桌面功能已经实现：ZIP、7z、tar 系列和 gz
 ## 6. 继续开发时的具体边界
 
 - 7z 多块并行按固实块调度，每个工作线程使用独立输入流；对于 COPY、LZMA2 和 AES 组合，按最大字典加固定开销估算线程数。默认预算为 256 MiB，该估算不包含整个进程内存和全部归档元数据，不是硬资源限制。
-- WIM 候选 `wim-parser` 0.1.2 为 MIT，但当前实现以读取镜像元数据为主，并按文件声明的 XML 大小直接分配缓冲区；它不能作为安全的文件浏览与提取后端。`wim-format` 0.1.1 声明 LGPL-2.1-or-later OR GPL-3.0-or-later，不符合项目静态链接依赖许可规则，因此未引入。
-- CHM 候选 `libchm` 0.3.0 和 `rustchm` 0.1.2 均为 MIT，但公开读取接口会将整个条目读入内存，且没有用于取消单次读取的接口；直接接入会违反流式和可取消要求。需要上游提供有界范围读取，或维护经安全审查的适配实现。
+- WIM / DMG / NSIS 的候选版本、许可证、API 和资源边界见[第三阶段评估](phase-3-format-assessment.md)；未通过安全门槛的候选不进入依赖或格式注册表。CHM 的上游 MIT reader 经本地范围读取 / 取消补丁后接入，硬资源上限及 fixture 也记录在该阶段文档。
 - 现有 unrar 接口先将完整条目写到临时磁盘；RAR 预览已关闭并提示先解压。正常解压仍可能对未选条目先产生临时文件，解码阶段没有硬磁盘输出上限。恢复预览和补齐正常解压保护均需要可中断且有输出上限的解码接口或可靠的隔离资源限制，见 D35。
 - 2026-10-27 本机 `cargo check -p rz-app -p rustzip-gui` 通过；2026-10-28 增加预览与更新交接定向测试，正式安装器实机验收仍未完成。
 - 7z 顺序遍历改为逐块检查解码器的停止信号，避免预览结束后继续处理后续块；`cargo check -p rz-app -p rustzip-gui` 通过。`RZ_BENCH_MB=8 cargo bench -p rz-engine --bench throughput` 跑完整套矩阵并通过基准自身的输出检查；单次 8 MiB 样本不能证明无性能回归，同机基线和多次采样仍待补齐。
