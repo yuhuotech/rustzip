@@ -29,6 +29,7 @@ jobs:
   dry-run-signing-key:
     name: Prepare disposable dry-run signing key
     runs-on: ubuntu-22.04
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
@@ -74,11 +75,13 @@ jobs:
     if: ${{ startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
     name: Build ${{ matrix.platform }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     continue-on-error: ${{ matrix.experimental }}
     strategy:
       fail-fast: false
       matrix:
         include:
+          # rust-toolchain.toml overrides the action's stable toolchain; build each macOS architecture on its native runner.
           - { os: macos-15, platform: macos-aarch64, target: aarch64-apple-darwin, experimental: false }
           - { os: macos-15-intel, platform: macos-x86_64, target: x86_64-apple-darwin, experimental: false }
           - { os: windows-latest, platform: windows-x86_64, target: x86_64-pc-windows-msvc, experimental: false }
@@ -194,6 +197,7 @@ jobs:
   assemble:
     needs: [build, dry-run-signing-key]
     runs-on: ubuntu-22.04
+    timeout-minutes: 20
     if: ${{ !cancelled() && (inputs.dry_run || startsWith(github.ref, 'refs/tags/v')) }}
     permissions:
       contents: read
@@ -253,6 +257,7 @@ jobs:
   publish:
     needs: assemble
     runs-on: ubuntu-22.04
+    timeout-minutes: 10
     if: ${{ startsWith(github.ref, 'refs/tags/v') && inputs.dry_run != true }}
     permissions:
       contents: write
