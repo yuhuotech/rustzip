@@ -74,13 +74,13 @@ jobs:
         with:
           path: ${{ runner.temp }}\rustzip-vcpkg-cache
           key: rustzip-vcpkg-x64-windows-static-md-${{ steps.native-deps.outputs.vcpkg-revision }}-v2
-      - run: cargo clippy -p rustzip-gui --all-targets -- -D warnings
+      - run: cargo clippy -p rustzip-gui --all-targets --all-features -- -D warnings
       - name: Test GUI under Xvfb (Linux)
         if: runner.os == 'Linux'
-        run: xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 cargo test -p rustzip-gui
+        run: xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 cargo test -p rustzip-gui --all-features
       - name: Test GUI
         if: runner.os != 'Linux'
-        run: cargo test -p rustzip-gui
+        run: cargo test -p rustzip-gui --all-features
       - name: Windows installer smoke test
         if: runner.os == 'Windows'
         timeout-minutes: 30
