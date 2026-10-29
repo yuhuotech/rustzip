@@ -78,6 +78,6 @@ macOS 的“打开方式”声明包含已接入的常见只读格式及 LZ4，R
 
 - 2026-10-29 Release dry-run [40950855468](https://github.com/yuhuotech/rustzip/actions/runs/40950855468)：Linux、macOS arm64、macOS x86_64 与 Windows x86_64 产物均构建并签名成功；汇总验签 job 在构建 `rz-release` 时因 runner 未安装 `libacl` 开发库而失败，因此未生成验证 bundle，正式发布步骤跳过。已在汇总 job 加入 `native-archive-deps`；修复后的 dry-run 待重新运行。
 - 2026-10-30 修复后的 Release dry-run [40958424663](https://github.com/yuhuotech/rustzip/actions/runs/40958424663) 全部通过：四个平台包均构建并签名，汇总验签成功，上传了 48,267,020 字节的 `release-dry-run-bundle` artifact；下载检查确认 `update.json` 含四个平台及对应包名。公开 Release 的 `publish` job 按 dry-run 条件跳过。该 bundle 可供 14 天检查，不是可安装更新的正式签名包。
-- 2026-10-30 核对 GitHub Actions 运行记录：Fuzz 的手动 run [40912070562](https://github.com/yuhuotech/rustzip/actions/runs/40912070562) 四个 target 通过；尚未找到 `schedule` 事件的运行记录，定时运行仍待确认。
+- 2026-10-29 最新 Fuzz 手动 run [40961694769](https://github.com/yuhuotech/rustzip/actions/runs/40961694769) 在提交 `70addea` 上四个 target 均通过并保存 corpus cache：ZIP recovery 743,952 次、CHM 34,172 次、bzip2 8,454 次、RAR 187,945 次，无 crash。每日 schedule 在 03:23 UTC；该次 run 在下次触发时间前结束。
 
 2026-10-28 的手动 CI、macOS 钥匙串 / Launch Services 检查与 Windows 修复见[第二阶段验收](phase-2-platform-acceptance.md)：提交 `30c4201` 的六个 CI 任务全部通过。之后的 CHM 和 RAR 回调改动仍需在最新提交上完成三平台 CI 与打包验收。

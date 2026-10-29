@@ -271,6 +271,7 @@
 - `ArchiveReader::for_each_selected` 让引擎将选择索引交给顺序格式；RAR 可以跳过未选条目的临时输出，同时保留固实流状态。兼容性 `open` 的整条目内存读取限制为 64 MiB。
 - 图片预览使用 8 MiB 上限、文本预览使用 64 KiB 上限；RAR 只在启用 `rar` feature 的构建中可预览。该决策取代 D35 的 RAR 预览禁用状态及 D36 中“临时输出没有硬上限”的旧实现状态，不改变 D36 的默认关闭、许可证和文件关联要求。
 - 回归覆盖原生回调超限中止、取消、RAR 测试、选择性输出及应用层图片 / 文本读取限额。正式发行仍需在三平台验证启用 RAR 的构建和实际安装包许可证。
+- GitHub Fuzz run [40961694769](https://github.com/yuhuotech/rustzip/actions/runs/40961694769) 对 RAR target 执行 187,945 次变异并保存 corpus cache，未发现崩溃；RAR feature 的原生解码与安装包许可仍需要三平台发行验收。
 
 ## D39 bzip2 并行解压与 gzip 分块 Deflate
 

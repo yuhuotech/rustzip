@@ -35,7 +35,7 @@
 - `rz-formats::open` 对 WIM / DMG 返回明确的 `Error::Unsupported`；CHM 返回只读 `ArchiveReader`。
 - `chm_basic.chm` 由独立 `rustchm` 编译器生成，覆盖多块 LZX、空文件、CJK 名称和误导性 `.bin` 扩展名。定向测试覆盖列举 / 内容逐字节比对、输出上限、元数据取消、多块解码中的取消、损坏输入和 Zip Slip 拒绝。
 - `cargo test` 与 `cargo test --all-features` 全工作区通过；各有 3 项按项目定义忽略的环境测试（两个要求非 root Unix 用户、一个真实系统钥匙串）。`cargo clippy --all-targets -- -D warnings`、工作区 / vendor 格式检查、vendor `libchm` 50 项单元测试 + 2 项文档测试及独立 Clippy 均通过。现有依赖 `block v0.1.6` 仍有 Rust future-incompatibility 提示。
-- `cargo check --manifest-path fuzz/Cargo.toml --bins` 和 `cargo clippy --manifest-path fuzz/Cargo.toml --all-targets -- -D warnings` 通过，新增 CHM fuzz target。2026-10-29 本机 nightly ASan fuzz 对独立 CHM fixture 运行 15 秒，约 21,000 次变异未发现崩溃；此前稳定工具链确实无法运行 sanitizer session。短时 fuzz 不替代持续 runner。本机也对有效 bzip2 seed 执行了 15 秒 ASan fuzz，约 11,000 次变异未发现崩溃。
+- `cargo check --manifest-path fuzz/Cargo.toml --bins` 和 `cargo clippy --manifest-path fuzz/Cargo.toml --all-targets -- -D warnings` 通过，新增 CHM fuzz target。2026-10-29 本机 nightly ASan fuzz 对独立 CHM fixture 运行 15 秒，约 21,000 次变异未发现崩溃；之后 GitHub Fuzz run [40961694769](https://github.com/yuhuotech/rustzip/actions/runs/40961694769) 对 CHM 运行 34,172 次并保存 corpus cache，未发现崩溃。此前稳定工具链确实无法运行 sanitizer session。本机也对有效 bzip2 seed 执行了 15 秒 ASan fuzz，约 11,000 次变异未发现崩溃。
 - `RZ_BENCH_MB=8 cargo bench -p rz-engine --bench throughput` 通过现有格式、转换、修复与卷操作的输出校验。该基准不包含 CHM，结果只用于确认原有基准路径正常，不作为 CHM 性能数据。
 - 本阶段未运行 Windows / Linux CI runner；平台关联配置有清单级测试，真实安装器及桌面点击仍待相应 runner 实测。
 - [第三阶段后端门槛](decisions.md#d37-长尾格式后端准入) 记录了后续 reader 必须达到的安全条件。
