@@ -1,6 +1,6 @@
 # 第三阶段：长尾格式候选审查与 CHM 接入
 
-评估日期：2026-10-29。RustZIP 基线为 `01e84d8`。本阶段按许可证、流式读取、取消、内存 / 磁盘上限和独立样本审查 WIM、DMG、CHM、NSIS；接入满足安全门槛的 reader，其余格式明确保持不支持。
+首次评估日期：2026-10-29。RustZIP 基线为 `01e84d8`。本阶段按许可证、流式读取、取消、内存 / 磁盘上限和独立样本审查 WIM、DMG、CHM、NSIS；接入满足安全门槛的 reader，其余格式明确保持不支持。2026-10-30 复查 WIM / NSIS / PDF 新候选，结论记录在本文末尾。
 
 ## 结果
 
@@ -20,6 +20,12 @@
 | DMG | [`dmg-core` 0.1.5](https://crates.io/crates/dmg-core/0.1.5) 为 Apache-2.0，提供 `Read + Seek` 虚拟磁盘和每块 64 MiB 输出上限，但一次缓冲由 trailer 声明的整个 XML plist，也不解析 HFS+ / APFS 文件。MIT [`isomage` 2.1.0](https://crates.io/crates/isomage/2.1.0) 只列 DMG 分区名，没有解码 `mish` 区块；MIT [`dpp` 0.6.1](https://crates.io/crates/dpp/0.6.1) 的已审查实现会对 plist、区块数或分区数据做大块分配，且缺少取消。 | 没有候选提供完整文件系统浏览 / 提取，同时满足元数据上限、流式解码与取消。 | 只识别 trailer 的 `koly`，不注册 reader。 |
 | CHM | [`libchm` 0.3.0](https://crates.io/crates/libchm/0.3.0) 是 MIT、纯 Rust；上游提供 LZX 解码和结构校验，LZX 窗口最高 2 MiB，目录块最高 1 MiB。上游整条目 API 返回 `Vec`，因此 RustZIP 保留其源码并补充 64 KiB 范围读取、分块取消、4 MiB 压缩块上限、8 MiB reset-table 上限、16 MiB 目录元数据上限及 100,000 条目上限。作为对照，[`chmlib` 1.0.0](https://crates.io/crates/chmlib/1.0.0) 有范围读取，但 LGPL 且默认由 build script 静态编译；本阶段不采用。 [`rustchm` 0.1.2](https://crates.io/crates/rustchm/0.1.2) 用于独立生成测试 fixture。 | reader 满足本阶段的流式、取消和资源上限要求；独立 fixture 覆盖多块 LZX、空文件、CJK 名称和 Zip Slip。 | 接入只读 reader；写入仍不支持。 |
 | NSIS | [`nsis` 0.6.0](https://github.com/ATRAPSLLC/nsis-rs/tree/f20d03c407674dd670787ebcb2fa9e5f0d65a0ad) 为 Apache-2.0，默认限制未知长度流解压到 64 MiB，但入口要求完整 `&[u8]`，会同步把 solid 流解压成 `Vec`，没有 RustZIP 可驱动的取消或流式条目接口。 | 输入和输出仍整体缓冲；解析和固实流解压不能被调用方取消。扩展名 `.exe` 不能区分 NSIS 与其他 Windows 可执行文件。 | 不新增 PE / NSIS 启发式识别，不注册 reader。 |
+
+## 2026-10-30 候选复查
+
+- `wim-format` 0.1.1 和其 `wim-types` 0.1.1 声明 `LGPL-2.1-or-later OR GPL-3.0-or-later`。MIT `caddy-archive-core` 0.3.4 的可选 WIM backend 依赖 `wim-format`，故该包装不会消除底层 license 冲突；继续不接入。该底层 API 提供资源 / 分块读取原语，但没有改变项目的 license 准入条件。
+- 最新 `nsis` 0.6.0 仍通过 `NsisInstallerBuilder<&[u8]>` 接收整个输入；solid payload 会先解到受预算限制的缓存 `Vec`。预算限制缓解输出膨胀，但输入整包缓冲和缺少调用方取消的边界仍不符合本项目 reader 准入要求。
+- `pdf-engine` 1.0.0 提供单 stream / 单文档内存 / 图像像素上限，但 crate license 是 `AGPL-3.0-only OR LicenseRef-PDFluent-Commercial`；这两种选择都不在当前依赖许可策略内。PDF 仍交给系统阅读器。
 
 候选源码核对点：[`dmg-core` trailer 与 XML plist 缓冲](https://docs.rs/crate/dmg-core/0.1.5/source/src/lib.rs)、[`isomage` WIM 元数据范围](https://github.com/JackDanger/isomage/tree/v2.1.0/src/formats)、[`libchm` 上游源码](https://github.com/trypsynth/libchm/tree/927cec11c4cf8165d28731fe1b3e07b40f8ddf5e)、[RustZIP 的局部补丁和上游来源](../vendor/libchm/PATCHES.md)。NSIS [`from_bytes 与解压上限`](https://github.com/ATRAPSLLC/nsis-rs/blob/f20d03c407674dd670787ebcb2fa9e5f0d65a0ad/src/installer/nsisinstaller.rs#L305-L345)、[`固实流预解压`](https://github.com/ATRAPSLLC/nsis-rs/blob/f20d03c407674dd670787ebcb2fa9e5f0d65a0ad/src/installer/nsisinstaller.rs#L607-L660)。
 

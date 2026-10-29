@@ -216,6 +216,7 @@
 - 当前评估的纯 Rust Hayro renderer 使用 Apache-2.0 OR MIT，且禁止 unsafe，但默认 Flate fallback 将解码输出不断追加到 `Vec`，没有输出上限；可选的标准解码路径也调用无上限的 `read_to_end`。仅限制源文件字节数和最终像素数不足以防止解压炸弹，所以在渲染器实现可执行的解压输出硬上限前不接入。依据：[Hayro 渲染说明与许可证](https://github.com/LaurenzV/hayro)、[Flate 解码实现](https://github.com/LaurenzV/hayro/blob/main/hayro-syntax/src/filter/lzw_flate.rs)。
 - `pdfium-render` 的 Rust 绑定许可证为 MIT OR Apache-2.0，但不包含 PDFium 动态库，需额外下载、构建和跨平台打包原生二进制；因此本轮不选用。PDFium 的归档样本、运行时限制和包体成本需要单独评估。
 - 2026-10-29 复查 MIT OR Apache-2.0 的 `pdfrum` 0.5.3：提供单 PDF stream 解码字节上限、每次 render 像素上限和可协作 deadline，且默认不启用 JavaScript；但已公开的上限针对单 stream，无法配置一页所有图片 / 内容 stream 的累计解码字节预算，deadline 也在解析 / page / 操作符 / render 对象等检查点协作执行，不能中断任意长的单个底层解码调用。因此仍未证明页面总解码内存有硬上限，不接入。依据：[Limits API](https://docs.rs/pdfrum/latest/pdfrum/struct.Limits.html)、[OpenOptions](https://docs.rs/pdfrum/latest/pdfrum/struct.OpenOptions.html)、[项目主页与许可证](https://github.com/PoHsuanLai/pdfrum)。
+- 2026-10-30 复查 `pdf-engine` 1.0.0：虽提供单 stream、单文档总内存和图像像素上限，但许可证为 `AGPL-3.0-only OR LicenseRef-PDFluent-Commercial`，不符合 RustZIP 依赖许可策略，故不接入。依据：[crate 版本与许可证](https://docs.rs/crate/pdf-engine/1.0.0)、[ProcessingLimits](https://docs.rs/pdf-engine/1.0.0/pdf_engine/limits/struct.ProcessingLimits.html)。
 - Hayro 当前项目说明仍列出不可信 PDF 可触发 OOM / timeout，且上游仍有交互渲染协作取消需求；PDFium 的 limited-image-cache 是降低内存使用的选项，不是可配置的累计解码输出硬上限。依据：[Hayro robustness status](https://github.com/LaurenzV/hayro)、[cancellation issue](https://github.com/LaurenzV/hayro/issues/1052)、[PDFium render cache option](https://docs.rs/pdfium-render/latest/pdfium_render/struct.PdfRenderConfig.html)。在累计解码上限或 OS 隔离限制可验证前，预览继续调用系统 PDF 阅读器。
 - 达到资源边界后，内置预览需清楚提示用户改用系统 PDF 阅读器；在满足上述限制之前继续由系统程序打开 PDF。
 
@@ -258,7 +259,8 @@
 
 - CHM 以只读格式接入 `rz-formats::chm_fmt`，使用 MIT `libchm` 0.3.0 的固定 vendor 副本。局部补丁提供范围读取、directory 回调和 LZX block 取消；条目读取每次最多 64 KiB、每次操作总输出按应用设置限制（未设置时为 1 TiB）、单压缩 block 4 MiB、reset table 8 MiB、目录元数据 16 MiB / 100,000 条。测试 fixture 由独立 `rustchm` 0.1.2 生成；解压路径仍统一经过引擎的 `safe_join`。
 - `fuzz/fuzz_targets/chm.rs` 会模糊测试 CHM 打开、枚举和范围读取。2026-10-29 本机 nightly ASan fuzz 已运行 15 秒，约 21,000 次变异未发现崩溃；这只作为短时冒烟，发布前仍需在持续 nightly runner 中重复运行。
-- WIM 和 DMG 仅按魔数 / trailer 识别并返回明确的“不支持”。已审候选只读镜像或分区元数据，或缺少对元数据、解压和取消的完整控制；WIM 完整候选还涉及 LGPL / GPL 静态链接许可及更高 MSRV。NSIS 位于 PE overlay，不以通用 `.exe` 扩展名或普通 PE 头认定为归档。
+- WIM 和 DMG 仅按魔数 / trailer 识别并返回明确的“不支持”。已审候选只读镜像或分区元数据，或缺少对元数据、解压和取消的完整控制；WIM 完整候选还涉及 LGPL / GPL 静态链接许可及更高 MSRV。2026-10-30 复查 `wim-format` 0.1.1 确认其许可证为 LGPL-2.1-or-later OR GPL-3.0-or-later；MIT `caddy-archive-core` 的 WIM feature 仍依赖该 crate，不能绕过限制。NSIS 位于 PE overlay，不以通用 `.exe` 扩展名或普通 PE 头认定为归档。
+- 最新 `nsis` 0.6.0 为 Apache-2.0，增加了分块输出预算，但公开入口仍接收整份 `&[u8]`，solid 文件流仍被解压到缓存 `Vec`；没有 caller-driven cancellation / streaming entry reader，暂不注册。依据：[nsis crate API](https://docs.rs/nsis/0.6.0/nsis/installer/struct.NsisInstaller.html)、[solid stream behavior](https://docs.rs/nsis/0.6.0/nsis/installer/enum.SolidStatus.html)、[`wim-format` 许可证与 API](https://docs.rs/crate/wim-format/0.1.1)。
 - 新格式 reader 只有在提供流式 / 有界读取、分块取消与进度、元数据和解压输出硬上限、通用路径安全处理、损坏输入与 fuzz 覆盖，以及实际工具生成的独立 fixture 后，才可注册并宣称支持。具体候选证据见[第三阶段记录](phase-3-format-assessment.md)。
 
 ## D38 RAR 解码输出上限与安全预览
