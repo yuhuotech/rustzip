@@ -180,12 +180,14 @@ jobs:
           fi
           cargo build --release -p rz-release
           case "${{ matrix.platform }}" in
-            macos-aarch64|macos-x86_64) pattern='RustZIP-*.dmg' ;;
-            windows-x86_64) pattern='RustZIP-*.exe' ;;
-            linux-x86_64) pattern='RustZIP-*.tar.gz' ;;
+            macos-aarch64|macos-x86_64) pattern='dist/RustZIP-*.dmg' ;;
+            windows-x86_64) pattern='dist/RustZIP-*.exe' ;;
+            linux-x86_64) pattern='dist/RustZIP-*.tar.gz' ;;
             *) echo "Unknown release platform: ${{ matrix.platform }}" >&2; exit 1 ;;
           esac
-          mapfile -t packages < <(find dist -maxdepth 1 -type f -name "$pattern" -print)
+          shopt -s nullglob
+          packages=( $pattern )
+          shopt -u nullglob
           if [[ ${#packages[@]} -ne 1 ]]; then
             echo "Expected one $pattern package for ${{ matrix.platform }}, found ${#packages[@]}" >&2
             exit 1
