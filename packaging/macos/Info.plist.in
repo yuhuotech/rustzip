@@ -47,6 +47,7 @@
                 <string>lha</string>
                 <string>lzh</string>
                 <string>xar</string>
+                <string>chm</string>
             </array>
         </dict>
     </array>

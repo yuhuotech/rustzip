@@ -189,7 +189,7 @@ pub fn looks_like_archive(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
     let standard = [
         ".zip", ".7z", ".rar", ".tar", ".tgz", ".txz", ".tzst", ".tbz2", ".tbz", ".gz", ".xz",
-        ".zst", ".zstd", ".bz2", ".lz4", ".jar", ".apk", ".cbz",
+        ".zst", ".zstd", ".bz2", ".lz4", ".jar", ".apk", ".cbz", ".chm",
     ]
     .iter()
     .any(|e| lower.ends_with(e));
@@ -277,6 +277,7 @@ mod tests {
         l.sort_by(RecentSort::Name);
         assert_eq!(names(&l), ["zeta", "alpha.zip"]);
         assert!(looks_like_archive("Backup.TAR.GZ") && !looks_like_archive("notes.txt"));
+        assert!(looks_like_archive("manual.CHM"));
         assert!(list_dir(&tmp.path().join("missing")).is_err());
     }
 

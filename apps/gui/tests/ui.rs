@@ -1215,6 +1215,27 @@ fn a_file_that_is_not_an_archive_shows_an_error_and_no_tab(cx: &mut TestAppConte
 }
 
 #[gpui_kit::test]
+fn chm_fixture_opens_in_the_archive_browser_as_read_only(cx: &mut TestAppContext) {
+    let archive = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../crates/rz-formats/tests/fixtures/chm_basic.chm");
+    let (handle, view) = open_window(cx, None);
+    open_sync(cx, handle, &view, &archive, None);
+    cx.run_until_parked();
+
+    cx.update(|cx| {
+        let current = view.read(cx).current().unwrap();
+        assert_eq!(current.format, "chm");
+        let rows = current
+            .tree
+            .list("", rz_app::browse::SortKey::Name, true, "");
+        let names = rows.into_iter().map(|row| row.name).collect::<Vec<_>>();
+        assert!(names.contains(&"a.htm".to_string()));
+        assert!(names.contains(&"large.bin".to_string()));
+        assert!(names.contains(&"项目.htm".to_string()));
+    });
+}
+
+#[gpui_kit::test]
 fn several_archives_keep_their_own_folder_and_tabs_close_cleanly(cx: &mut TestAppContext) {
     let tmp = tempfile::tempdir().unwrap();
     let a = make_archive(tmp.path(), "a.zip", None);

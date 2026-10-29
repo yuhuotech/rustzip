@@ -134,14 +134,14 @@ impl ArchiveTree {
                 continue;
             }
             let path = clean_path(&e.path);
-            all.size += e.size;
-            all.packed += e.packed_size.unwrap_or(0);
+            all.size = all.size.saturating_add(e.size);
+            all.packed = all.packed.saturating_add(e.packed_size.unwrap_or(0));
             all.files += 1;
             let mut dir = split_parent(&path).0;
             loop {
                 let t = totals.entry(dir.to_string()).or_default();
-                t.size += e.size;
-                t.packed += e.packed_size.unwrap_or(0);
+                t.size = t.size.saturating_add(e.size);
+                t.packed = t.packed.saturating_add(e.packed_size.unwrap_or(0));
                 t.files += 1;
                 if dir.is_empty() {
                     break;
@@ -483,6 +483,17 @@ mod tests {
         );
         // Each test entry packs to half its size: 50 + 1000 + 250 + 150 + 4500.
         assert_eq!(t.total_packed(), Some(5950));
+    }
+
+    #[test]
+    fn untrusted_entry_size_totals_saturate_instead_of_wrapping() {
+        let mut first = file("a", u64::MAX);
+        first.packed_size = Some(u64::MAX);
+        let mut second = file("b", 1);
+        second.packed_size = Some(1);
+        let t = ArchiveTree::build(vec![first, second]);
+        assert_eq!(t.total_size(), u64::MAX);
+        assert_eq!(t.total_packed(), Some(u64::MAX));
     }
 
     #[test]

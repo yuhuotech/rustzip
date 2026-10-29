@@ -6,6 +6,9 @@ const WINDOWS: &str = include_str!("../../../packaging/windows/rustzip.iss");
 const LINUX_DESKTOP: &str = include_str!("../../../packaging/linux/rustzip.desktop");
 const LINUX_NEMO: &str = include_str!("../../../packaging/linux/rustzip-extract.nemo_action");
 const WINDOWS_INSTALLER: &str = include_str!("../../../packaging/windows/rustzip.iss");
+const MACOS_INFO: &str = include_str!("../../../packaging/macos/Info.plist.in");
+const MACOS_BUILD: &str = include_str!("../../../packaging/macos/build-app.sh");
+const LINUX_TARBALL: &str = include_str!("../../../packaging/linux/build-tarball.sh");
 
 #[test]
 fn windows_open_with_and_extract_support_the_same_archive_extensions() {
@@ -44,7 +47,7 @@ fn windows_open_with_and_extract_support_the_same_archive_extensions() {
     assert_eq!(open, extract);
     assert_eq!(rar_entries, 3);
     for extension in [
-        "zip", "7z", "rar", "lz4", "iso", "cab", "cpio", "deb", "rpm",
+        "zip", "7z", "rar", "lz4", "iso", "cab", "cpio", "deb", "rpm", "chm",
     ] {
         assert!(open.contains(extension), "{extension} is missing");
     }
@@ -60,6 +63,22 @@ fn optional_rar_is_not_advertised_in_default_linux_descriptors() {
 }
 
 #[test]
+fn chm_is_advertised_in_linux_descriptors() {
+    for descriptor in [LINUX_DESKTOP, LINUX_NEMO] {
+        assert!(descriptor.contains("application/vnd.ms-htmlhelp"));
+    }
+}
+
+#[test]
+fn chm_is_listed_as_a_read_only_macos_document_type() {
+    assert!(MACOS_INFO.contains("<string>chm</string>"));
+    assert!(MACOS_INFO.contains("<key>CFBundleTypeRole</key><string>Viewer</string>"));
+    assert!(MACOS_BUILD.contains("packaging/licenses/libchm.txt"));
+    assert!(LINUX_TARBALL.contains("packaging/licenses/libchm.txt"));
+    assert!(LINUX_TARBALL.contains("libchm-license.txt"));
+}
+
+#[test]
 fn windows_installer_uses_the_bundled_simplified_chinese_language_file() {
     let language = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../packaging/windows/ChineseSimplified.isl");
@@ -68,6 +87,16 @@ fn windows_installer_uses_the_bundled_simplified_chinese_language_file() {
     assert!(
         std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../packaging/licenses/inno-chinese-translation.txt")
+            .is_file()
+    );
+}
+
+#[test]
+fn windows_installer_includes_the_chm_reader_license() {
+    assert!(WINDOWS_INSTALLER.contains(r#"DestName: "libchm.txt""#));
+    assert!(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../packaging/licenses/libchm.txt")
             .is_file()
     );
 }

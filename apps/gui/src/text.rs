@@ -154,10 +154,8 @@ pub fn tr(language: &str, key: &str) -> &'static str {
         .unwrap_or("?")
 }
 
-/// Archive types people know by name but that no backend reads yet.
-const KNOWN_ARCHIVE_EXTENSIONS: [&str; 12] = [
-    "dmg", "wim", "arj", "lzh", "rpm", "xar", "z", "img", "chm", "nsis", "sit", "lha",
-];
+/// Unsupported archive-like extensions that still deserve a format-specific hint.
+const KNOWN_ARCHIVE_EXTENSIONS: [&str; 7] = ["dmg", "wim", "arj", "z", "img", "nsis", "sit"];
 
 /// Turns a failure to open `path` into a sentence a non-technical user can act on.
 pub fn open_error(language: &str, path: &std::path::Path, error: &rz_core::Error) -> &'static str {

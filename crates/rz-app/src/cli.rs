@@ -152,12 +152,14 @@ pub fn test_archive(
     if let Some(password) = password {
         reader.set_password(password)?;
     }
+    reader.set_read_control(cancel.clone(), u64::MAX);
     let entries = reader.entries()?;
     let total_entries = entries.len() as u64;
     let bytes_total = entries
         .iter()
         .filter(|entry| entry.kind == EntryKind::File)
         .fold(0u64, |total, entry| total.saturating_add(entry.size));
+    reader.set_read_control(cancel.clone(), bytes_total);
     let mut buffer = vec![0u8; 256 * 1024];
     let (mut entries_done, mut bytes_done) = (0u64, 0u64);
     reader.for_each(&mut |entry, data| {
@@ -165,9 +167,13 @@ pub fn test_archive(
         if entry.kind == EntryKind::File {
             loop {
                 cancel.check()?;
-                let count = data
-                    .read(&mut buffer)
-                    .map_err(|error| Error::Corrupt(format!("{}: {error}", entry.path)))?;
+                let count = data.read(&mut buffer).map_err(|error| {
+                    if cancel.is_cancelled() {
+                        Error::Cancelled
+                    } else {
+                        Error::Corrupt(format!("{}: {error}", entry.path))
+                    }
+                })?;
                 if count == 0 {
                     break;
                 }

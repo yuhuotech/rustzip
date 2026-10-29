@@ -31,7 +31,7 @@ rz h <file>... [-a sha256|blake3]                             calculate hashes\n
 Create formats: .zip .7z .tar .tar.gz .tar.xz .tar.zst .tar.bz2 .tar.lz4\n\
                 (also .tgz .txz .tzst .tbz2)\n\
                 .gz .xz .zst .bz2 .lz4 (one file)\n\
-Read formats:   all of the above, plus .iso .cab .cpio .ar .lha .lzh .xar .rpm (.deb uses AR)\n\
+Read formats:   all of the above, plus .iso .cab .cpio .ar .lha .lzh .xar .rpm .chm (.deb uses AR)\n\
                 .rar is available only when built with the optional `rar` feature\n";
 
 #[derive(Default)]

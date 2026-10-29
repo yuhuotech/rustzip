@@ -30,6 +30,72 @@ fn sample(root: &Path) {
     fs::write(root.join("proj/empty.bin"), "").unwrap();
 }
 
+#[test]
+fn chm_fixture_lists_tests_and_extracts_through_the_cli() {
+    let tmp = tempfile::tempdir().unwrap();
+    let archive = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../crates/rz-formats/tests/fixtures/chm_basic.chm");
+
+    let listing = rz(&["l", p(&archive)]);
+    let (stdout, stderr) = s(&listing);
+    assert!(listing.status.success(), "{}", s(&listing).1);
+    for name in [
+        "a.htm",
+        "b.htm",
+        "empty.txt",
+        "large.bin",
+        "style.css",
+        "项目.htm",
+    ] {
+        assert!(stdout.contains(name), "missing {name}: {stdout}");
+    }
+    assert!(
+        stderr.contains("items,"),
+        "missing listing progress: {stderr}"
+    );
+
+    let tested = rz(&["t", p(&archive)]);
+    assert!(tested.status.success(), "{}", s(&tested).1);
+
+    let output = tmp.path().join("out");
+    let extracted = rz(&["x", p(&archive), "-o", p(&output)]);
+    assert!(extracted.status.success(), "{}", s(&extracted).1);
+    for (name, expected) in [
+        (
+            "a.htm",
+            include_bytes!("../../../crates/rz-formats/tests/fixtures/chm_basic_sources/a.htm")
+                .as_slice(),
+        ),
+        (
+            "b.htm",
+            include_bytes!("../../../crates/rz-formats/tests/fixtures/chm_basic_sources/b.htm")
+                .as_slice(),
+        ),
+        (
+            "empty.txt",
+            include_bytes!("../../../crates/rz-formats/tests/fixtures/chm_basic_sources/empty.txt")
+                .as_slice(),
+        ),
+        (
+            "large.bin",
+            include_bytes!("../../../crates/rz-formats/tests/fixtures/chm_basic_sources/large.bin")
+                .as_slice(),
+        ),
+        (
+            "style.css",
+            include_bytes!("../../../crates/rz-formats/tests/fixtures/chm_basic_sources/style.css")
+                .as_slice(),
+        ),
+        (
+            "项目.htm",
+            include_bytes!("../../../crates/rz-formats/tests/fixtures/chm_basic_sources/项目.htm")
+                .as_slice(),
+        ),
+    ] {
+        assert_eq!(fs::read(output.join(name)).unwrap(), expected, "{name}");
+    }
+}
+
 fn password_file(root: &Path, name: &str, password: &str) -> String {
     let path = root.join(name);
     fs::write(&path, format!("{password}\n")).unwrap();

@@ -793,6 +793,7 @@ fn run(
             encoding,
         } => {
             let mut reader = rz_formats::open(archive)?;
+            reader.set_read_control(token.clone(), u64::MAX);
             if let Some(enc) = encoding {
                 reader.set_encoding(enc)?;
             }
@@ -864,7 +865,11 @@ fn run(
             if let Some(pw) = password {
                 reader.set_password(pw)?;
             }
-            let total: u64 = reader.entries()?.iter().map(|e| e.size).sum();
+            let total = reader
+                .entries()?
+                .iter()
+                .fold(0u64, |total, entry| total.saturating_add(entry.size));
+            reader.set_read_control(token.clone(), total);
             let (mut files, mut bytes) = (0u64, 0u64);
             let mut buf = vec![0u8; 256 * 1024];
             reader.for_each(&mut |e, data| {
@@ -872,9 +877,13 @@ fn run(
                 if e.kind == EntryKind::File {
                     loop {
                         token.check()?;
-                        let n = data
-                            .read(&mut buf)
-                            .map_err(|err| Error::Corrupt(format!("{}: {err}", e.path)))?;
+                        let n = data.read(&mut buf).map_err(|err| {
+                            if token.is_cancelled() {
+                                Error::Cancelled
+                            } else {
+                                Error::Corrupt(format!("{}: {err}", e.path))
+                            }
+                        })?;
                         if n == 0 {
                             break;
                         }
