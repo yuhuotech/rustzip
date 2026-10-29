@@ -50,3 +50,4 @@
 - Dolphin / Nemo 的真实桌面点击、Linux 低图形能力设备、三平台百万条真实归档列表仍待验收。
 - 该阶段的默认安装包不启用 RAR。之后 D38 已为 RAR 增加可取消且受 `max_total` 限制的逐块输出；正式发行仍需在三平台验证启用 RAR 的构建、许可证和发行策略，默认包继续关闭 RAR。
 - Release dry-run [40950855468](https://github.com/yuhuotech/rustzip/actions/runs/40950855468) 的汇总验签因 runner 缺少 `libacl` 开发库失败；之后在 `assemble` 加入原生依赖安装 action。修复后的 dry-run [40958424663](https://github.com/yuhuotech/rustzip/actions/runs/40958424663) 四个平台构建、签名和汇总验签通过；下载的 bundle 已确认 `update.json` 中有四个平台资产和对应文件名，正式发布仍未执行。
+- CI [40958398639](https://github.com/yuhuotech/rustzip/actions/runs/40958398639) 对提交 `7ad1791` 的七个 job 全部通过：macOS / Ubuntu / Windows core、三平台 GUI、基准均成功。Windows core job（含 default 与 all-features）耗时 17 分 37 秒；Windows GUI 与安装器冒烟耗时 18 分 44 秒；macOS core 11 分 35 秒，Ubuntu core 7 分 24 秒。Windows GUI job 的缓存保存步骤有非致命失败告警，job 最终仍通过。
