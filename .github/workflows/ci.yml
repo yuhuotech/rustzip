@@ -50,8 +50,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Linux is left out until the GPUI Kit system packages are verified on a runner.
-        os: [macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
@@ -61,6 +61,13 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: ./.github/actions/native-archive-deps
         id: native-deps
+      - name: Install Linux GUI dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxcb1-dev libxkbcommon-dev libxkbcommon-x11-dev \
+            libwayland-dev libvulkan-dev libfontconfig1-dev libasound2-dev libssl-dev \
+            pkg-config xvfb
       - name: Save vcpkg binary packages before tests
         if: runner.os == 'Windows'
         uses: actions/cache/save@v4
@@ -68,7 +75,12 @@ jobs:
           path: ${{ runner.temp }}\rustzip-vcpkg-cache
           key: rustzip-vcpkg-x64-windows-static-md-${{ steps.native-deps.outputs.vcpkg-revision }}-v2
       - run: cargo clippy -p rustzip-gui --all-targets -- -D warnings
-      - run: cargo test -p rustzip-gui
+      - name: Test GUI under Xvfb (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 cargo test -p rustzip-gui
+      - name: Test GUI
+        if: runner.os != 'Linux'
+        run: cargo test -p rustzip-gui
       - name: Windows installer smoke test
         if: runner.os == 'Windows'
         timeout-minutes: 30

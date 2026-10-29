@@ -4,7 +4,7 @@
 
 ## 工作清单
 
-1. 手动运行已配置的三平台 CI，检查每个任务和实际提交；失败时定位并修复可在当前工作区处理的问题。手动验收不改变自动触发策略。
+1. 手动运行已配置的三平台 CI，检查每个任务和实际提交；GUI job 包含 macOS、Windows 和 Ubuntu/Xvfb；失败时定位并修复可在当前工作区处理的问题。手动验收不改变自动触发策略。
 2. 在隔离的 macOS 测试环境验证打包、签名、启动、格式关联声明和钥匙串；通知、Finder 和真实用户交互按实际证据分别记录。
 3. 检查 Windows 安装器、注册表和 CI 覆盖；具备 Windows 原生环境时验证构建、安装 / 卸载、关联菜单、通知、钥匙串、输入法与渲染。自动化结果不代替真实交互。
 4. 基于已有 Ubuntu 验收记录，尽可能在可用 Linux 桌面验证 Dolphin / Nemo；不能运行的桌面环境标记待验收。
@@ -37,6 +37,7 @@
 - 最新跨平台 CI run [40914277975](https://github.com/yuhuotech/rustzip/actions/runs/40914277975) 对提交 `37f7d26`：Ubuntu core、macOS core / GUI、Windows GUI / installer smoke 和基准通过；Windows core 因 checkout 将 CHM HTML fixture 的 LF 转为 CRLF 而失败。已在 `da02032` 为该 fixture 增加 `.gitattributes` 固定 LF，最新提交的三平台 CI 仍待复跑。
 - CI [40920442634](https://github.com/yuhuotech/rustzip/actions/runs/40920442634) 对提交 `da02032`：Ubuntu / macOS core、macOS GUI、Windows GUI / 安装器及基准通过；Windows core 暴露便携 ZIP 权限受 runner 平台默认值影响（`0o100664`，预期 `0o100644`）。ZIP 写入器现明确标注 Unix creator 和 ZIP / tar 兼容权限（目录 `0755`、普通文件 `0644`），大条目分块路径也已固定写入该权限。Linux 安装器隔离安装 / 卸载冒烟已在本机配合 GNU `install` 通过，并已加入 Ubuntu core CI；修复后的三平台 CI 待运行。
 - 最新 CI [40926953354](https://github.com/yuhuotech/rustzip/actions/runs/40926953354) 对提交 `0d43a20` 的六个 job 全部通过。Windows core default / all-features、Windows GUI 与安装器安装 / 注册 / 卸载冒烟通过；Ubuntu core 的 Linux Dolphin / Nemo / Nautilus 安装卸载冒烟通过；macOS core default / all-features、GUI 和基准通过。便携 ZIP 文件权限回归在 Windows runner 通过。
+- 根据 Ubuntu 26.04 的既有全工作区 GUI 与软件渲染验收，将 Linux 加入 GUI CI 矩阵；runner 安装 GPUI 的 X11 / Wayland / Vulkan / 字体依赖，并在 Xvfb 软件渲染下运行 GUI Clippy / 测试。首次 GitHub runner 验证待运行。
 - 本机全工作区默认 / all-features 测试通过自动更新交接用例；系统程序由后台任务启动，签名验证失败时不会调用启动器。当前没有正式签名 Release 可供端到端安装验收，真实安装流程仍待三平台 Release 演练。
 - 最终工作区默认及 all-features 的格式检查、Clippy、全工作区测试均通过；每套测试有三项按环境条件忽略。Windows 和 macOS 的原生编译及桌面测试也在最终 CI 通过。
 

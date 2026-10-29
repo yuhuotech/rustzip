@@ -31,7 +31,7 @@ RustZIP 的主要归档与桌面主流程已实现，Windows CI / 安装器自�
 | P1 | 多语言和无障碍 | 十种语言的 365 个界面资源键已实现；八种新增语言各有完整词条包，覆盖及占位符测试通过。十种菜单选项逐项切换测试通过；设置和窗口顶栏共用语言下拉菜单，系统首选语言读取可用，侧栏使用简短本地化标签并保留省略保护 | Windows 原生语言设置、真实屏幕阅读器、阿拉伯语 RTL 整页布局仍待平台验收 |
 | P1 | 文件关联与系统菜单 | Nautilus 50.2.2 的 Scripts 子菜单在 Ubuntu 26.04 / Xvfb 显示并实际点击验收；解压两个 Unicode 文件后逐字节比对一致，压缩入口启动 RustZIP 创建窗口。Linux 安装器现将 Dolphin 菜单装入 `$XDG_DATA_HOME/kio/servicemenus`，并保留旧版 KDE Frameworks 的 `kservices5/ServiceMenus`；Nemo 动作随 XDG 数据目录安装。Dolphin / Nemo 实机点击仍待验收；macOS 增加已支持格式的“打开方式”声明，尚未实机验证 | 验收 Plasma 6 / KDE Frameworks Dolphin、旧版 Dolphin 和 Nemo 的真实菜单点击；验收 Windows 菜单与 macOS 格式关联；评估 Finder 右键及 Quick Look |
 | P1 | 持续 fuzz | nightly ASan 定时工作流覆盖 ZIP recovery、CHM、bzip2、RAR；GitHub 手动 run `40912070562` 四个 target 全部通过并保存 corpus cache，分别执行 467k / 47k / 7k / 182k 次，无 crash | 观察每日 schedule 运行和 corpus 增长；如出现 crash，确认 14 天 artifact 保存并 triage |
-| P1 | 跨平台桌面与打包 | macOS `.app` / DMG arm64 签名与启动通过，尚未公证。Ubuntu 26.04.1 x86_64 的全工作区 all-features 测试与 Clippy 通过（3 项环境条件测试忽略）；Linux tarball 构建、隔离安装 / 卸载、Nautilus 菜单点击通过。真实 Wayland GUI 启动、GNOME Secret Service 唯一标签往返、通知启用投递 / 关闭静默通过。Windows CI 已通过原生构建和安装器自动冒烟；桌面人工验收仍缺。详细证据见 [第二阶段验收](phase-2-platform-acceptance.md) | Windows 原生输入法 / 渲染 / 钥匙串 / 通知、macOS 公证 / Finder / 通知、Dolphin / Nemo 点击、屏幕阅读器、正式三平台发布流程仍需验收 |
+| P1 | 跨平台桌面与打包 | macOS `.app` / DMG arm64 签名与启动通过，尚未公证。Ubuntu 26.04.1 x86_64 的全工作区 all-features 测试与 Clippy 通过（3 项环境条件测试忽略）；Linux tarball 构建、隔离安装 / 卸载、Nautilus 菜单点击通过。真实 Wayland GUI 启动、GNOME Secret Service 唯一标签往返、通知启用投递 / 关闭静默通过。Windows CI 已通过原生构建和安装器自动冒烟；GUI CI 已加入 Ubuntu/Xvfb，首次 runner 结果待验证。桌面人工验收仍缺。详细证据见 [第二阶段验收](phase-2-platform-acceptance.md) | Windows 原生输入法 / 渲染 / 钥匙串 / 通知、macOS 公证 / Finder / 通知、Dolphin / Nemo 点击、屏幕阅读器、正式三平台发布流程仍需验收 |
 | P1 | 自动更新 | 有安装包签名校验、更新发现和下载后交给系统安装器的流程；产品规格已按决策 D8 统一为用户操作安装器。交接在后台执行，通过自动化用例验证签名成功后才启动、篡改内容拒绝启动及启动失败提示 | 用正式签名 Release 在三平台验证清单下载、安装包校验和系统安装器交接；安装器的替换和回滚不由应用实现 |
 | P2 | 压缩包对比、虚拟磁盘挂载、云端按需解压、WASM 插件、自解压包 | 均未开始，属于远期需求 | 暂缓；根据用户需求和安全 / 平台成本分别立项 |
 
@@ -41,7 +41,7 @@ RustZIP 的主要归档与桌面主流程已实现，Windows CI / 安装器自�
 
 ### 阶段 A：跨平台验收与规格收口
 
-1. 补齐 Windows 原生 GUI、中文输入、渲染、长列表和安装器验收；Ubuntu 26.04 的 GUI、全工作区测试、Nautilus 菜单和 tarball 安装已通过，继续评估 Linux GUI CI。
+1. 补齐 Windows 原生 GUI、中文输入、渲染、长列表和安装器验收；Ubuntu 26.04 的 GUI、全工作区测试、Nautilus 菜单和 tarball 安装已通过，Linux GUI/Xvfb CI 已加入，等待首轮 runner 结果。
 2. 在 Windows 实机验证系统钥匙串、注册表菜单和安装 / 升级产物；在 macOS 验收系统钥匙串与通知。Linux 的 Secret Service、通知、Nautilus 菜单及安装 / 卸载已有 Ubuntu 证据；Dolphin / Nemo 仍需实际桌面点击验收。
 3. ~~统一自动更新产品规格与决策。~~ 已按 D8 明确为验签后交给系统安装器，不静默替换；正式发布时仍需验证实际安装流程。
 4. 为长尾格式建立格式清单：样本、读写档位、加密 / 多卷情况、许可证与依赖、明确的不支持提示。
