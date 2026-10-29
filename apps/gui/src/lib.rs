@@ -7,6 +7,7 @@ pub mod assets;
 pub mod brand;
 pub mod dialog;
 pub mod history;
+mod image_preview;
 pub mod launch;
 pub mod location_state;
 pub mod locations;

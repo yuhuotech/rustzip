@@ -1951,13 +1951,21 @@ impl MainView {
             let data = cx
                 .background_executor()
                 .spawn(async move {
-                    rz_app::preview::read_entry(
+                    let data = rz_app::preview::read_entry(
                         &archive_bg,
                         &entry,
                         password.as_deref(),
                         encoding_bg.as_deref(),
                         limit,
-                    )
+                    )?;
+                    if image_format.is_some()
+                        && !crate::image_preview::dimensions_within_limit(&data)
+                    {
+                        return Err(Error::LimitExceeded(
+                            "image dimensions exceed the preview limit".into(),
+                        ));
+                    }
+                    Ok(data)
                 })
                 .await;
             // A picture that cannot be read just keeps the type tile.
