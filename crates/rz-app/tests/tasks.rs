@@ -202,6 +202,29 @@ fn comparison_runs_through_the_task_queue_and_keeps_its_report() {
 }
 
 #[test]
+fn comparison_matches_solid_sevenz_and_compressed_tar_entries() {
+    let tmp = tempfile::tempdir().unwrap();
+    let source = tree(tmp.path());
+    let manager = TaskManager::new(1);
+    let sevenz = tmp.path().join("solid.7z");
+    let tar = tmp.path().join("copy.tar.gz");
+    make_archive(&manager, vec![source.clone()], &sevenz);
+    make_archive(&manager, vec![source], &tar);
+
+    let id = manager.submit(JobSpec::Compare {
+        left: sevenz,
+        right: tar,
+        options: rz_app::compare::CompareOptions::default(),
+    });
+    let task = manager.wait_for(id, WAIT).unwrap();
+
+    assert_eq!(task.state, TaskState::Done, "{:?}", task.error);
+    let report = task.summary.unwrap().comparison.unwrap();
+    assert!(report.differences.is_empty(), "{:?}", report.differences);
+    assert_eq!(report.bytes_hashed, 2 * (13 + 8 + 400_000));
+}
+
+#[test]
 fn extraction_uses_a_folder_only_when_the_archive_has_loose_files() {
     let tmp = tempfile::tempdir().unwrap();
     let m = TaskManager::new(2);
