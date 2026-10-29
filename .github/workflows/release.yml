@@ -179,7 +179,18 @@ jobs:
             export RZ_UPDATE_KEY
           fi
           cargo build --release -p rz-release
-          file="$(ls dist/RustZIP-*.dmg dist/RustZIP-*.exe dist/RustZIP-*.tar.gz 2>/dev/null | head -n 1)"
+          case "${{ matrix.platform }}" in
+            macos-aarch64|macos-x86_64) pattern='RustZIP-*.dmg' ;;
+            windows-x86_64) pattern='RustZIP-*.exe' ;;
+            linux-x86_64) pattern='RustZIP-*.tar.gz' ;;
+            *) echo "Unknown release platform: ${{ matrix.platform }}" >&2; exit 1 ;;
+          esac
+          mapfile -t packages < <(find dist -maxdepth 1 -type f -name "$pattern" -print)
+          if [[ ${#packages[@]} -ne 1 ]]; then
+            echo "Expected one $pattern package for ${{ matrix.platform }}, found ${#packages[@]}" >&2
+            exit 1
+          fi
+          file="${packages[0]}"
           name="$(basename "$file")"
           url="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/$name"
           bin=target/release/rz-release
