@@ -1,3 +1,8 @@
+param(
+    [switch]$RarEnabled,
+    [string]$OutputDir
+)
+
 $ErrorActionPreference = "Stop"
 
 $iscc = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
@@ -14,21 +19,26 @@ $owned = @(
     "$classes\Directory\shell\RustZIP.Compress",
     "$classes\SystemFileAssociations\.zip\shell\RustZIP.Extract"
 )
+$rarContext = "$classes\SystemFileAssociations\.rar\shell\RustZIP.Extract"
+if ($RarEnabled) { $owned += $rarContext }
 foreach ($key in $owned) {
     if (Test-Path -LiteralPath $key) { throw "Smoke test requires a clean account: $key" }
 }
 
 $work = Join-Path $env:RUNNER_TEMP ("rustzip-installer-" + [guid]::NewGuid().ToString("N"))
 $install = Join-Path $work "app"
-$dist = Join-Path $work "dist"
+$dist = if ([string]::IsNullOrWhiteSpace($OutputDir)) { Join-Path $work "dist" } else { $OutputDir }
 New-Item -ItemType Directory -Path $dist | Out-Null
 $exe = Join-Path $PWD "target\release\rustzip.exe"
 $zipKey = "$classes\.zip"
 $zipBefore = if (Test-Path -LiteralPath $zipKey) { (Get-Item -LiteralPath $zipKey).GetValue("") } else { $null }
 
-cargo build --release -p rustzip-gui
+$buildArgs = @("build", "--release", "-p", "rustzip-gui")
+if ($RarEnabled) { $buildArgs += @("--features", "rar") }
+& cargo @buildArgs
 if ($LASTEXITCODE -ne 0) { throw "Windows GUI build failed: $LASTEXITCODE" }
-& $iscc "/DAppVersion=0.1.0" "/DSourceExe=$exe" "/DOutDir=$dist" "packaging\windows\rustzip.iss"
+$rarEnabledDefine = if ($RarEnabled) { "/DRarEnabled=1" } else { "/DRarEnabled=0" }
+& $iscc "/DAppVersion=0.1.0" "/DSourceExe=$exe" "/DOutDir=$dist" $rarEnabledDefine "packaging\windows\rustzip.iss"
 if ($LASTEXITCODE -ne 0) { throw "Windows installer compilation failed: $LASTEXITCODE" }
 $installer = Join-Path $dist "RustZIP-0.1.0-windows-x86_64.exe"
 if (-not (Test-Path $installer)) { throw "Windows installer was not created" }
@@ -39,7 +49,9 @@ try {
         "/DIR=`"$install`"", "/TASKS=contextmenu,openwith", "/LOG=`"$work\install.log`""
     ) -Wait -PassThru
     if ($process.ExitCode -ne 0) { throw "Installer failed: $($process.ExitCode)" }
-    foreach ($file in @("rustzip.exe", "licenses\zlib.txt", "licenses\libchm.txt", "licenses\pbz2.txt", "licenses\pbz2-notice.txt", "licenses\inno-chinese-translation.txt")) {
+    $installedFiles = @("rustzip.exe", "licenses\zlib.txt", "licenses\libchm.txt", "licenses\pbz2.txt", "licenses\pbz2-notice.txt", "licenses\inno-chinese-translation.txt")
+    if ($RarEnabled) { $installedFiles += "unrar-license.txt" }
+    foreach ($file in $installedFiles) {
         if (-not (Test-Path -LiteralPath (Join-Path $install $file))) {
             throw "Installed file missing: $file"
         }
@@ -60,8 +72,15 @@ try {
         throw "ZIP Open With registration is missing"
     }
     $rarOpen = Get-Item -LiteralPath "$classes\.rar\OpenWithProgids" -ErrorAction SilentlyContinue
-    if ($null -ne $rarOpen -and $rarOpen.GetValueNames() -contains "RustZIP.Archive") {
+    $rarRegistered = $null -ne $rarOpen -and $rarOpen.GetValueNames() -contains "RustZIP.Archive"
+    if ($RarEnabled -and -not $rarRegistered) {
+        throw "RAR Open With registration is missing from the RAR package"
+    }
+    if (-not $RarEnabled -and $rarRegistered) {
         throw "Default build must not register RAR"
+    }
+    if ($RarEnabled -and -not (Test-Path -LiteralPath $rarContext)) {
+        throw "RAR Extract here context-menu registration is missing"
     }
     $zipAfter = if (Test-Path -LiteralPath $zipKey) { (Get-Item -LiteralPath $zipKey).GetValue("") } else { $null }
     if ($zipAfter -ne $zipBefore) { throw "Installation changed the ZIP default handler" }
@@ -87,6 +106,10 @@ if (Test-Path -LiteralPath (Join-Path $install "rustzip.exe")) {
 $zipOpen = Get-Item -LiteralPath "$classes\.zip\OpenWithProgids" -ErrorAction SilentlyContinue
 if ($null -ne $zipOpen -and $zipOpen.GetValueNames() -contains "RustZIP.Archive") {
     throw "ZIP Open With registration survived uninstall"
+}
+$rarOpen = Get-Item -LiteralPath "$classes\.rar\OpenWithProgids" -ErrorAction SilentlyContinue
+if ($null -ne $rarOpen -and $rarOpen.GetValueNames() -contains "RustZIP.Archive") {
+    throw "RAR Open With registration survived uninstall"
 }
 $zipAfterUninstall = if (Test-Path -LiteralPath $zipKey) { (Get-Item -LiteralPath $zipKey).GetValue("") } else { $null }
 if ($zipAfterUninstall -ne $zipBefore) { throw "Uninstall changed the ZIP default handler" }

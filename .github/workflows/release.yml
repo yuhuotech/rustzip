@@ -14,6 +14,11 @@ on:
         required: true
         type: boolean
         default: true
+      validate_rar_packages:
+        description: Build and inspect opt-in RAR packages for all platforms without publishing them.
+        required: true
+        type: boolean
+        default: false
   # Automatic tag builds and releases are paused until the project is ready.
   # push:
   #   tags: ["v*"]
@@ -206,6 +211,112 @@ jobs:
             dist/RustZIP-*.exe
             dist/RustZIP-*.tar.gz
             dist/*.asset.json
+
+  rar-package-validation:
+    needs: dry-run-signing-key
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && inputs.validate_rar_packages }}
+    name: Validate RAR package ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-15, platform: macos-aarch64, target: aarch64-apple-darwin }
+          - { os: macos-15-intel, platform: macos-x86_64, target: x86_64-apple-darwin }
+          - { os: windows-latest, platform: windows-x86_64, target: x86_64-pc-windows-msvc }
+          - { os: ubuntu-22.04, platform: linux-x86_64, target: x86_64-unknown-linux-gnu }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+      - uses: ./.github/actions/native-archive-deps
+      - name: Install Linux GUI dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxcb1-dev libxkbcommon-dev libxkbcommon-x11-dev \
+            libwayland-dev libvulkan-dev libfontconfig1-dev libasound2-dev libssl-dev pkg-config
+      - name: Build and inspect RAR macOS package
+        if: runner.os == 'macOS'
+        env:
+          TARGET: ${{ matrix.target }}
+          RZ_WITH_RAR: "1"
+        shell: bash
+        run: |
+          mkdir -p dist "$RUNNER_TEMP/rustzip-rar-mounted"
+          packaging/macos/build-app.sh dist
+          dmg=(dist/*.dmg)
+          if [[ ${#dmg[@]} -ne 1 ]]; then
+            echo "Expected one RAR test DMG, found ${#dmg[@]}" >&2
+            exit 1
+          fi
+          mount="$RUNNER_TEMP/rustzip-rar-mounted"
+          hdiutil attach -nobrowse -readonly -mountpoint "$mount" "${dmg[0]}"
+          trap 'hdiutil detach "$mount" -quiet || true' EXIT
+          app="$mount/RustZIP.app"
+          test -f "$app/Contents/Resources/unrar-license.txt"
+          grep -Fq '<string>rar</string>' "$app/Contents/Info.plist"
+          codesign --verify --deep --strict "$app"
+          hdiutil verify "${dmg[0]}"
+      - name: Build and inspect RAR Linux package
+        if: runner.os == 'Linux'
+        env:
+          RZ_WITH_RAR: "1"
+        shell: bash
+        run: |
+          mkdir -p dist "$RUNNER_TEMP/rustzip-rar-package"
+          package="$(packaging/linux/build-tarball.sh dist)"
+          tar -xzf "$package" -C "$RUNNER_TEMP/rustzip-rar-package"
+          stage="$(find "$RUNNER_TEMP/rustzip-rar-package" -mindepth 1 -maxdepth 1 -type d -print -quit)"
+          test -n "$stage"
+          test -x "$stage/rustzip"
+          test -f "$stage/unrar-license.txt"
+          grep -Eq '^MimeType=.*application/vnd\.rar' "$stage/rustzip.desktop"
+          grep -Eq '^Mimetypes=.*application/vnd\.rar' "$stage/rustzip-extract.nemo_action"
+      - name: Build, install and inspect RAR Windows package
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./packaging/windows/ci-smoke.ps1 -RarEnabled -OutputDir "$PWD\dist"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rar-package-${{ matrix.platform }}
+          path: |
+            dist/RustZIP-*.dmg
+            dist/RustZIP-*.exe
+            dist/RustZIP-*.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+  rar-validation-bundle:
+    needs: rar-package-validation
+    if: ${{ success() && github.event_name == 'workflow_dispatch' && inputs.dry_run && inputs.validate_rar_packages }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: rar-package-*
+          path: rar-packages
+          merge-multiple: true
+      - name: Check all platform packages are present
+        shell: bash
+        run: |
+          mapfile -t packages < <(find rar-packages -maxdepth 1 -type f -print | sort)
+          if [[ ${#packages[@]} -ne 4 ]]; then
+            printf 'Expected four RAR packages, found %s\n' "${#packages[@]}" >&2
+            printf '%s\n' "${packages[@]}" >&2
+            exit 1
+          fi
+          printf '%s\n' "${packages[@]}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rar-package-validation-bundle
+          path: rar-packages/RustZIP-*
+          if-no-files-found: error
+          retention-days: 14
 
   assemble:
     needs: [build, dry-run-signing-key]
