@@ -11,7 +11,7 @@
 - **ZIP 依赖升级**：工作区统一升级到 `zip` 9.1.3，替换受安全公告影响的 2.6.1 与旧 zstd 依赖。应用解压继续走 RustZIP 引擎安全路径。cargo-deny 配置见仓库根目录 `deny.toml`；无安全升级的上游维护状态公告保留有原因的忽略项。
 - **ZIP 编辑元数据保真**：快路径放开归档 / 条目注释输入，复制时保留归档注释、ZIP64 扩展数据及未修改条目的文件注释 / 扩展字段；拒绝带自解压前缀的快路径输入。通过删除、重命名后逐字节检查注释和自定义 extra field。见 D42。
 - **fuzz**：新增 bzip2、RAR fuzz target 和 bzip2 seed。nightly ASan 对 bzip2、CHM、RAR、ZIP recovery 分别运行约 15 秒，约 11,000、21,000、67,000、91,000 次变异，未发现崩溃。短时结果不替代持续 fuzz runner。
-- **持续 fuzz runner**：新增 `.github/workflows/fuzz.yml`，每日运行四个 nightly ASan target，最多同时跑两个；手动运行时每 target 60 秒，定时运行每 target 180 秒；保留 14 天崩溃 artifact，并按 target 缓存 corpus。`fuzz/seeds/` 保存最小 ZIP、bzip2、CHM 和 RAR 输入。工作流尚未在 GitHub 上运行；首次远端运行与后续覆盖增长仍待验收。
+- **持续 fuzz runner**：新增 `.github/workflows/fuzz.yml`，每日运行四个 nightly ASan target，最多同时跑两个；手动运行时每 target 60 秒，定时运行每 target 180 秒；保留 14 天崩溃 artifact，并按 target 缓存 corpus。`fuzz/seeds/` 保存最小 ZIP、bzip2、CHM 和 RAR 输入。GitHub 首轮 run [40907566477](https://github.com/yuhuotech/rustzip/actions/runs/40907566477) 确认 cache / seed 步骤成功，但 fuzz build 错选仓库固定的 stable `rustc`，ASan 的 nightly 参数被拒绝；工作流现显式导出 nightly `rustc` 路径，修复后的远端运行仍待验收。
 
 ## 本机验证
 
@@ -23,7 +23,7 @@
 - `cargo fuzz run zip_recovery` 在 ZIP 9.1.3 上进行约 91,000 次短时变异，未发现崩溃。
 - `cargo deny check --hide-inclusion-graph` 通过 licenses、sources、bans、advisories；仍报告多个传递依赖版本并存。advisory 忽略项都来自上游注明暂无安全升级的依赖。
 - 上述依赖审计记录来自本阶段较早的检查。最终改动只将已有传递依赖 `crc32fast` 加为直接依赖；本次环境没有安装 `cargo-deny` 可执行文件，未能重跑依赖审计。该版本的 Cargo.toml 声明 `MIT OR Apache-2.0`，符合项目许可白名单。
-- 本机 nightly ASan 下四个 fuzz target 均构建成功；reviewed seed 各运行 5 秒，ZIP recovery / CHM / bzip2 / RAR 分别约 29,605 / 7,995 / 4,462 / 20,552 次变异，未发现崩溃。`actionlint` 检查 `.github/workflows/fuzz.yml` 通过；Actions 远端每日任务仍待首次执行。
+- 本机 nightly ASan 下四个 fuzz target 均构建成功；reviewed seed 各运行 5 秒，ZIP recovery / CHM / bzip2 / RAR 分别约 29,605 / 7,995 / 4,462 / 20,552 次变异，未发现崩溃。`actionlint` 检查 `.github/workflows/fuzz.yml` 通过；修复 nightly rustc 选择后的远端首轮运行待验证。
 - `cargo test -p rz-formats --test zip_parallel --all-features` 通过 6 项；36 MiB CJK 名称、重复块伪随机内容分块往返通过本机 `unzip -t`。引擎 40 MiB 文件流式解压和取消清理用例通过；源在第二块后失败时 worker 正常退出。
 - `cargo test -p rz-app --lib zip_copy_edit_preserves_archive_and_entry_comments_and_extra_fields` 通过；验证删除和重命名后的归档注释、文件注释及自定义 extra field。
 - 本机 nightly ASan 下四个 fuzz target 均构建成功；用 reviewed seed 各运行 5 秒，ZIP recovery / CHM / bzip2 / RAR 分别约 29,605 / 7,995 / 4,462 / 20,552 次变异，未发现崩溃。`actionlint` 检查 `.github/workflows/fuzz.yml` 通过。

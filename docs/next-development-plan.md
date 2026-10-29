@@ -30,7 +30,7 @@ RustZIP 的主要归档与桌面主流程已实现，Windows CI / 安装器自�
 | P1 | 重复文件检测 | GUI 压缩前按内容 BLAKE3 检查同大小普通文件，任务可取消并报告进度；发现重复后可继续压缩或取消，不自动删除；超过 100,000 个文件时可明确选择继续 | 扩充大目录压力样本；自动去重另行评估 |
 | P1 | 多语言和无障碍 | 十种语言的 365 个界面资源键已实现；八种新增语言各有完整词条包，覆盖及占位符测试通过。十种菜单选项逐项切换测试通过；设置和窗口顶栏共用语言下拉菜单，系统首选语言读取可用，侧栏使用简短本地化标签并保留省略保护 | Windows 原生语言设置、真实屏幕阅读器、阿拉伯语 RTL 整页布局仍待平台验收 |
 | P1 | 文件关联与系统菜单 | Nautilus 50.2.2 的 Scripts 子菜单在 Ubuntu 26.04 / Xvfb 显示并实际点击验收；解压两个 Unicode 文件后逐字节比对一致，压缩入口启动 RustZIP 创建窗口；PATH 不含安装目录时仍可解析已安装二进制。免 root 安装/卸载通过；macOS 增加已支持格式的“打开方式”声明，尚未实机验证；Dolphin/Nemo 和 Windows 菜单仍待实机 | 实机验收 macOS 格式关联、Dolphin/Nemo 和 Windows 菜单；评估 Finder 右键及 Quick Look |
-| P1 | 持续 fuzz | nightly ASan 定时工作流覆盖 ZIP recovery、CHM、bzip2、RAR；按 target 恢复并更新 corpus，失败时上传 14 天 crash artifact。配置和种子已在工作区，远端首次运行未验证 | 运行并审查 GitHub Actions 首轮及持续结果，确认 corpus cache 与 crash artifact 可用；triage 任何新 crash |
+| P1 | 持续 fuzz | nightly ASan 定时工作流覆盖 ZIP recovery、CHM、bzip2、RAR；按 target 恢复并更新 corpus，失败时上传 14 天 crash artifact。reviewed seed 和本机 smoke 已通过；GitHub 首次运行发现 stable rustc 选择错误，已修复，远端复验待跑 | 运行并审查修复后的 GitHub Actions 及每日结果，确认 corpus cache 与 crash artifact 可用；triage 任何新 crash |
 | P1 | 跨平台桌面与打包 | macOS `.app` / DMG arm64 签名与启动通过，尚未公证。Ubuntu 26.04.1 x86_64 的全工作区 all-features 测试与 Clippy 通过（3 项环境条件测试忽略）；Linux tarball 构建、隔离安装 / 卸载、Nautilus 菜单点击通过。真实 Wayland GUI 启动、GNOME Secret Service 唯一标签往返、通知启用投递 / 关闭静默通过。Windows CI 已通过原生构建和安装器自动冒烟；桌面人工验收仍缺。详细证据见 [第二阶段验收](phase-2-platform-acceptance.md) | Windows 原生输入法 / 渲染 / 钥匙串 / 通知、macOS 公证 / Finder / 通知、Dolphin / Nemo 点击、屏幕阅读器、正式三平台发布流程仍需验收 |
 | P1 | 自动更新 | 有安装包签名校验、更新发现和下载后交给系统安装器的流程；产品规格已按决策 D8 统一为用户操作安装器。启动系统程序移至后台，启动失败时保留重试入口并提示错误；该改动尚未验证 | 正式发布时验证签名、下载及各平台安装流程；安装器的替换和回滚不由应用实现 |
 | P2 | 压缩包对比、虚拟磁盘挂载、云端按需解压、WASM 插件、自解压包 | 均未开始，属于远期需求 | 暂缓；根据用户需求和安全 / 平台成本分别立项 |
