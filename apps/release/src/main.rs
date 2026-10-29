@@ -3,15 +3,20 @@
 //!     rz-release keygen <private-key-file>
 //!     rz-release sign <version> <platform> <file> <url>        (key in $RZ_UPDATE_KEY)
 //!     rz-release manifest <version> <notes-file> <asset.json>...
+//!     rz-release verify <update.json> <asset-directory> [test-public-key-hex]
 //!
 //! The private key is 32 random bytes as 64 hex characters. It is only ever read from the
 //! environment variable `RZ_UPDATE_KEY` (a repository secret in CI), never from a file in
 //! the repository.
 
 use ed25519_dalek::{Signer, SigningKey};
-use rz_app::update::{hex, signed_message, Asset, Manifest};
+use rz_app::update::{hex, parse_manifest, signed_message, verify_asset, Asset, Manifest};
 use sha2::{Digest, Sha256};
+use std::collections::BTreeSet;
+use std::path::Path;
 use std::process::ExitCode;
+
+const APP_UPDATE_PUBLIC_KEY: [u8; 32] = include!("../../../crates/rz-services/src/update_key.in");
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -26,9 +31,16 @@ fn main() -> ExitCode {
         ["manifest", version, notes, assets @ ..] if !assets.is_empty() => {
             manifest(version, notes, assets)
         }
+        ["verify", manifest_file, asset_dir] => {
+            verify_manifest_file(manifest_file, asset_dir, None)
+        }
+        ["verify", manifest_file, asset_dir, public_key] => {
+            verify_manifest_file(manifest_file, asset_dir, Some(public_key))
+        }
         _ => Err(
             "usage: rz-release keygen <file> | sign <version> <platform> <file> <url> | \
-                  manifest <version> <notes-file> <asset.json>..."
+                  manifest <version> <notes-file> <asset.json>... | \
+                  verify <update.json> <asset-dir> [test-public-key-hex]"
                 .to_string(),
         ),
     };
@@ -133,6 +145,70 @@ fn manifest(version: &str, notes_file: &str, asset_files: &[&str]) -> Result<Str
     serde_json::to_string_pretty(&manifest).map_err(|e| e.to_string())
 }
 
+fn verify_manifest_file(
+    manifest_file: &str,
+    asset_dir: &str,
+    public_key_hex: Option<&str>,
+) -> Result<String, String> {
+    let bytes = std::fs::read(manifest_file).map_err(|e| format!("{manifest_file}: {e}"))?;
+    let manifest = parse_manifest(&bytes).map_err(|e| e.to_string())?;
+    let test_key = public_key_hex
+        .map(|text| {
+            unhex32(text).ok_or_else(|| "test public key must be 64 hex characters".to_string())
+        })
+        .transpose()?;
+    let public_key = test_key.as_ref().unwrap_or(&APP_UPDATE_PUBLIC_KEY);
+    let platforms = verify_manifest_assets(&manifest, Path::new(asset_dir), public_key)?;
+    Ok(format!("verified update assets: {}", platforms.join(", ")))
+}
+
+fn verify_manifest_assets(
+    manifest: &Manifest,
+    asset_dir: &Path,
+    public_key: &[u8; 32],
+) -> Result<Vec<String>, String> {
+    if manifest.assets.is_empty() {
+        return Err("update manifest has no assets".into());
+    }
+    let mut platforms = BTreeSet::new();
+    for asset in &manifest.assets {
+        if !platforms.insert(asset.platform.as_str()) {
+            return Err(format!("duplicate update platform: {}", asset.platform));
+        }
+        if !asset.url.starts_with("https://") || asset.url.contains('?') || asset.url.contains('#')
+        {
+            return Err(format!("unsafe asset URL for {}", asset.platform));
+        }
+        let file_name = asset
+            .url
+            .rsplit('/')
+            .next()
+            .ok_or_else(|| format!("missing asset filename for {}", asset.platform))?;
+        if file_name.is_empty()
+            || file_name == "."
+            || file_name == ".."
+            || !file_name
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_'))
+        {
+            return Err(format!("unsafe asset filename for {}", asset.platform));
+        }
+        let path = asset_dir.join(file_name);
+        let metadata = std::fs::symlink_metadata(&path)
+            .map_err(|e| format!("missing {} asset: {e}", asset.platform))?;
+        if !metadata.file_type().is_file() {
+            return Err(format!("{} asset is not a regular file", asset.platform));
+        }
+        if metadata.len() != asset.size {
+            return Err(format!("{} asset size does not match", asset.platform));
+        }
+        let bytes = std::fs::read(&path).map_err(|e| format!("{} asset: {e}", asset.platform))?;
+        verify_asset(&bytes, &manifest.version, asset, public_key)
+            .map_err(|e| format!("{} asset: {e}", asset.platform))?;
+    }
+    Ok(platforms.into_iter().map(str::to_string).collect())
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -210,5 +286,50 @@ mod tests {
         let derived = SigningKey::from_bytes(&seed).verifying_key().to_bytes();
         assert!(public.contains(&format!("0x{:02x}", derived[0])));
         assert!(keygen(path.to_str().unwrap()).is_err());
+    }
+
+    #[test]
+    fn manifest_verification_checks_local_assets_against_the_app_key() {
+        let dir = tempfile::tempdir().unwrap();
+        let key = SigningKey::from_bytes(&[7; 32]);
+        let file = dir.path().join("RustZIP-0.2.0-macos-aarch64.dmg");
+        std::fs::write(&file, b"installer bytes").unwrap();
+        let asset_json = sign_with(
+            &key,
+            "0.2.0",
+            "macos-aarch64",
+            file.to_str().unwrap(),
+            "https://example.com/RustZIP-0.2.0-macos-aarch64.dmg",
+        )
+        .unwrap();
+        let asset: Asset = serde_json::from_str(&asset_json).unwrap();
+        let manifest = Manifest {
+            version: "0.2.0".into(),
+            notes: String::new(),
+            assets: vec![asset.clone()],
+        };
+        let public_key = key.verifying_key().to_bytes();
+        let manifest_path = dir.path().join("update.json");
+        std::fs::write(&manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+        let public_key_hex = hex(&public_key);
+        assert!(verify_manifest_file(
+            manifest_path.to_str().unwrap(),
+            dir.path().to_str().unwrap(),
+            Some(&public_key_hex)
+        )
+        .is_ok());
+        assert_eq!(
+            verify_manifest_assets(&manifest, dir.path(), &public_key).unwrap(),
+            ["macos-aarch64"]
+        );
+
+        std::fs::write(&file, b"tampered bytes!").unwrap();
+        assert!(verify_manifest_assets(&manifest, dir.path(), &public_key).is_err());
+
+        let duplicate = Manifest {
+            assets: vec![asset.clone(), asset],
+            ..manifest
+        };
+        assert!(verify_manifest_assets(&duplicate, dir.path(), &public_key).is_err());
     }
 }

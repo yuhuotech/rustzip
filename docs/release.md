@@ -12,12 +12,15 @@
 
 ## 发一个版本
 
-> 主 CI 和 Release 构建仍由 Actions 页面手动触发；Release 只接受 `v*` tag。独立 Fuzz 工作流每天定时运行 ZIP recovery、CHM、bzip2 和 RAR target，不构建或发布安装包。
+> 主 CI 和 Release workflow 由 Actions 页面手动触发。Release dry-run 可从任意分支运行；正式发布只接受 `v*` tag。独立 Fuzz 工作流每天定时运行 ZIP recovery、CHM、bzip2 和 RAR target，不构建或发布安装包。
 
 1. 改根 `Cargo.toml` 里 `[workspace.package] version`,提交。
-2. `git tag v0.2.0 && git push origin v0.2.0`。
-3. `.github/workflows/release.yml` 在三个系统上打包(macOS arm64 和 x86_64 各一个 dmg,Windows 一个安装程序,Linux 一个 tar.gz),用 `RZ_UPDATE_KEY` 给每个安装包签名,汇总成 `update.json`,创建 GitHub Release 并上传。
-4. 已安装的用户下次启动时,从 `https://github.com/yuhuotech/rustzip/releases/latest/download/update.json` 读到新版本,状态栏出现"新版本 x.y.z · 更新"。
+2. 先在 `main` 上手动触发 Release workflow，保留默认 `dry_run=true`；它会生成一次性测试密钥、构建四个平台产物、签名并校验平台集合和实际文件，保存名为 `release-dry-run-bundle` 的 14 天 artifact。测试签名不匹配应用公钥，dry-run 包不能用于更新安装。
+3. 检查 dry-run artifact 后创建并推送对应的 `v*` tag，再从该 tag 手动触发 Release workflow 并将 `dry_run` 设为 `false`。workflow 会再次检查 tag 与 `Cargo.toml` 版本一致，只有四个平台资产全部存在且客户端公钥验签通过才会发布。
+4. 发布后 `.github/workflows/release.yml` 创建 GitHub Release 并上传四个平台安装包和 `update.json`。
+5. 已安装的用户下次启动时,从 `https://github.com/yuhuotech/rustzip/releases/latest/download/update.json` 读到新版本,状态栏出现"新版本 x.y.z · 更新"。
+
+Dry-run 默认不创建 GitHub Release，也不提交 Apple notarization 请求。其一次性私钥只在 1 天有效的单独 workflow artifact 中供 matrix jobs 共享，最终 dry-run bundle 不包含该密钥。正式发布使用已经安全保管的 `RZ_UPDATE_KEY`，并以应用内置公钥验签；生产私钥不会写入仓库或任何 workflow artifact。
 
 ## 更新怎么保证安全
 

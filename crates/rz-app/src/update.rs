@@ -110,8 +110,23 @@ pub fn select_update(manifest: &Manifest, current: &str, platform: &str) -> Resu
 
 /// Checks size, hash and signature of a downloaded file.
 pub fn verify_download(bytes: &[u8], update: &Update, public_key: &[u8; 32]) -> Result<()> {
-    let asset = &update.asset;
+    verify_asset(
+        bytes,
+        &update.version.to_string(),
+        &update.asset,
+        public_key,
+    )
+}
+
+/// Checks size, hash and signature for one manifest asset.
+pub fn verify_asset(
+    bytes: &[u8],
+    version: &str,
+    asset: &Asset,
+    public_key: &[u8; 32],
+) -> Result<()> {
     let fail = |m: &str| Error::Corrupt(format!("update rejected: {m}"));
+    let version = Version::parse(version).map_err(|_| fail("version is invalid"))?;
     if bytes.len() as u64 != asset.size {
         return Err(fail("size does not match the manifest"));
     }
@@ -123,7 +138,7 @@ pub fn verify_download(bytes: &[u8], update: &Update, public_key: &[u8; 32]) -> 
     let sig_bytes: [u8; 64] =
         unhex(&asset.signature).ok_or_else(|| fail("signature is not 64 bytes of hex"))?;
     let sig = Signature::from_bytes(&sig_bytes);
-    let message = signed_message(&update.version.to_string(), &asset.platform, &digest);
+    let message = signed_message(&version.to_string(), &asset.platform, &digest);
     key.verify_strict(&message, &sig)
         .map_err(|_| fail("signature is not valid for this release"))
 }

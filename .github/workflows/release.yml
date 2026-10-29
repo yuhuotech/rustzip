@@ -1,6 +1,6 @@
 name: Release
 
-# Push a tag such as v0.2.0 to build, sign and publish a release.
+# Run a dry-run from any branch, or dispatch a v* tag with dry_run=false to publish.
 # One-time setup (see docs/release.md):
 #   - repository secret RZ_UPDATE_KEY: the update signing key (64 hex characters)
 #   - optional repository variable RZ_STATS_URL: https address that receives install reports
@@ -8,20 +8,70 @@ name: Release
 #     MACOS_SIGN_IDENTITY, and for notarization APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD
 on:
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Build, sign and verify all platform packages without publishing. Use false only for a v* release tag.
+        required: true
+        type: boolean
+        default: true
   # Automatic tag builds and releases are paused until the project is ready.
   # push:
   #   tags: ["v*"]
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
   RZ_STATS_URL: ${{ vars.RZ_STATS_URL }}
 
 jobs:
+  dry-run-signing-key:
+    name: Prepare disposable dry-run signing key
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    steps:
+      - name: Validate manual release selection
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        shell: bash
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "$DRY_RUN" != "true" && "$GITHUB_REF" != refs/tags/v* ]]; then
+            echo "A non-dry-run release must be dispatched from a v* tag." >&2
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+      - uses: dtolnay/rust-toolchain@stable
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+      - uses: Swatinem/rust-cache@v2
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+      - uses: ./.github/actions/native-archive-deps
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+      - name: Build release verifier
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        run: cargo build --release -p rz-release
+      - name: Generate disposable run-scoped key
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        shell: bash
+        run: |
+          key_dir="$RUNNER_TEMP/rustzip-dry-run-key"
+          mkdir -m 700 -p "$key_dir"
+          public_rust="$(target/release/rz-release keygen "$key_dir/private.hex")"
+          python3 -c 'import re,sys; b=re.findall(r"0x([0-9a-fA-F]{2})",sys.argv[1]); assert len(b)==32; print("".join(x.lower() for x in b))' \
+            "$public_rust" > "$key_dir/public.hex"
+          chmod 600 "$key_dir/private.hex"
+      - uses: actions/upload-artifact@v4
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        with:
+          name: rustzip-dry-run-signing-key
+          path: ${{ runner.temp }}/rustzip-dry-run-key
+          retention-days: 1
+
   build:
-    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+    needs: dry-run-signing-key
+    if: ${{ startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
     name: Build ${{ matrix.platform }}
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.experimental }}
@@ -41,6 +91,13 @@ jobs:
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
       - uses: ./.github/actions/native-archive-deps
+
+      - name: Download disposable dry-run signing key
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        uses: actions/download-artifact@v4
+        with:
+          name: rustzip-dry-run-signing-key
+          path: ${{ runner.temp }}/rustzip-dry-run-key
 
       - name: Version
         id: v
@@ -77,7 +134,7 @@ jobs:
           TARGET: ${{ matrix.target }}
           MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
         run: |
-          if [ -n "${{ secrets.APPLE_ID }}" ]; then
+          if [[ "${{ inputs.dry_run }}" != "true" && -n "${{ secrets.APPLE_ID }}" ]]; then
             xcrun notarytool store-credentials ci --apple-id "${{ secrets.APPLE_ID }}" \
               --team-id "${{ secrets.APPLE_TEAM_ID }}" --password "${{ secrets.APPLE_APP_PASSWORD }}"
             export NOTARY_PROFILE=ci
@@ -101,7 +158,23 @@ jobs:
         shell: bash
         env:
           RZ_UPDATE_KEY: ${{ secrets.RZ_UPDATE_KEY }}
+          DRY_RUN: ${{ inputs.dry_run }}
         run: |
+          if [[ "$DRY_RUN" == "true" ]]; then
+            if [[ "$RUNNER_OS" == "Windows" ]]; then
+              key_dir="$(cygpath -u "$RUNNER_TEMP")/rustzip-dry-run-key"
+            else
+              key_dir="$RUNNER_TEMP/rustzip-dry-run-key"
+            fi
+            key_file="$key_dir/private.hex"
+            if [[ ! -f "$key_file" ]]; then
+              echo "Dry-run signing key is missing" >&2
+              exit 1
+            fi
+            chmod 600 "$key_file"
+            RZ_UPDATE_KEY="$(cat "$key_file")"
+            export RZ_UPDATE_KEY
+          fi
           cargo build --release -p rz-release
           file="$(ls dist/RustZIP-*.dmg dist/RustZIP-*.exe dist/RustZIP-*.tar.gz 2>/dev/null | head -n 1)"
           name="$(basename "$file")"
@@ -118,10 +191,12 @@ jobs:
             dist/RustZIP-*.tar.gz
             dist/*.asset.json
 
-  publish:
-    needs: build
+  assemble:
+    needs: [build, dry-run-signing-key]
     runs-on: ubuntu-22.04
-    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') }}
+    if: ${{ !cancelled() && (inputs.dry_run || startsWith(github.ref, 'refs/tags/v')) }}
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -130,13 +205,62 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
-      - name: Manifest
+      - name: Download disposable dry-run verification key
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        uses: actions/download-artifact@v4
+        with:
+          name: rustzip-dry-run-signing-key
+          path: ${{ runner.temp }}/rustzip-dry-run-key
+      - name: Verify platform artifacts and manifest
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+          DRY_RUN_PUBLIC_KEY_FILE: ${{ runner.temp }}/rustzip-dry-run-key/public.hex
         run: |
           cargo build --release -p rz-release
-          version="${GITHUB_REF_NAME#v}"
+          version="$(awk -F'"' '/^version *=/ {print $2; exit}' Cargo.toml)"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            tag_version="${GITHUB_REF_NAME#v}"
+            if [[ "$tag_version" != "$version" ]]; then
+              echo "Tag version $tag_version does not match Cargo.toml $version" >&2
+              exit 1
+            fi
+            version="$tag_version"
+          fi
+          expected_platforms="$(printf '%s\n' linux-x86_64 macos-aarch64 macos-x86_64 windows-x86_64 | sort)"
+          actual_platforms="$(jq -r '.platform' artifacts/*.asset.json | sort)"
+          if [[ "$actual_platforms" != "$expected_platforms" ]]; then
+            echo "Expected exactly these release platforms:" >&2
+            echo "$expected_platforms" >&2
+            echo "Found:" >&2
+            echo "$actual_platforms" >&2
+            exit 1
+          fi
           printf 'RustZIP %s\n' "$version" > notes.txt
           target/release/rz-release manifest "$version" notes.txt artifacts/*.asset.json > artifacts/update.json
-          cat artifacts/update.json
+          if [[ "$DRY_RUN" == "true" ]]; then
+            target/release/rz-release verify artifacts/update.json artifacts "$(cat "$DRY_RUN_PUBLIC_KEY_FILE")"
+          else
+            target/release/rz-release verify artifacts/update.json artifacts
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.dry_run == true && 'release-dry-run-bundle' || 'release-bundle' }}
+          path: |
+            artifacts/RustZIP-*
+            artifacts/update.json
+          retention-days: 14
+
+  publish:
+    needs: assemble
+    runs-on: ubuntu-22.04
+    if: ${{ startsWith(github.ref, 'refs/tags/v') && inputs.dry_run != true }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-bundle
+          path: artifacts
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
