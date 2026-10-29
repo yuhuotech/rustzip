@@ -1,0 +1,103 @@
+name: Fuzz
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 3 * * *"
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_FUZZ_VERSION: 0.13.2
+
+jobs:
+  fuzz:
+    name: fuzz / ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - target: zip_recovery
+            features: ""
+            max_len: 1048576
+          - target: chm
+            features: ""
+            max_len: 8388608
+          - target: bzip2
+            features: ""
+            max_len: 8388608
+          - target: rar
+            features: rar
+            max_len: 8388608
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly
+          components: llvm-tools-preview, rust-src
+      - name: Install cargo-fuzz
+        run: cargo install --locked --version "$CARGO_FUZZ_VERSION" cargo-fuzz
+      - name: Prepare persistent corpus directory
+        env:
+          FUZZ_TARGET: ${{ matrix.target }}
+        run: mkdir -p "fuzz/corpus/$FUZZ_TARGET"
+      - uses: actions/cache/restore@v4
+        id: corpus
+        with:
+          path: fuzz/corpus/${{ matrix.target }}
+          key: fuzz-corpus-${{ matrix.target }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: fuzz-corpus-${{ matrix.target }}-
+      - name: Restore reviewed seed corpus
+        env:
+          FUZZ_TARGET: ${{ matrix.target }}
+        run: cp -R "fuzz/seeds/$FUZZ_TARGET/." "fuzz/corpus/$FUZZ_TARGET/"
+      - name: Build fuzz target
+        env:
+          FUZZ_TARGET: ${{ matrix.target }}
+          FUZZ_FEATURES: ${{ matrix.features }}
+        shell: bash
+        run: |
+          if [[ -n "$FUZZ_FEATURES" ]]; then
+            cargo fuzz build "$FUZZ_TARGET" --features "$FUZZ_FEATURES"
+          else
+            cargo fuzz build "$FUZZ_TARGET"
+          fi
+      - name: Fuzz target
+        id: run-fuzz
+        continue-on-error: true
+        env:
+          FUZZ_TARGET: ${{ matrix.target }}
+          FUZZ_FEATURES: ${{ matrix.features }}
+          FUZZ_MAX_LEN: ${{ matrix.max_len }}
+          FUZZ_SECONDS: ${{ github.event_name == 'schedule' && '180' || '60' }}
+        shell: bash
+        run: |
+          if [[ -n "$FUZZ_FEATURES" ]]; then
+            cargo fuzz run "$FUZZ_TARGET" "fuzz/corpus/$FUZZ_TARGET" --features "$FUZZ_FEATURES" -- \
+              -max_total_time="$FUZZ_SECONDS" -max_len="$FUZZ_MAX_LEN" -timeout=10 -rss_limit_mb=4096
+          else
+            cargo fuzz run "$FUZZ_TARGET" "fuzz/corpus/$FUZZ_TARGET" -- \
+              -max_total_time="$FUZZ_SECONDS" -max_len="$FUZZ_MAX_LEN" -timeout=10 -rss_limit_mb=4096
+          fi
+      - uses: actions/cache/save@v4
+        if: always() && steps.corpus.outputs.cache-primary-key != ''
+        with:
+          path: fuzz/corpus/${{ matrix.target }}
+          key: ${{ steps.corpus.outputs.cache-primary-key }}
+      - uses: actions/upload-artifact@v4
+        if: steps.run-fuzz.outcome == 'failure'
+        with:
+          name: fuzz-artifacts-${{ matrix.target }}-${{ github.run_id }}
+          path: |
+            fuzz/artifacts/${{ matrix.target }}
+            fuzz/corpus/${{ matrix.target }}
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Fail the job after preserving corpus and artifacts
+        if: steps.run-fuzz.outcome == 'failure'
+        run: exit 1

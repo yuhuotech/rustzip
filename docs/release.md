@@ -12,7 +12,7 @@
 
 ## 发一个版本
 
-> 当前 GitHub Actions 自动触发暂时关闭：推送 `main`、PR 和推送版本 tag 都不会自动构建。CI 可从 Actions 页面手动运行；Release 工作流仅保留手动触发，并且只在 `v*` tag 上执行。
+> 主 CI 和 Release 构建仍由 Actions 页面手动触发；Release 只接受 `v*` tag。独立 Fuzz 工作流每天定时运行 ZIP recovery、CHM、bzip2 和 RAR target，不构建或发布安装包。
 
 1. 改根 `Cargo.toml` 里 `[workspace.package] version`,提交。
 2. `git tag v0.2.0 && git push origin v0.2.0`。
@@ -53,7 +53,7 @@ Vercel build 会在部署期间自动应用 Neon Postgres migrations;检查部�
 
 图标由 `cargo run --release -p rustzip-gui --example make_icons -- packaging/icons` 生成(`.icns`、`.ico`、各尺寸 PNG)。
 
-默认包不启用 RAR，也不注册 RAR 专属关联。macOS / Linux 可设置 `RZ_WITH_RAR=1` 打包测试版；Windows 需用 `cargo build --release -p rustzip-gui --features rar` 构建，并给 Inno Setup 增加 `/DRarEnabled=1`。启用时安装包附带 unRAR 许可证。RAR 临时磁盘输出尚无硬上限，不能将此测试包视为已完成安全验收的正式发行版，见 D35 / D36。
+默认包不启用 RAR，也不注册 RAR 专属关联。macOS / Linux 可设置 `RZ_WITH_RAR=1` 打包测试版；Windows 需用 `cargo build --release -p rustzip-gui --features rar` 构建，并给 Inno Setup 增加 `/DRarEnabled=1`。启用时安装包附带 unRAR 许可证。RAR 解码现由 `rz-ffi` 逐块执行并受选中输出总量、条目声明大小和取消控制；启用 RAR 的正式发行仍需完成三平台构建、许可证与真实安装包验收，见 D36 / D38。
 
 Windows 使用 `x64-windows-static-md` vcpkg triplet 静态链接原生归档库，避免 libarchive 与 Rust LZMA 后端的 DLL 导入符号冲突。安装器从 `VCPKG_INSTALLATION_ROOT` 收集原生依赖许可证；原生安装与卸载仍待 Windows runner 验收。
 
@@ -71,6 +71,6 @@ macOS 的“打开方式”声明包含已接入的常见只读格式及 LZ4，R
 
 命令行入口:`rustzip --extract-here <压缩包>...` 解压到压缩包所在目录;`rustzip --compress <文件或文件夹>...` 打开新建压缩窗口。
 
-**验证状态**：macOS arm64 `.app` / DMG 的打包、签名校验和启动通过，尚未公证；Linux x86_64 tarball 已在 Ubuntu 26.04 构建，并通过隔离安装 / 卸载和 Nautilus Scripts 菜单验收。Windows 安装程序和完整 release 工作流尚未运行。当前 GitHub Actions 只允许手动触发 CI；Release 需在 `v*` tag 上手动运行。仓库截至 2026-10-27 尚无公开 GitHub Release。
+**验证状态**：macOS arm64 `.app` / DMG 的打包、签名校验和启动通过，尚未公证；Linux x86_64 tarball 已在 Ubuntu 26.04 构建，并通过隔离安装 / 卸载和 Nautilus Scripts 菜单验收。Windows runner 已编译 GUI / Inno 安装器并完成自动安装 / 卸载冒烟；原生 GUI 人工验收和完整 release 工作流仍未完成。当前 GitHub Actions 只允许手动触发 CI；Release 需在 `v*` tag 上手动运行。仓库截至 2026-10-27 尚无公开 GitHub Release。
 
-2026-10-28 的手动 CI、macOS 钥匙串 / Launch Services 检查及 Windows 链接失败与后续修复状态见 [第二阶段验收](phase-2-platform-acceptance.md)；修复后的工作区尚未在 Windows 或远端 CI 验证。
+2026-10-28 的手动 CI、macOS 钥匙串 / Launch Services 检查与 Windows 修复见[第二阶段验收](phase-2-platform-acceptance.md)：提交 `30c4201` 的六个 CI 任务全部通过。之后的 CHM 和 RAR 回调改动仍需在最新提交上完成三平台 CI 与打包验收。

@@ -7,6 +7,9 @@ edition = "2021"
 [package.metadata]
 cargo-fuzz = true
 
+[features]
+rar = ["rz-formats/rar"]
+
 [workspace]
 members = ["."]
 
@@ -26,6 +29,21 @@ bench = false
 [[bin]]
 name = "chm"
 path = "fuzz_targets/chm.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "bzip2"
+path = "fuzz_targets/bzip2.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "rar"
+path = "fuzz_targets/rar.rs"
+required-features = ["rar"]
 test = false
 doc = false
 bench = false
