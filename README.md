@@ -31,7 +31,7 @@ RustZIP 是一个用 Rust 开发的压缩管理软件，支持 Windows、macOS �
 
 桌面应用与命令行共用同一套核心库，行为一致。
 
-> 核心归档能力、CLI 和桌面主流程已经实现；macOS 与 Ubuntu 26.04 已完成一部分实机验证。Windows CI 与安装器自动化验收通过，原生 GUI 人工验收、其他文件管理器集成及正式发布流程仍待完成。**截至 2026-10-29，GitHub Releases 尚无公开版本**；详细状态见[开发计划](docs/next-development-plan.md)和[第二阶段验收](docs/phase-2-platform-acceptance.md)。
+> 核心归档能力、CLI 和桌面主流程已经实现；macOS 与 Ubuntu 26.04 已完成一部分实机验证。Windows CI 与安装器自动化验收通过，Windows/macOS/Linux GUI CI（Linux 使用 Xvfb 软件渲染）均通过；原生 GUI 人工验收、其他文件管理器集成及正式发布流程仍待完成。**截至 2026-10-30，GitHub Releases 尚无公开版本**；详细状态见[开发计划](docs/next-development-plan.md)和[第二阶段验收](docs/phase-2-platform-acceptance.md)。
 
 ## 特色功能
 
