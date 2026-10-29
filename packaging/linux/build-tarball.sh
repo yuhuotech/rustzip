@@ -28,6 +28,8 @@ mkdir -p "$stage/icons"
 cp target/release/rustzip "$stage/"
 cp packaging/linux/*.desktop packaging/linux/*.nemo_action packaging/linux/rustzip-nautilus-* "$stage/"
 cp packaging/licenses/libchm.txt "$stage/libchm-license.txt"
+cp packaging/licenses/pbz2.txt "$stage/pbz2-license.txt"
+cp packaging/licenses/pbz2-notice.txt "$stage/pbz2-notice.txt"
 if [ "${RZ_WITH_RAR:-0}" = "1" ]; then
     sed 's|MimeType=|MimeType=application/vnd.rar;application/x-rar;|' \
         "$stage/rustzip.desktop" > "$stage/rustzip.desktop.tmp"
@@ -57,6 +59,7 @@ if [ "${1:-}" = "--uninstall" ]; then
           "$nautilus_scripts/RustZIP - Extract archives here"
     rm -f "$prefix/share/doc/rustzip/unrar-license.txt"
     rm -f "$prefix/share/doc/rustzip/libchm-license.txt"
+    rm -f "$prefix/share/doc/rustzip/pbz2-license.txt" "$prefix/share/doc/rustzip/pbz2-notice.txt"
     rm -f "$nautilus_binary"
     rmdir "$nautilus_scripts/.rustzip" 2>/dev/null || true
     for s in 16 32 48 64 128 256 512; do
@@ -67,6 +70,8 @@ if [ "${1:-}" = "--uninstall" ]; then
 fi
 install -Dm755 "$here/rustzip" "$prefix/bin/rustzip"
 install -Dm644 "$here/libchm-license.txt" "$prefix/share/doc/rustzip/libchm-license.txt"
+install -Dm644 "$here/pbz2-license.txt" "$prefix/share/doc/rustzip/pbz2-license.txt"
+install -Dm644 "$here/pbz2-notice.txt" "$prefix/share/doc/rustzip/pbz2-notice.txt"
 if [ -f "$here/unrar-license.txt" ]; then
     install -Dm644 "$here/unrar-license.txt" "$prefix/share/doc/rustzip/unrar-license.txt"
 fi

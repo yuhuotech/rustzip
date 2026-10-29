@@ -1,6 +1,8 @@
 //! Stream compressors used by tar and by single-file formats (.gz .xz .zst .bz2).
 
-use crate::parallel_bzip2::{worker_count, ParallelBzip2};
+use crate::parallel_bzip2::{
+    decode_worker_count, worker_count, ParallelBzip2, ParallelBzip2Decoder, ParallelGzip,
+};
 use flate2::read::MultiGzDecoder;
 use flate2::write::GzEncoder;
 use lz4_flex::frame::{FrameDecoder, FrameEncoder};
@@ -33,7 +35,23 @@ impl Compression {
 
     /// Wraps a file in the matching decompressor.
     pub fn reader(self, file: File) -> Result<Box<dyn Read + Send>> {
+        self.reader_with_options(file, 1, 0)
+    }
+
+    /// Wraps a file in the matching decompressor, using bounded workers where supported.
+    pub fn reader_with_options(
+        self,
+        file: File,
+        threads: usize,
+        memory_budget: u64,
+    ) -> Result<Box<dyn Read + Send>> {
         let buffered = BufReader::with_capacity(256 * 1024, file);
+        if self == Compression::Bzip2 {
+            let workers = decode_worker_count(threads, memory_budget);
+            if workers > 1 {
+                return Ok(Box::new(ParallelBzip2Decoder::new(buffered, workers)));
+            }
+        }
         Ok(match self {
             Compression::None => Box::new(buffered),
             Compression::Gzip => Box::new(MultiGzDecoder::new(buffered)),
@@ -57,7 +75,14 @@ impl Compression {
         let out = BufWriter::with_capacity(256 * 1024, file);
         Ok(match self {
             Compression::None => Sink::Plain(out),
-            Compression::Gzip => Sink::Gzip(GzEncoder::new(out, flate2::Compression::new(level))),
+            Compression::Gzip => {
+                let workers = worker_count(threads, memory_budget);
+                if workers > 1 {
+                    Sink::ParallelGzip(ParallelGzip::new(out, level, workers)?)
+                } else {
+                    Sink::Gzip(GzEncoder::new(out, flate2::Compression::new(level)))
+                }
+            }
             Compression::Xz => {
                 let mut b = liblzma::stream::MtStreamBuilder::new();
                 b.threads(threads as u32)
@@ -98,10 +123,12 @@ pub fn zstd_level(level: u32) -> i32 {
 }
 
 type Out = BufWriter<File>;
+pub(crate) const DEFAULT_DECODE_MEMORY_BUDGET: u64 = 256 << 20;
 
 pub enum Sink {
     Plain(Out),
     Gzip(GzEncoder<Out>),
+    ParallelGzip(ParallelGzip<Out>),
     Xz(liblzma::write::XzEncoder<Out>),
     Zstd(Box<zstd::stream::write::Encoder<'static, Out>>),
     Bzip2(bzip2::write::BzEncoder<Out>),
@@ -114,6 +141,7 @@ impl Write for Sink {
         match self {
             Sink::Plain(w) => w.write(buf),
             Sink::Gzip(w) => w.write(buf),
+            Sink::ParallelGzip(w) => w.write(buf),
             Sink::Xz(w) => w.write(buf),
             Sink::Zstd(w) => w.write(buf),
             Sink::Bzip2(w) => w.write(buf),
@@ -126,6 +154,7 @@ impl Write for Sink {
         match self {
             Sink::Plain(w) => w.flush(),
             Sink::Gzip(w) => w.flush(),
+            Sink::ParallelGzip(w) => w.flush(),
             Sink::Xz(w) => w.flush(),
             Sink::Zstd(w) => w.flush(),
             Sink::Bzip2(w) => w.flush(),
@@ -141,6 +170,7 @@ impl Sink {
         let mut out = match self {
             Sink::Plain(w) => w,
             Sink::Gzip(w) => w.finish()?,
+            Sink::ParallelGzip(w) => w.finish()?,
             Sink::Xz(w) => w.finish()?,
             Sink::Zstd(w) => w.finish()?,
             Sink::Bzip2(w) => w.finish()?,
@@ -190,5 +220,86 @@ mod tests {
             assert!(r.read_to_end(&mut back).is_ok());
             assert_eq!(back, data, "{c:?}");
         }
+    }
+
+    #[test]
+    fn parallel_bzip2_reader_handles_single_and_concatenated_streams() {
+        use std::io::Read;
+
+        let temp = tempfile::tempdir().unwrap_or_else(|_| unreachable!());
+        let input: Vec<u8> = (0usize..4 * 1024 * 1024)
+            .map(|index| (index.wrapping_mul(29) % 251) as u8)
+            .collect();
+
+        for concatenated in [false, true] {
+            let mut encoded = Vec::new();
+            if concatenated {
+                for chunk in input.chunks(900_000) {
+                    let mut encoder =
+                        bzip2::write::BzEncoder::new(Vec::new(), bzip2::Compression::new(6));
+                    encoder.write_all(chunk).unwrap_or_else(|_| unreachable!());
+                    encoded.extend(encoder.finish().unwrap_or_else(|_| unreachable!()));
+                }
+            } else {
+                let mut encoder =
+                    bzip2::write::BzEncoder::new(Vec::new(), bzip2::Compression::new(6));
+                encoder.write_all(&input).unwrap_or_else(|_| unreachable!());
+                encoded = encoder.finish().unwrap_or_else(|_| unreachable!());
+            }
+
+            let path = temp.path().join(if concatenated {
+                "multi.bz2"
+            } else {
+                "single.bz2"
+            });
+            std::fs::write(&path, encoded).unwrap_or_else(|_| unreachable!());
+            let mut decoder = Compression::Bzip2
+                .reader_with_options(
+                    File::open(path).unwrap_or_else(|_| unreachable!()),
+                    4,
+                    256 << 20,
+                )
+                .unwrap_or_else(|_| unreachable!());
+            let mut decoded = Vec::new();
+            decoder
+                .read_to_end(&mut decoded)
+                .unwrap_or_else(|_| unreachable!());
+            assert_eq!(decoded, input);
+        }
+    }
+
+    #[test]
+    fn parallel_bzip2_reader_rejects_trailing_bytes() {
+        use std::io::Read;
+
+        let temp = tempfile::tempdir().unwrap_or_else(|_| unreachable!());
+        let path = temp.path().join("trailing.bz2");
+        let mut encoder = bzip2::write::BzEncoder::new(Vec::new(), bzip2::Compression::new(1));
+        encoder
+            .write_all(b"valid bzip2 member")
+            .unwrap_or_else(|_| unreachable!());
+        let mut encoded = encoder.finish().unwrap_or_else(|_| unreachable!());
+        encoded.extend_from_slice(b"garbage");
+        std::fs::write(&path, encoded).unwrap_or_else(|_| unreachable!());
+
+        let mut decoder = Compression::Bzip2
+            .reader_with_options(
+                File::open(path).unwrap_or_else(|_| unreachable!()),
+                4,
+                256 << 20,
+            )
+            .unwrap_or_else(|_| unreachable!());
+        let mut decoded = Vec::new();
+        assert!(decoder
+            .read_to_end(&mut decoded)
+            .is_err_and(|error| error.kind() == std::io::ErrorKind::InvalidData));
+    }
+
+    #[test]
+    fn bzip2_decode_workers_follow_the_memory_budget() {
+        assert_eq!(decode_worker_count(8, 32 << 20), 0);
+        assert_eq!(decode_worker_count(8, 128 << 20), 1);
+        assert_eq!(decode_worker_count(8, 256 << 20), 3);
+        assert_eq!(decode_worker_count(1, 256 << 20), 1);
     }
 }

@@ -190,7 +190,7 @@ fn describe<R: Read>(
             .0
             .into_owned()
     } else {
-        file.name().to_string()
+        file.name().map_err(map_err)?.to_string()
     };
     let mode = file.unix_mode();
     Ok(Entry {

@@ -43,7 +43,6 @@ notice_prepare_preview	Preparando {name}…
 notice_external_edit_writeback	Aberto no aplicativo do sistema. As alterações salvas serão gravadas de volta no arquivo compactado.
 notice_external_read_only	Aberto no aplicativo do sistema. Este arquivo compactado é somente leitura, então as alterações não serão gravadas de volta.
 notice_preview_too_large	Este arquivo é grande demais para visualizar. Extraia-o para abrir.
-notice_rar_preview_unavailable	A pré-visualização de RAR não está disponível; extraia o arquivo antes de abri-lo.
 task_test_passed	{task} concluída: nenhum problema encontrado em {count} itens
 task_edit_complete	{task} concluída: o arquivo compactado agora tem {count} itens
 task_complete_count	{task} concluída: {count} arquivos, {size}

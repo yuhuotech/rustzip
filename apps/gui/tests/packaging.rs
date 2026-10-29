@@ -79,6 +79,20 @@ fn chm_is_listed_as_a_read_only_macos_document_type() {
 }
 
 #[test]
+fn parallel_bzip_decoder_licenses_are_in_every_desktop_package() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    for file in ["pbz2.txt", "pbz2-notice.txt"] {
+        assert!(root.join("../../packaging/licenses").join(file).is_file());
+    }
+    assert!(MACOS_BUILD.contains("packaging/licenses/pbz2.txt"));
+    assert!(MACOS_BUILD.contains("packaging/licenses/pbz2-notice.txt"));
+    assert!(LINUX_TARBALL.contains("packaging/licenses/pbz2.txt"));
+    assert!(LINUX_TARBALL.contains("packaging/licenses/pbz2-notice.txt"));
+    assert!(WINDOWS_INSTALLER.contains(r#"DestName: "pbz2.txt""#));
+    assert!(WINDOWS_INSTALLER.contains(r#"DestName: "pbz2-notice.txt""#));
+}
+
+#[test]
 fn windows_installer_uses_the_bundled_simplified_chinese_language_file() {
     let language = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../packaging/windows/ChineseSimplified.isl");

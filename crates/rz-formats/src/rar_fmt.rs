@@ -1,25 +1,44 @@
 //! Read-only RAR support (feature `rar`), built on the unRAR library.
 //!
-//! The library decodes into files, so each entry goes through a private temporary
-//! directory. RAR is a legacy format here: it is read, never written.
+//! Decoded chunks are written through a bounded callback to a private temporary
+//! file. RAR is a legacy format here: it is read, never written.
 
 use crate::timeutil::civil_to_unix;
 use rz_core::{
     ArchiveReader, CancelToken, Caps, Entry, EntryKind, Error, NoProgress, Progress, ProgressSink,
     Result,
 };
-use std::io::Read;
+use std::collections::HashSet;
+use std::fs::OpenOptions;
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
-use unrar::error::{Code, UnrarError};
-use unrar::{Archive, FileHeader};
+use zeroize::Zeroizing;
 
-fn map_err(e: UnrarError) -> Error {
-    match e.code {
-        Code::BadPassword | Code::MissingPassword => Error::Password,
-        Code::BadData | Code::BadArchive => Error::Corrupt(e.to_string()),
-        Code::UnknownFormat => Error::UnknownFormat,
-        Code::NoMemory => Error::LimitExceeded("out of memory".into()),
-        other => Error::Io(std::io::Error::other(format!("unrar: {other:?}"))),
+const MAX_COMPAT_ENTRY: u64 = 64 << 20;
+const DEFAULT_MAX_TOTAL: u64 = 1 << 40;
+
+fn map_err(e: rz_ffi::unrar::Error) -> Error {
+    match e {
+        rz_ffi::unrar::Error::BadPassword | rz_ffi::unrar::Error::MissingPassword => {
+            Error::Password
+        }
+        rz_ffi::unrar::Error::Corrupt(code) => Error::Corrupt(format!("unRAR error {code}")),
+        rz_ffi::unrar::Error::UnknownFormat => Error::UnknownFormat,
+        rz_ffi::unrar::Error::NoMemory => {
+            Error::LimitExceeded("unRAR could not allocate decoder memory".into())
+        }
+        rz_ffi::unrar::Error::Cancelled => Error::Cancelled,
+        rz_ffi::unrar::Error::OutputLimit => {
+            Error::LimitExceeded("RAR output exceeded the declared or configured size limit".into())
+        }
+        rz_ffi::unrar::Error::InvalidInput(message) => Error::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            message,
+        )),
+        rz_ffi::unrar::Error::Io(error) => Error::Io(error),
+        rz_ffi::unrar::Error::Other(code) => {
+            Error::Io(std::io::Error::other(format!("unRAR error {code}")))
+        }
     }
 }
 
@@ -41,26 +60,30 @@ fn dos_to_unix(t: u32) -> Option<i64> {
     ))
 }
 
-fn describe(index: usize, h: &FileHeader) -> Entry {
+fn describe(index: usize, h: rz_ffi::unrar::EntryInfo) -> Entry {
     Entry {
         index,
-        path: h.filename.to_string_lossy().replace('\\', "/"),
-        kind: if h.is_directory() {
+        path: h.path.to_string_lossy().replace('\\', "/"),
+        kind: if h.is_directory {
             EntryKind::Dir
         } else {
             EntryKind::File
         },
-        size: h.unpacked_size,
-        packed_size: None,
-        modified: dos_to_unix(h.file_time),
-        encrypted: h.is_encrypted(),
+        size: h.size,
+        packed_size: Some(h.packed_size),
+        modified: dos_to_unix(h.modified),
+        encrypted: h.encrypted,
         unix_mode: None,
     }
 }
 
 pub struct RarReader {
     path: PathBuf,
-    password: Option<String>,
+    password: Option<Zeroizing<String>>,
+    cancel: CancelToken,
+    max_total: u64,
+    max_ratio: u64,
+    ratio_check_above: u64,
 }
 
 impl RarReader {
@@ -68,20 +91,34 @@ impl RarReader {
         let r = Self {
             path: path.to_path_buf(),
             password: None,
+            cancel: CancelToken::new(),
+            max_total: DEFAULT_MAX_TOTAL,
+            max_ratio: 2000,
+            ratio_check_above: 256 << 20,
         };
         // Walk all headers now, so a damaged archive fails at open and not half way
         // through an extraction. Passwords are only checked when data is read.
-        for header in r.archive().open_for_listing().map_err(map_err)? {
-            header.map_err(map_err)?;
+        let mut archive = r.listing_archive()?;
+        while archive.next_entry().map_err(map_err)?.is_some() {
+            archive.skip_current().map_err(map_err)?;
         }
         Ok(r)
     }
 
-    fn archive(&self) -> Archive<'_> {
-        match &self.password {
-            Some(pw) => Archive::with_password(&self.path, pw),
-            None => Archive::new(&self.path),
-        }
+    fn listing_archive(&self) -> Result<rz_ffi::unrar::Reader> {
+        rz_ffi::unrar::Reader::open_for_listing(
+            &self.path,
+            self.password.as_deref().map(String::as_str),
+        )
+        .map_err(map_err)
+    }
+
+    fn processing_archive(&self) -> Result<rz_ffi::unrar::Reader> {
+        rz_ffi::unrar::Reader::open_for_processing(
+            &self.path,
+            self.password.as_deref().map(String::as_str),
+        )
+        .map_err(map_err)
     }
 }
 
@@ -99,8 +136,18 @@ impl ArchiveReader for RarReader {
     }
 
     fn set_password(&mut self, password: &str) -> Result<()> {
-        self.password = Some(password.to_string());
+        self.password = Some(Zeroizing::new(password.to_string()));
         Ok(())
+    }
+
+    fn set_read_control(&mut self, cancel: CancelToken, max_total: u64) {
+        self.cancel = cancel;
+        self.max_total = max_total;
+    }
+
+    fn set_ratio_limit(&mut self, max_ratio: u64, check_above: u64) {
+        self.max_ratio = max_ratio;
+        self.ratio_check_above = check_above;
     }
 
     fn entries(&mut self) -> Result<Vec<Entry>> {
@@ -113,16 +160,13 @@ impl ArchiveReader for RarReader {
         progress: &mut dyn ProgressSink,
     ) -> Result<Vec<Entry>> {
         cancel.check()?;
+        let mut archive = self.listing_archive()?;
         let mut out = Vec::new();
         let mut bytes_done = 0u64;
-        for (index, header) in self
-            .archive()
-            .open_for_listing()
-            .map_err(map_err)?
-            .enumerate()
-        {
+        while let Some(header) = archive.next_entry().map_err(map_err)? {
             cancel.check()?;
-            let entry = describe(index, &header.map_err(map_err)?);
+            archive.skip_current().map_err(map_err)?;
+            let entry = describe(out.len(), header);
             bytes_done = bytes_done.saturating_add(entry.size);
             out.push(entry);
             progress.update(Progress {
@@ -136,11 +180,17 @@ impl ArchiveReader for RarReader {
     }
 
     fn open<'a>(&'a mut self, entry: &Entry) -> Result<Box<dyn Read + 'a>> {
+        if entry.size > MAX_COMPAT_ENTRY {
+            return Err(Error::LimitExceeded(format!(
+                "RAR entry is larger than the {MAX_COMPAT_ENTRY}-byte compatibility read limit"
+            )));
+        }
         let wanted = entry.index;
+        let selected = [wanted];
         let mut found = None;
-        self.for_each(&mut |e, data| {
+        self.for_each_selected(Some(&selected), &mut |e, data| {
             if e.index == wanted {
-                let mut buf = Vec::new();
+                let mut buf = Vec::with_capacity(e.size as usize);
                 data.read_to_end(&mut buf)?;
                 found = Some(buf);
             }
@@ -156,25 +206,94 @@ impl ArchiveReader for RarReader {
         &mut self,
         visit: &mut dyn FnMut(&Entry, &mut dyn Read) -> Result<()>,
     ) -> Result<()> {
+        self.for_each_selected(None, visit)
+    }
+
+    fn for_each_selected(
+        &mut self,
+        selected: Option<&[usize]>,
+        visit: &mut dyn FnMut(&Entry, &mut dyn Read) -> Result<()>,
+    ) -> Result<()> {
+        let selected = selected.map(|indexes| indexes.iter().copied().collect::<HashSet<_>>());
+        let mut archive = self.processing_archive()?;
         let scratch = tempfile::tempdir()?;
         let tmp = scratch.path().join("entry");
-        let mut cursor = self.archive().open_for_processing().map_err(map_err)?;
         let mut index = 0usize;
-        while let Some(header) = cursor.read_header().map_err(map_err)? {
-            let entry = describe(index, header.entry());
+        let mut bytes_written = 0u64;
+
+        while let Some(header) = archive.next_entry().map_err(map_err)? {
+            self.cancel.check()?;
+            let entry = describe(index, header);
             index += 1;
+            let chosen = selected
+                .as_ref()
+                .is_none_or(|indexes| indexes.contains(&entry.index));
+
+            if entry.size > self.ratio_check_above {
+                let allowed = entry
+                    .packed_size
+                    .unwrap_or(0)
+                    .max(1)
+                    .saturating_mul(self.max_ratio);
+                if entry.size > allowed {
+                    return Err(Error::LimitExceeded(format!(
+                        "{}: compression ratio too high",
+                        entry.path
+                    )));
+                }
+            }
+
             if entry.kind == EntryKind::Dir {
-                visit(&entry, &mut std::io::empty())?;
-                cursor = header.skip().map_err(map_err)?;
+                archive.skip_current().map_err(map_err)?;
+                if chosen {
+                    visit(&entry, &mut std::io::empty())?;
+                }
                 continue;
             }
-            cursor = header.extract_to(&tmp).map_err(map_err)?;
-            let mut file = std::fs::File::open(&tmp)?;
+
+            let cancelled = || self.cancel.check().is_err();
+            if !chosen {
+                archive
+                    .test_current(entry.size, &cancelled)
+                    .map_err(map_err)?;
+                continue;
+            }
+
+            let remaining = self.max_total.saturating_sub(bytes_written);
+            if entry.size > remaining {
+                return Err(Error::LimitExceeded(format!(
+                    "RAR selected output exceeds the configured {}-byte total limit",
+                    self.max_total
+                )));
+            }
+
+            let mut file = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open(&tmp)?;
+            let decoded = archive
+                .extract_current_to(&mut file, remaining.min(entry.size), &cancelled)
+                .map_err(map_err)?;
+            if decoded != entry.size {
+                return Err(Error::Corrupt(format!(
+                    "{}: RAR entry size does not match its header",
+                    entry.path
+                )));
+            }
+            file.flush()?;
+            file.seek(SeekFrom::Start(0))?;
             let result = visit(&entry, &mut file);
             drop(file);
-            let _ = std::fs::remove_file(&tmp);
+            std::fs::remove_file(&tmp)?;
             result?;
+            bytes_written = bytes_written.saturating_add(decoded);
         }
+        Ok(())
+    }
+
+    fn set_encoding(&mut self, _label: &str) -> Result<()> {
         Ok(())
     }
 }

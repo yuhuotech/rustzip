@@ -47,11 +47,11 @@
 
 - 7z:`sevenz-rust2`(Apache-2.0,纯 Rust)。写入走固实块加多线程 LZMA2,加密时同时加密文件头。
 - xz:`liblzma`(静态链接 xz 源码,公有领域),用其多线程编码器。zstd 用 `zstd` 的多线程模式。
-- bzip2:`bzip2` crate,目前单线程。
+- bzip2:`bzip2` crate,单文件 / tar.bz2 按块并行压缩,内存不足时回退单线程;当前并行解码见 D39。
 - 读取接口加入 `for_each`(单遍流式)和 `reopen`(独立读取器):tar / 7z / rar 这类顺序格式一次解码全部条目,zip 用多个读取器并行解压。
-- zip 并行压缩:小文件在工作线程里各自压成内存中的小 zip,再由写入线程按输入顺序合并(`merge_archive`),受内存预算约束;超过阈值的大文件在写入线程内联压缩。输出与单线程一致,条目顺序不受线程数影响。
+- ZIP 并行压缩:小文件跨条目并行压缩后按输入顺序合并(`merge_archive`);超过阈值的未加密 Deflate 条目按 D41 分块并行,Store / 加密 / 预算不足时顺序编码。线程与在途数据受内存预算约束,条目顺序不受线程数影响。
 - 压缩炸弹:压缩比限制只对解压后超过 256 MiB 的条目生效,避免误伤小而高度重复的数据;总大小上限和"写入不超过声明大小"始终生效。
-- RAR:`unrar` crate,放在默认关闭的 `rar` feature 里,只读。unRAR 是 C++ 代码,攻击面比其余纯 Rust 后端大,需要在文档中提示。
+- RAR:通过 `rz-ffi` 中的 `unrar_sys` 调用 unRAR,放在默认关闭的 `rar` feature 里,只读。unRAR 是 C++ 代码,攻击面比其余纯 Rust 后端大,需要在文档中提示。
 - 已知局限:每个压缩比检查依赖条目声明的压缩后大小,7z / tar 这类固实格式没有逐条目的压缩后大小,只能靠总大小上限和"不超过声明大小"兜底。
 
 ## D8 联网、钥匙串与发布(已定)
@@ -215,6 +215,8 @@
 - PDF 内容与归档内容一样是不可信输入。内置 PDF 渲染必须限制解压后数据量和栅格像素数；只限制源 PDF 文件大小与最终位图大小不足以防止压缩数据放大耗尽内存。
 - 当前评估的纯 Rust Hayro renderer 使用 Apache-2.0 OR MIT，且禁止 unsafe，但默认 Flate fallback 将解码输出不断追加到 `Vec`，没有输出上限；可选的标准解码路径也调用无上限的 `read_to_end`。仅限制源文件字节数和最终像素数不足以防止解压炸弹，所以在渲染器实现可执行的解压输出硬上限前不接入。依据：[Hayro 渲染说明与许可证](https://github.com/LaurenzV/hayro)、[Flate 解码实现](https://github.com/LaurenzV/hayro/blob/main/hayro-syntax/src/filter/lzw_flate.rs)。
 - `pdfium-render` 的 Rust 绑定许可证为 MIT OR Apache-2.0，但不包含 PDFium 动态库，需额外下载、构建和跨平台打包原生二进制；因此本轮不选用。PDFium 的归档样本、运行时限制和包体成本需要单独评估。
+- 2026-10-29 复查 MIT OR Apache-2.0 的 `pdfrum` 0.5.3：提供单 PDF stream 解码字节上限、每次 render 像素上限和可协作 deadline，且默认不启用 JavaScript；但已公开的上限针对单 stream，无法配置一页所有图片 / 内容 stream 的累计解码字节预算，deadline 也在解析 / page / 操作符 / render 对象等检查点协作执行，不能中断任意长的单个底层解码调用。因此仍未证明页面总解码内存有硬上限，不接入。依据：[Limits API](https://docs.rs/pdfrum/latest/pdfrum/struct.Limits.html)、[OpenOptions](https://docs.rs/pdfrum/latest/pdfrum/struct.OpenOptions.html)、[项目主页与许可证](https://github.com/PoHsuanLai/pdfrum)。
+- Hayro 当前项目说明仍列出不可信 PDF 可触发 OOM / timeout，且上游仍有交互渲染协作取消需求；PDFium 的 limited-image-cache 是降低内存使用的选项，不是可配置的累计解码输出硬上限。依据：[Hayro robustness status](https://github.com/LaurenzV/hayro)、[cancellation issue](https://github.com/LaurenzV/hayro/issues/1052)、[PDFium render cache option](https://docs.rs/pdfium-render/latest/pdfium_render/struct.PdfRenderConfig.html)。在累计解码上限或 OS 隔离限制可验证前，预览继续调用系统 PDF 阅读器。
 - 达到资源边界后，内置预览需清楚提示用户改用系统 PDF 阅读器；在满足上述限制之前继续由系统程序打开 PDF。
 
 ## D31 LHA / LZH 只读后端
@@ -242,19 +244,54 @@
 - RustZIP 仅列出、测试和提取包内普通文件；不执行包安装脚本，不保留链接等特殊文件，不提供 RPM 写入。
 - sniff 使用 RPM 包头魔数与版本 / 类型字段，不以 `.rpm` 扩展名判定。bzip2 和 gzip 测试 fixture 来自 vendored libarchive 的 BSD-2-Clause 测试数据，由三份虚构的 `hello` 文本文件组成；没有新增 Cargo 依赖。
 
-## D35 bzip2 并行压缩与 RAR 预览边界
+## D35 bzip2 并行压缩与初始 RAR 预览限制
 
-- 更新 D7 的 bzip2 单线程状态：单文件和 tar.bz2 可将输入分块并行压缩为按顺序拼接的标准 bzip2 流；线程数受内存预算估算限制，不足时回退单线程。解压仍为单线程。
-- 当前 unrar 后端在提供条目流之前会把整个条目写入临时文件，不能保证预览磁盘上限。因此详情栏和外部打开入口均不读取 RAR 预览，提示用户先解压；正常的 RAR 浏览、测试和解压不变。未来只有具备可验证的解码输出硬限制后才恢复预览。
+- 更新 D7 的 bzip2 单线程状态：单文件和 tar.bz2 可将输入分块并行压缩为按顺序拼接的标准 bzip2 流；线程数受内存预算估算限制，不足时回退单线程。D39 后续增加并行解码。
+- 本决策当时的 unrar 后端在提供条目流之前会把整个条目写入临时文件，不能保证预览磁盘上限，故先禁用 RAR 预览。该实现状态已被 D38 的逐块回调和硬输出上限取代；D35 仅保留历史原因。
 
 ## D36 安装包的 RAR 能力与关联一致性
 
-- D1 规划正式发行版附带 RAR，但现有发布构建未启用该 feature，且 D35 记录的普通 RAR 解压临时磁盘限制仍未解决。正式发行前必须解决该安全边界和许可证声明，不能把当前默认构建称作含 RAR 的正式发行版。
+- D1 规划正式发行版附带 RAR，但默认构建仍关闭该 feature。D38 已为 RAR 解码增加逐块输出上限和取消；正式发行前仍必须在三平台验证启用 feature 的构建、安装包和 unRAR 许可声明。
 - 桌面应用暴露默认关闭的 `rar` feature；本地打包默认不启用 RAR，也不注册 RAR 专属文件关联。显式启用 RAR 的本地测试包可同时注册相应关联，并继续遵守 unRAR 许可证。三平台的设置方式在发布文档中说明。
 
 ## D37 长尾格式后端准入
 
 - CHM 以只读格式接入 `rz-formats::chm_fmt`，使用 MIT `libchm` 0.3.0 的固定 vendor 副本。局部补丁提供范围读取、directory 回调和 LZX block 取消；条目读取每次最多 64 KiB、每次操作总输出按应用设置限制（未设置时为 1 TiB）、单压缩 block 4 MiB、reset table 8 MiB、目录元数据 16 MiB / 100,000 条。测试 fixture 由独立 `rustchm` 0.1.2 生成；解压路径仍统一经过引擎的 `safe_join`。
-- `fuzz/fuzz_targets/chm.rs` 会模糊测试 CHM 打开、枚举和范围读取；本轮只完成 fuzz target 编译，稳定版工具链无法运行 sanitizer fuzz session，发布前仍须在 nightly fuzz runner 实际执行。
+- `fuzz/fuzz_targets/chm.rs` 会模糊测试 CHM 打开、枚举和范围读取。2026-10-29 本机 nightly ASan fuzz 已运行 15 秒，约 21,000 次变异未发现崩溃；这只作为短时冒烟，发布前仍需在持续 nightly runner 中重复运行。
 - WIM 和 DMG 仅按魔数 / trailer 识别并返回明确的“不支持”。已审候选只读镜像或分区元数据，或缺少对元数据、解压和取消的完整控制；WIM 完整候选还涉及 LGPL / GPL 静态链接许可及更高 MSRV。NSIS 位于 PE overlay，不以通用 `.exe` 扩展名或普通 PE 头认定为归档。
 - 新格式 reader 只有在提供流式 / 有界读取、分块取消与进度、元数据和解压输出硬上限、通用路径安全处理、损坏输入与 fuzz 覆盖，以及实际工具生成的独立 fixture 后，才可注册并宣称支持。具体候选证据见[第三阶段记录](phase-3-format-assessment.md)。
+
+## D38 RAR 解码输出上限与安全预览
+
+- 保留默认关闭的 `rar` feature 和只读边界；将 UnRAR 的逐块数据回调封装在 `rz-ffi`，解码前检查压缩比，并在回调中检查取消、声明大小和本次选中输出的剩余预算，超限时立即中止原生解码。
+- 选中条目逐块写入私有临时文件，单个文件不超过其声明大小和剩余 `max_total` 的较小值；每项消费后删除。未选条目通过 UnRAR 测试流继续固实解码，不写临时盘，并在数据回调中检查取消。
+- `ArchiveReader::for_each_selected` 让引擎将选择索引交给顺序格式；RAR 可以跳过未选条目的临时输出，同时保留固实流状态。兼容性 `open` 的整条目内存读取限制为 64 MiB。
+- 图片预览使用 8 MiB 上限、文本预览使用 64 KiB 上限；RAR 只在启用 `rar` feature 的构建中可预览。该决策取代 D35 的 RAR 预览禁用状态及 D36 中“临时输出没有硬上限”的旧实现状态，不改变 D36 的默认关闭、许可证和文件关联要求。
+- 回归覆盖原生回调超限中止、取消、RAR 测试、选择性输出及应用层图片 / 文本读取限额。正式发行仍需在三平台验证启用 RAR 的构建和实际安装包许可证。
+
+## D39 bzip2 并行解压与 gzip 分块 Deflate
+
+- 使用 MIT `pbz2` 0.2.0 及其 MIT `pbz2-core` 做 bzip2 顺序流和串接 member 的并行解码；保留上游 `NOTICE` 中的 bzip2 / libdivsufsort 归属与许可说明。wrapper 固定为本地 vendor 副本，改动限于 decoder worker 启动错误返回和后台线程异常传递。
+- bzip2 解码的 worker 数按 `min(requested_threads, floor((memory_budget - 16 MiB) / 64 MiB))` 估算；不足两个 worker 时回退现有 `MultiBzDecoder`。压缩流按块 CRC 与 stream CRC 校验，未消费完即 drop 可停止后台工作。
+- gzip 与 tar.gz 在多线程模式下把输入分成最多 900,000 字节块，按顺序生成标准串接 gzip member；单线程或预算不足时沿用 flate2 单 member 编码。`MultiGzDecoder` 和常见 gzip 工具可读取。
+- 初始实现的分块 Deflate 覆盖 `.gz` / `.tar.gz`；ZIP 大条目扩展实现与验证见 D41。
+
+## D40 ZIP 依赖安全版本
+
+- 工作区 ZIP crates 统一使用 `zip` 9.1.3，修复 RustSec `RUSTSEC-2026-0367/0368/0369` 覆盖的权限恢复和符号链接逃逸问题；9.x 后续发行也包含提取路径与 ZIP64 处理修正。升级移除了由 2.6.1 带入、命中 `RUSTSEC-2026-0391/0392/0398/0403` 的 zstd 0.13 依赖。
+- RustZIP 的解压仍由 `rz-engine` 的 `safe_join`、不跟随符号链接写入和权限规范化实现；不得调用 `ZipArchive::extract` 绕过引擎策略。ZIP 大条目并行 Deflate 已按 D41 接入，仍需 Windows / macOS 外部工具互通验收。
+- 升级后的 `zip_recovery` nightly ASan fuzz 冒烟运行约 91,000 次变异，未发现崩溃；ZIP 编辑 8 MiB raw-copy / repack 基准均按输出 SHA-256 校验通过。更大样本和多轮采样仍待执行。
+- 锁文件升级必须运行工作区 all-features 测试和 `cargo deny check`；[deny.toml](../deny.toml) 限定受支持的平台目标和许可白名单，不允许 GPL / LGPL。
+
+## D41 ZIP 大条目分块 Deflate
+
+- 多线程创建 ZIP 时，小文件继续跨条目并行；超过现有条目阈值的大文件在未加密 Deflate 模式下按 900,000 字节切块，由有界 worker 压缩并按输入顺序写入。各块在 Deflate 边界处刷新后接成一个标准 Deflate stream，外层 ZIP 仍由 `zip` crate 写入和校验。
+- worker 数按 `min(requested_threads, floor(memory_budget / 16 MiB))` 估算；最多保留每个 worker 两个块的输入 / 压缩结果。输入使用流式读取；压缩中间数据写匿名临时文件，不在内存中组装整条目。该预算用于约束并行工作集，不代表操作系统级内存限制。
+- ZIP 加密条目继续使用现有顺序 writer；级别为 Store、仅一个 worker 或预算不足时回退顺序路径。源读取检查现有任务取消 / 暂停逻辑，读错或取消时 worker 在关闭通道后退出，外层临时归档由引擎清理。
+- 本机验证覆盖多块大条目往返、CJK 文件名、源中途失败、Info-ZIP `unzip -t` 和 BLAKE3 校验基准。Windows / macOS 工具互通与三平台性能矩阵仍需验收。
+
+## D42 ZIP 压缩数据复用时保留容器元数据
+
+- 符合复制快路径条件的单卷、无密码 ZIP 编辑保留归档注释、ZIP64 扩展数据、未修改条目的文件注释和扩展字段；替换条目时保留归档注释与该条目的文件注释。重建中央目录时将原始扩展字段交由 `zip` 9.1.3 的 raw-copy API 复制。
+- 快路径只接受 ZIP 起始偏移为 0 的归档；带自解压前缀、非 UTF-8 原始文件名或不满足路径 / 资源限制的归档回退完整解压重打包。编辑仍写入同目录新文件并校验后原子替换，遵守 D11；这不实现原地增量写入。
+- 回归用例检查删除与重命名后归档注释、保留条目的文件注释 / 自定义 extra field，以及替换后的归档和条目注释。

@@ -1,20 +1,88 @@
 use std::collections::BTreeMap;
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread::{self, JoinHandle};
 
 const CHUNK: usize = 900_000;
 const WORKER_MEMORY: u64 = 16 << 20;
+const DECODE_WORKER_MEMORY: u64 = 64 << 20;
+const DECODE_FIXED_MEMORY: u64 = 16 << 20;
 
 type Job = (u64, Vec<u8>);
 type Done = (u64, io::Result<Vec<u8>>);
+
+#[derive(Clone, Copy)]
+enum Codec {
+    Bzip2(u32),
+    Gzip(u32),
+}
+
+impl Codec {
+    fn encode(self, input: &[u8]) -> io::Result<Vec<u8>> {
+        match self {
+            Self::Bzip2(level) => {
+                let mut encoder =
+                    bzip2::write::BzEncoder::new(Vec::new(), bzip2::Compression::new(level));
+                encoder.write_all(input)?;
+                encoder.finish()
+            }
+            Self::Gzip(level) => {
+                let mut encoder =
+                    flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::new(level));
+                encoder.write_all(input)?;
+                encoder.finish()
+            }
+        }
+    }
+}
 
 pub(crate) fn worker_count(threads: usize, budget: u64) -> usize {
     threads.min(usize::try_from(budget / WORKER_MEMORY).unwrap_or(usize::MAX))
 }
 
-/// Concatenated bzip2 streams can be decoded as one continuous stream.
-pub struct ParallelBzip2<W: Write> {
+pub(crate) fn decode_worker_count(threads: usize, budget: u64) -> usize {
+    let available = budget
+        .saturating_sub(DECODE_FIXED_MEMORY)
+        .checked_div(DECODE_WORKER_MEMORY)
+        .unwrap_or(0);
+    threads.min(usize::try_from(available).unwrap_or(usize::MAX))
+}
+
+pub(crate) struct ParallelBzip2Decoder {
+    inner: pbz2::ParallelDecoder,
+    checked_end: bool,
+}
+
+impl ParallelBzip2Decoder {
+    pub(crate) fn new(input: impl Read + Send + 'static, threads: usize) -> Self {
+        Self {
+            inner: pbz2::ParallelDecoder::with_threads(input, threads),
+            checked_end: false,
+        }
+    }
+}
+
+impl Read for ParallelBzip2Decoder {
+    fn read(&mut self, output: &mut [u8]) -> io::Result<usize> {
+        if output.is_empty() {
+            return Ok(0);
+        }
+        let read = self.inner.read(output)?;
+        if read == 0 && !self.checked_end {
+            self.checked_end = true;
+            if self.inner.has_trailing_bytes() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "trailing bytes after the final bzip2 stream",
+                ));
+            }
+        }
+        Ok(read)
+    }
+}
+
+/// Encodes bounded input chunks independently, then writes their streams in order.
+struct ParallelChunks<W: Write> {
     out: Option<W>,
     input: Vec<u8>,
     jobs: Option<mpsc::Sender<Job>>,
@@ -27,8 +95,8 @@ pub struct ParallelBzip2<W: Write> {
     max_jobs: usize,
 }
 
-impl<W: Write> ParallelBzip2<W> {
-    pub fn new(out: W, level: u32, workers: usize) -> io::Result<Self> {
+impl<W: Write> ParallelChunks<W> {
+    fn new(out: W, codec: Codec, workers: usize) -> io::Result<Self> {
         let (job_tx, job_rx) = mpsc::channel::<Job>();
         let (done_tx, done_rx) = mpsc::channel::<Done>();
         let job_rx = Arc::new(Mutex::new(job_rx));
@@ -44,13 +112,8 @@ impl<W: Write> ParallelBzip2<W> {
                 let Ok((index, input)) = job else {
                     break;
                 };
-                let result = std::panic::catch_unwind(|| {
-                    let mut encoder =
-                        bzip2::write::BzEncoder::new(Vec::new(), bzip2::Compression::new(level));
-                    encoder.write_all(&input)?;
-                    encoder.finish()
-                })
-                .unwrap_or_else(|_| Err(io::Error::other("bzip2 worker failed")));
+                let result = std::panic::catch_unwind(|| codec.encode(&input))
+                    .unwrap_or_else(|_| Err(io::Error::other("compression worker failed")));
                 if done.send((index, result)).is_err() {
                     break;
                 }
@@ -85,13 +148,13 @@ impl<W: Write> ParallelBzip2<W> {
         let (index, result) = self
             .done
             .recv()
-            .map_err(|_| io::Error::other("bzip2 worker stopped"))?;
+            .map_err(|_| io::Error::other("compression worker stopped"))?;
         self.outstanding -= 1;
         self.pending.insert(index, result?);
         while let Some(data) = self.pending.remove(&self.written) {
             self.out
                 .as_mut()
-                .ok_or_else(|| io::Error::other("bzip2 writer is closed"))?
+                .ok_or_else(|| io::Error::other("compression writer is closed"))?
                 .write_all(&data)?;
             self.written += 1;
         }
@@ -105,9 +168,9 @@ impl<W: Write> ParallelBzip2<W> {
         let input = std::mem::replace(&mut self.input, Vec::with_capacity(CHUNK));
         self.jobs
             .as_ref()
-            .ok_or_else(|| io::Error::other("bzip2 writer is closed"))?
+            .ok_or_else(|| io::Error::other("compression writer is closed"))?
             .send((self.sent, input))
-            .map_err(|_| io::Error::other("bzip2 workers stopped"))?;
+            .map_err(|_| io::Error::other("compression workers stopped"))?;
         self.sent += 1;
         self.outstanding += 1;
         Ok(())
@@ -123,7 +186,7 @@ impl<W: Write> ParallelBzip2<W> {
         self.stop_workers();
         self.out
             .take()
-            .ok_or_else(|| io::Error::other("bzip2 writer is closed"))
+            .ok_or_else(|| io::Error::other("compression writer is closed"))
     }
 
     fn stop_workers(&mut self) {
@@ -134,7 +197,7 @@ impl<W: Write> ParallelBzip2<W> {
     }
 }
 
-impl<W: Write> Write for ParallelBzip2<W> {
+impl<W: Write> Write for ParallelChunks<W> {
     fn write(&mut self, data: &[u8]) -> io::Result<usize> {
         if self.input.len() == CHUNK {
             self.submit()?;
@@ -153,14 +216,58 @@ impl<W: Write> Write for ParallelBzip2<W> {
         }
         self.out
             .as_mut()
-            .ok_or_else(|| io::Error::other("bzip2 writer is closed"))?
+            .ok_or_else(|| io::Error::other("compression writer is closed"))?
             .flush()
     }
 }
 
-impl<W: Write> Drop for ParallelBzip2<W> {
+impl<W: Write> Drop for ParallelChunks<W> {
     fn drop(&mut self) {
         self.stop_workers();
+    }
+}
+
+pub struct ParallelBzip2<W: Write>(ParallelChunks<W>);
+
+impl<W: Write> ParallelBzip2<W> {
+    pub fn new(out: W, level: u32, workers: usize) -> io::Result<Self> {
+        ParallelChunks::new(out, Codec::Bzip2(level), workers).map(Self)
+    }
+
+    pub fn finish(self) -> io::Result<W> {
+        self.0.finish()
+    }
+}
+
+impl<W: Write> Write for ParallelBzip2<W> {
+    fn write(&mut self, data: &[u8]) -> io::Result<usize> {
+        self.0.write(data)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.0.flush()
+    }
+}
+
+pub struct ParallelGzip<W: Write>(ParallelChunks<W>);
+
+impl<W: Write> ParallelGzip<W> {
+    pub fn new(out: W, level: u32, workers: usize) -> io::Result<Self> {
+        ParallelChunks::new(out, Codec::Gzip(level), workers).map(Self)
+    }
+
+    pub fn finish(self) -> io::Result<W> {
+        self.0.finish()
+    }
+}
+
+impl<W: Write> Write for ParallelGzip<W> {
+    fn write(&mut self, data: &[u8]) -> io::Result<usize> {
+        self.0.write(data)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.0.flush()
     }
 }
 
@@ -213,6 +320,27 @@ mod tests {
             let bytes = writer.finish()?;
             let mut decoded = Vec::new();
             bzip2::read::MultiBzDecoder::new(bytes.as_slice()).read_to_end(&mut decoded)?;
+            assert_eq!(decoded, expected);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn gzip_chunks_decode_as_a_standard_multistream() -> io::Result<()> {
+        for chunks in [
+            vec![Vec::new()],
+            vec![vec![1; CHUNK + 17], vec![2; CHUNK + 31], vec![3; 20]],
+        ] {
+            let mut writer = ParallelGzip::new(Vec::new(), 6, 3)?;
+            let mut expected = Vec::new();
+            for chunk in chunks {
+                writer.write_all(&chunk)?;
+                writer.flush()?;
+                expected.extend_from_slice(&chunk);
+            }
+            let bytes = writer.finish()?;
+            let mut decoded = Vec::new();
+            flate2::read::MultiGzDecoder::new(bytes.as_slice()).read_to_end(&mut decoded)?;
             assert_eq!(decoded, expected);
         }
         Ok(())

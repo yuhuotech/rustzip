@@ -31,7 +31,7 @@ RustZIP 是一个用 Rust 开发的压缩管理软件，支持 Windows、macOS �
 
 桌面应用与命令行共用同一套核心库，行为一致。
 
-> 核心归档能力、CLI 和桌面主流程已经实现；macOS 与 Ubuntu 26.04 已完成一部分实机验证。**截至 2026-10-27，GitHub Releases 还没有公开版本**；Windows 原生 GUI / 安装器、其他文件管理器集成及正式发布流程仍待验收。详细状态见[开发计划](docs/next-development-plan.md)和[Ubuntu 验收记录](docs/linux-ubuntu-acceptance.md)。
+> 核心归档能力、CLI 和桌面主流程已经实现；macOS 与 Ubuntu 26.04 已完成一部分实机验证。Windows CI 与安装器自动化验收通过，原生 GUI 人工验收、其他文件管理器集成及正式发布流程仍待完成。**截至 2026-10-29，GitHub Releases 尚无公开版本**；详细状态见[开发计划](docs/next-development-plan.md)和[第二阶段验收](docs/phase-2-platform-acceptance.md)。
 
 ## 特色功能
 
@@ -141,9 +141,9 @@ rz r <archive> <output> [-p -|@file] [-q -|@file]               修复 ZIP / 7z
 
 ### 关于 RAR
 
-RAR 只读，不实现压缩。解压依赖 unRAR 源码（`unrar` crate），它的许可证禁止用来重建 RAR 压缩算法，因此放在默认关闭的 feature 里：
+RAR 只读，不实现压缩。解压通过 `rz-ffi` 封装 UnRAR 原生数据回调；该实现依赖受许可限制的 UnRAR 源码，故放在默认关闭的 feature 里：
 
-当前 RAR 后端会先将条目完整写入临时目录，选择性解压时也可能处理未选条目；解码阶段没有硬性的临时磁盘输出上限。RAR 内预览因此暂时关闭，该限制不代表正常解压已具有同等保护。
+启用可选 RAR feature 时，UnRAR 通过逐块回调工作；解码前检查压缩比，选中条目的临时输出受声明大小和解压总上限控制，未选条目不写临时盘，预览按图片 / 文本大小限额读取。默认构建仍关闭 RAR；实现边界见[决策 D38](docs/decisions.md#d38-rar-解码输出上限与安全预览)。
 
 ```bash
 cargo build --release --features rar
@@ -186,7 +186,7 @@ RZ_SHOT_DIR=/某个文件夹 cargo run --release -p rustzip-gui --example screen
 | 安全解压（路径穿越、压缩炸弹、符号链接、setuid） | 已完成 |
 | 取消、进度回调、原子写入（失败不留半成品） | 已完成 |
 | 权限与修改时间保留 | 已完成 |
-| zip 多线程压缩 / 解压；xz / zstd / 7z（LZMA2）内部多线程压缩 | 已完成 |
+| zip 多线程压缩 / 解压；ZIP 大条目分块 Deflate；xz / zstd / 7z（LZMA2）内部多线程压缩 | 已完成，本机往返与 Info-ZIP 校验通过 |
 | 命令行 `rz a / l / x / t / c / r / h`（含取消、进度、编码和分开的源 / 目标密码入口） | 已完成 |
 | zip 中日韩文件名编码自动识别与手动指定 | 已完成 |
 | 同名不失败：保留两者并加序号（解压、压缩、转换、修复输出） | 已完成 |
@@ -196,8 +196,8 @@ RZ_SHOT_DIR=/某个文件夹 cargo run --release -p rustzip-gui --example screen
 | 设置：原子保存、损坏自动隔离、范围校验、各系统配置目录 | 已完成（`rz-app`） |
 | 智能解压 | 已完成（`rz-app`） |
 | 选择性解压（按文件或文件夹，各格式含固实块与并行路径） | 已完成 |
-| 压缩包内添加 / 删除 / 重命名（zip、7z、tar 系列，校验后整体替换） | 已完成（`rz-app::modify`）；普通 ZIP 删除 / 重命名 / 条目写回可复用未改动的压缩数据并校验后替换，其余情况完整重打包，真正原地增量改写未做 |
-| 预览 | 图片在详情栏显示；64 KiB 内白名单 UTF-8 纯文本可预览；7z / tar 的顺序预览使用有限读取；RAR 暂不支持预览，需先解压；PDF / 音视频交给系统程序打开 |
+| 压缩包内添加 / 删除 / 重命名（zip、7z、tar 系列，校验后整体替换） | 已完成（`rz-app::modify`）；符合条件的 ZIP 编辑可复用未改动压缩数据并保留注释和扩展字段，其余情况完整重打包，真正原地增量改写未做 |
+| 预览 | 图片在详情栏显示；64 KiB 内白名单 UTF-8 纯文本可预览；7z / tar 的顺序预览使用有限读取；启用可选 RAR feature 时也按调用方大小上限读取；PDF / 音视频交给系统程序打开 |
 | 格式转换（ZIP / 7z / tar 系八种目标，独立源 / 目标密码，校验后另存） | 已完成，符号链接暂不支持 |
 | ZIP / 7z 修复（尽力抢救可读条目并报告跳过项） | 已完成，严重损坏不保证恢复 |
 | 密码本（系统钥匙串；「记住密码」默认关闭） | 已实现；macOS 和 Ubuntu 已通过隔离测试条目的真实钥匙串读写，Windows 待验收 |
@@ -208,11 +208,11 @@ RZ_SHOT_DIR=/某个文件夹 cargo run --release -p rustzip-gui --example screen
 | 发布工具（生成签名密钥、给安装包签名、生成 `update.json`） | 已完成（`rz-release`） |
 | 桌面应用 `rustzip`（GPUI Kit） | macOS Metal 渲染与 Ubuntu 26.04 GNOME Wayland / Xvfb 启动通过；Ubuntu 和 macOS 的工作区测试通过；Windows 原生 GUI 尚未验收。侧栏工具范围见 `docs/sidebar-implementation.md` |
 | 多语言界面 | 十种语言、365 个资源键已完成；系统语言识别、菜单切换和侧栏布局在 macOS / Ubuntu 26.04 通过；Windows 语言 API、屏幕阅读器和阿拉伯语 RTL 整页布局待设备验收 |
-| 应用图标与打包 | macOS `.app` / DMG 已签名并启动，尚未公证；Ubuntu x86_64 Linux tarball 构建、隔离安装和卸载通过；Windows 安装器、完整发布流程尚未运行；当前没有公开 GitHub Release |
+| 应用图标与打包 | macOS `.app` / DMG 已签名并启动，尚未公证；Ubuntu x86_64 Linux tarball 构建、隔离安装和卸载通过；Windows runner 已通过安装器编译、安装 / 卸载冒烟；完整 release 流程尚未运行 |
 | 文件关联与右键菜单 | macOS 支持“打开方式”，新增的长尾格式关联待实机验收，Finder 右键 / Quick Look 未做；Nautilus 50.2.2 的 Scripts 菜单、压缩入口和逐字节解压在 Ubuntu 26.04 / Xvfb 验收；Dolphin / Nemo 菜单已打包但未点击验收；Windows 注册表入口未实机验收 |
 | 7z 分块并行解压 | 已接入独立固实块调度，支持选择性解压和加密；线程数受解码器字典估算及内存预算限制，其他编码方法回退顺序解压；更大样本和跨平台验收待完成 |
-| bzip2 多线程压缩 | 单文件及 tar.bz2 按数据块并行压缩并顺序拼接标准 bzip2 流；内存不足时回退单线程，解压仍为单线程 |
-| 大文件分块 deflate | 未开始 |
+| bzip2 多线程压缩 / 解压 | 单文件及 tar.bz2 按数据块并行压缩；bzip2 单流和串接 member 并行解压；线程数按内存预算估算，预算不足时顺序回退 |
+| 大文件分块 Deflate | `.gz` / `.tar.gz` 使用标准串接 gzip member；ZIP 大条目按 900,000 字节分块并行 Deflate，按顺序合并，受内存预算限制；加密 ZIP 和低预算情况顺序回退 |
 | 7z 高级压缩参数 | 字典大小、固实块大小和非固实模式已接入 CLI / GUI，并按内存预算限制并行度 |
 | 压缩预设 | 极速 / 均衡 / 最小体积 / 邮件分享 / 跨平台兼容已接入；邮件分享默认 20 MiB ZIP / 7z 分卷 |
 | 重复文件检测 | GUI 压缩前按内容哈希提示重复，可取消或继续；不自动删除文件 |

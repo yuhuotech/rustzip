@@ -14,7 +14,7 @@
 - 项目许可证:`MIT OR Apache-2.0`。
 - 引入依赖前先检查许可证,**禁止引入 GPL / AGPL / LGPL 的静态链接依赖**。
 - **不拷贝 7-Zip 源码**(LGPL)。参考其格式规范,自行实现。
-- RAR:仅用 `unrar` 做只读解压,放在独立 Cargo feature `rar` 下,官方构建附带 unRAR 授权声明;不实现任何 RAR 压缩。
+- RAR:仅通过 `rz-ffi` 的 `unrar_sys` 调用 unRAR 做只读解压,放在独立 Cargo feature `rar` 下,发行包附带 unRAR 授权声明;不实现任何 RAR 压缩。
 - libarchive(BSD)可直接使用。
 
 ## 3. 代码规范

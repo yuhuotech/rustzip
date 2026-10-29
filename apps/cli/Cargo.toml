@@ -15,7 +15,7 @@ rz-app.workspace = true
 
 [dev-dependencies]
 tempfile = "3"
-zip = { version = "2", default-features = false, features = ["deflate"] }
+zip = { workspace = true, features = ["deflate"] }
 
 [features]
 # Read-only RAR support; see crates/rz-formats for the license note.

@@ -4,7 +4,8 @@ mod common;
 
 use common::*;
 use rz_core::{CancelToken, CreateOptions, EntryKind, Error, Progress};
-use rz_engine::{extract, ExtractOptions};
+use rz_engine::{compress, extract, ExtractOptions};
+use rz_formats::OutputFormat;
 use std::fs;
 use std::path::Path;
 
@@ -77,6 +78,83 @@ fn parallel_zip_keeps_input_order_and_content() {
         unpack(archive, &out, &ExtractOptions::default()).unwrap();
         assert_same_tree(&src, &out.join("many"), label);
     }
+}
+
+#[test]
+fn large_parallel_deflate_entry_extracts_through_engine_streaming_path() {
+    let tmp = tempfile::tempdir().unwrap();
+    let src = tmp.path().join("large");
+    fs::create_dir_all(&src).unwrap();
+    let block = pseudo_random(1 << 20, 0x5eed);
+    let mut file = fs::File::create(src.join("large-entry.bin")).unwrap();
+    for _ in 0..40 {
+        std::io::Write::write_all(&mut file, &block).unwrap();
+    }
+    drop(file);
+    rz_platform::set_mtime(&src.join("large-entry.bin"), MTIME).unwrap();
+    let archive = tmp.path().join("large.zip");
+    pack(
+        &src,
+        &archive,
+        &CreateOptions {
+            threads: 4,
+            ..CreateOptions::default()
+        },
+    )
+    .unwrap();
+    let mut reader = rz_formats::open(&archive).unwrap();
+    let entries = reader.entries().unwrap();
+    let mut compressed_reader = reader.open(&entries[1]).unwrap();
+    let mut buffer = vec![0; 256 * 1024];
+    loop {
+        let read = compressed_reader.read(&mut buffer).unwrap();
+        if read == 0 {
+            break;
+        }
+    }
+    drop(compressed_reader);
+    drop(reader);
+    let out = tmp.path().join("out");
+    unpack(
+        &archive,
+        &out,
+        &ExtractOptions {
+            threads: 4,
+            ..ExtractOptions::default()
+        },
+    )
+    .unwrap();
+    assert_same_tree(&src, &out.join("large"), "large parallel ZIP entry");
+}
+
+#[test]
+fn cancelling_large_parallel_deflate_cleans_staging_files() {
+    let tmp = tempfile::tempdir().unwrap();
+    let src = tmp.path().join("large");
+    fs::create_dir_all(&src).unwrap();
+    let block = pseudo_random(1 << 20, 0x5eed);
+    let mut file = fs::File::create(src.join("large-entry.bin")).unwrap();
+    for _ in 0..40 {
+        std::io::Write::write_all(&mut file, &block).unwrap();
+    }
+    let archive = tmp.path().join("cancelled.zip");
+    let cancel = CancelToken::new();
+    let cancel_from_progress = cancel.clone();
+    let mut progress = move |_: Progress| cancel_from_progress.cancel();
+    let result = compress(
+        &[src],
+        &archive,
+        OutputFormat::Zip,
+        &CreateOptions {
+            threads: 4,
+            ..CreateOptions::default()
+        },
+        &cancel,
+        &mut progress,
+    );
+    assert!(matches!(result, Err(Error::Cancelled)), "{result:?}");
+    assert!(!archive.exists());
+    assert!(temp_leftovers(tmp.path(), &archive).is_empty());
 }
 
 #[test]
@@ -363,6 +441,66 @@ fn bzip2_parallel_streams_round_trip_and_work_with_system_decoder() {
         &CreateOptions {
             threads: 4,
             level: 1,
+            ..CreateOptions::default()
+        },
+    )
+    .unwrap();
+    let out = tmp.path().join("tree-out");
+    unpack(&archive, &out, &ExtractOptions::default()).unwrap();
+    assert_eq!(fs::read(out.join("source/data.bin")).unwrap(), data);
+    if let Ok(output) = std::process::Command::new("bsdtar")
+        .arg("-xOf")
+        .arg(&archive)
+        .arg("source/data.bin")
+        .output()
+    {
+        assert!(output.status.success());
+        assert_eq!(output.stdout, data);
+    }
+}
+
+#[test]
+fn gzip_chunked_deflate_round_trips_as_standard_members() {
+    let tmp = tempfile::tempdir().unwrap();
+    let data = pseudo_random(3_100_000, 27);
+    let src = tmp.path().join("payload.bin");
+    fs::write(&src, &data).unwrap();
+    let archive = tmp.path().join("payload.gz");
+    pack(
+        &src,
+        &archive,
+        &CreateOptions {
+            threads: 4,
+            memory_budget: 128 << 20,
+            level: 6,
+            ..CreateOptions::default()
+        },
+    )
+    .unwrap();
+
+    let out = tmp.path().join("single-out");
+    unpack(&archive, &out, &ExtractOptions::default()).unwrap();
+    assert_eq!(fs::read(out.join("payload")).unwrap(), data);
+    if let Ok(output) = std::process::Command::new("gzip")
+        .arg("-dc")
+        .arg(&archive)
+        .output()
+    {
+        assert!(output.status.success());
+        assert_eq!(output.stdout, data);
+    }
+
+    let folder = tmp.path().join("source");
+    fs::create_dir(&folder).unwrap();
+    fs::write(folder.join("data.bin"), &data).unwrap();
+    let archive = tmp.path().join("tree.tar.gz");
+    pack(
+        &folder,
+        &archive,
+        &CreateOptions {
+            threads: 4,
+            memory_budget: 128 << 20,
+            level: 6,
             ..CreateOptions::default()
         },
     )

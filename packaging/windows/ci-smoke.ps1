@@ -39,7 +39,7 @@ try {
         "/DIR=`"$install`"", "/TASKS=contextmenu,openwith", "/LOG=`"$work\install.log`""
     ) -Wait -PassThru
     if ($process.ExitCode -ne 0) { throw "Installer failed: $($process.ExitCode)" }
-    foreach ($file in @("rustzip.exe", "licenses\zlib.txt", "licenses\libchm.txt", "licenses\inno-chinese-translation.txt")) {
+    foreach ($file in @("rustzip.exe", "licenses\zlib.txt", "licenses\libchm.txt", "licenses\pbz2.txt", "licenses\pbz2-notice.txt", "licenses\inno-chinese-translation.txt")) {
         if (-not (Test-Path -LiteralPath (Join-Path $install $file))) {
             throw "Installed file missing: $file"
         }

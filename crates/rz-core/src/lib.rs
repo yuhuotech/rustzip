@@ -1,5 +1,6 @@
 //! Core types shared by every RustZIP layer.
 
+use std::collections::HashSet;
 use std::io::Read;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
@@ -70,6 +71,10 @@ pub trait ArchiveReader: Send {
     /// Bounds work done before an entry stream can be exposed (for example, measuring
     /// a gzip stream whose uncompressed size is not stored in its header).
     fn set_read_control(&mut self, _cancel: CancelToken, _max_total: u64) {}
+    /// Sets the per-entry decompression ratio guard used before sequential readers emit data.
+    fn set_ratio_limit(&mut self, _max_ratio: u64, _check_above: u64) {}
+    /// Sets the maximum decoder workers and memory budget for sequential formats.
+    fn set_decode_config(&mut self, _threads: usize, _memory_budget: u64) {}
     fn format_name(&self) -> &'static str;
     fn caps(&self) -> Caps;
     fn entries(&mut self) -> Result<Vec<Entry>>;
@@ -123,6 +128,25 @@ pub trait ArchiveReader: Send {
             visit(&entry, &mut data)?;
         }
         Ok(())
+    }
+
+    /// Visits selected entries in archive order where the format can skip the others safely.
+    /// The default keeps every entry in the underlying stream and suppresses unselected visits.
+    fn for_each_selected(
+        &mut self,
+        selected: Option<&[usize]>,
+        visit: &mut dyn FnMut(&Entry, &mut dyn Read) -> Result<()>,
+    ) -> Result<()> {
+        let selected = selected.map(|indexes| indexes.iter().copied().collect::<HashSet<_>>());
+        self.for_each(&mut |entry, data| {
+            if selected
+                .as_ref()
+                .is_some_and(|indexes| !indexes.contains(&entry.index))
+            {
+                return Ok(());
+            }
+            visit(entry, data)
+        })
     }
 
     /// Returns a parallel plan when the format can bound decoder working memory.

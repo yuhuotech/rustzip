@@ -143,6 +143,8 @@ fn extract_with_metadata(
         reader.set_password(pw)?;
     }
     reader.set_read_control(cancel.clone(), opts.max_total);
+    reader.set_ratio_limit(opts.max_ratio, opts.ratio_check_above);
+    reader.set_decode_config(opts.threads, opts.memory_budget);
     let mut entries = reader.entries()?;
     // Selective extraction: keep the chosen paths and everything inside chosen folders.
     let wanted: Option<HashSet<usize>> = opts.only.as_ref().map(|only| {
@@ -412,14 +414,11 @@ fn secure_mkdirs(dest: &Path, parent: &Path) -> Result<()> {
 
 fn run_sequential(reader: &mut dyn ArchiveReader, ctx: &Ctx<'_>) -> Result<()> {
     let mut buf = vec![0u8; BUF];
-    reader.for_each(&mut |entry, data| {
-        if ctx
-            .wanted
-            .as_ref()
-            .is_some_and(|w| !w.contains(&entry.index))
-        {
-            return Ok(()); // not selected; the reader skips its data
-        }
+    let selected = ctx
+        .wanted
+        .as_ref()
+        .map(|wanted| wanted.iter().copied().collect::<Vec<_>>());
+    reader.for_each_selected(selected.as_deref(), &mut |entry, data| {
         handle(ctx, entry, || Ok(&mut *data), &mut buf)
     })
 }

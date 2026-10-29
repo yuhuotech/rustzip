@@ -1,7 +1,7 @@
 use crate::codec::{Compression, Sink};
 use rz_core::{
-    ArchiveReader, ArchiveWriter, CancelToken, Caps, CreateOptions, Entry, EntryKind, Error,
-    NewEntry, NoProgress, Progress, ProgressSink, Result,
+    resolve_threads, ArchiveReader, ArchiveWriter, CancelToken, Caps, CreateOptions, Entry,
+    EntryKind, Error, NewEntry, NoProgress, Progress, ProgressSink, Result,
 };
 use std::fs::File;
 use std::io::{self, Read};
@@ -51,6 +51,8 @@ impl Read for ListingReader<'_> {
 pub struct TarReader {
     path: PathBuf,
     comp: Compression,
+    decode_threads: usize,
+    memory_budget: u64,
 }
 
 impl TarReader {
@@ -58,11 +60,17 @@ impl TarReader {
         Self {
             path: path.to_path_buf(),
             comp,
+            decode_threads: resolve_threads(0),
+            memory_budget: crate::codec::DEFAULT_DECODE_MEMORY_BUDGET,
         }
     }
 
     fn stream(&self) -> Result<Box<dyn Read + Send>> {
-        self.comp.reader(File::open(&self.path)?)
+        self.comp.reader_with_options(
+            File::open(&self.path)?,
+            self.decode_threads,
+            self.memory_budget,
+        )
     }
 }
 
@@ -97,6 +105,11 @@ fn describe<R: Read>(index: usize, item: &tar::Entry<'_, R>) -> Result<Entry> {
 }
 
 impl ArchiveReader for TarReader {
+    fn set_decode_config(&mut self, threads: usize, memory_budget: u64) {
+        self.decode_threads = resolve_threads(threads);
+        self.memory_budget = memory_budget;
+    }
+
     fn format_name(&self) -> &'static str {
         match self.comp {
             Compression::None => "tar",

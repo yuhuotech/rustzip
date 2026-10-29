@@ -43,7 +43,6 @@ notice_prepare_preview	{name}を準備しています…
 notice_external_edit_writeback	システムアプリで開きました。保存した変更は圧縮ファイルに書き戻されます。
 notice_external_read_only	システムアプリで開きました。この圧縮ファイルは読み取り専用のため、変更は書き戻されません。
 notice_preview_too_large	ファイルが大きすぎるためプレビューできません。展開して表示してください。
-notice_rar_preview_unavailable	RARのプレビューは利用できません。ファイルを展開してから開いてください。
 task_test_passed	{task}が完了しました: {count}件に問題はありません
 task_edit_complete	{task}が完了しました: 圧縮ファイルに{count}件の項目があります
 task_complete_count	{task}が完了しました: {count}ファイル、{size}

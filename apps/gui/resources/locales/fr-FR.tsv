@@ -43,7 +43,6 @@ notice_prepare_preview	Préparation de {name}…
 notice_external_edit_writeback	Ouvert dans l’application système. Les modifications enregistrées seront réécrites dans l’archive.
 notice_external_read_only	Ouvert dans l’application système. Cette archive est en lecture seule, les modifications ne seront donc pas enregistrées.
 notice_preview_too_large	Ce fichier est trop volumineux pour être prévisualisé. Extrayez-le pour le consulter.
-notice_rar_preview_unavailable	La prévisualisation RAR est indisponible ; extrayez le fichier avant de l'ouvrir.
 task_test_passed	{task} terminé : aucun problème détecté dans {count} éléments
 task_edit_complete	{task} terminé : l’archive contient maintenant {count} éléments
 task_complete_count	{task} terminé : {count} fichiers, {size}

@@ -2,8 +2,8 @@
 
 use crate::codec::{Compression, Sink};
 use rz_core::{
-    ArchiveReader, ArchiveWriter, CancelToken, Caps, CreateOptions, Entry, EntryKind, Error,
-    NewEntry, Progress, ProgressSink, Result,
+    resolve_threads, ArchiveReader, ArchiveWriter, CancelToken, Caps, CreateOptions, Entry,
+    EntryKind, Error, NewEntry, Progress, ProgressSink, Result,
 };
 use std::fs::File;
 use std::io::{Read, Write};
@@ -17,6 +17,8 @@ pub struct SingleReader {
     comp: Compression,
     size: Option<u64>,
     control: Option<(CancelToken, u64)>,
+    decode_threads: usize,
+    memory_budget: u64,
 }
 
 impl SingleReader {
@@ -26,6 +28,8 @@ impl SingleReader {
             comp,
             size: None,
             control: None,
+            decode_threads: resolve_threads(0),
+            memory_budget: crate::codec::DEFAULT_DECODE_MEMORY_BUDGET,
         }
     }
 
@@ -48,7 +52,11 @@ impl SingleReader {
         if let Some(s) = self.size {
             return Ok(s);
         }
-        let mut r = self.comp.reader(File::open(&self.path)?)?;
+        let mut r = self.comp.reader_with_options(
+            File::open(&self.path)?,
+            self.decode_threads,
+            self.memory_budget,
+        )?;
         let mut buf = vec![0u8; 256 * 1024];
         let mut total = 0u64;
         loop {
@@ -88,6 +96,11 @@ impl SingleReader {
 impl ArchiveReader for SingleReader {
     fn set_read_control(&mut self, cancel: CancelToken, max_total: u64) {
         self.control = Some((cancel, max_total));
+    }
+
+    fn set_decode_config(&mut self, threads: usize, memory_budget: u64) {
+        self.decode_threads = resolve_threads(threads);
+        self.memory_budget = memory_budget;
     }
     fn format_name(&self) -> &'static str {
         match self.comp {
@@ -146,7 +159,11 @@ impl ArchiveReader for SingleReader {
     }
 
     fn open<'a>(&'a mut self, _entry: &Entry) -> Result<Box<dyn Read + 'a>> {
-        Ok(Box::new(self.comp.reader(File::open(&self.path)?)?))
+        Ok(self.comp.reader_with_options(
+            File::open(&self.path)?,
+            self.decode_threads,
+            self.memory_budget,
+        )?)
     }
 }
 

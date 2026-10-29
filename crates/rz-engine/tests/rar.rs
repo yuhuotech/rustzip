@@ -53,6 +53,46 @@ fn rar_entry_can_be_opened_directly() {
 }
 
 #[test]
+fn rar_streaming_output_stops_at_the_configured_limit() {
+    let mut reader = rz_formats::open(&fixture()).unwrap();
+    reader.set_read_control(CancelToken::new(), 1);
+    let result = reader.for_each(&mut |_, data| {
+        std::io::copy(data, &mut std::io::sink())?;
+        Ok(())
+    });
+    assert!(matches!(result, Err(Error::LimitExceeded(_))));
+}
+
+#[test]
+fn selecting_no_rar_entries_does_not_write_unselected_content() {
+    let mut reader = rz_formats::open(&fixture()).unwrap();
+    reader.set_read_control(CancelToken::new(), 1);
+    let mut visited = 0;
+
+    reader
+        .for_each_selected(Some(&[]), &mut |_, _| {
+            visited += 1;
+            Ok(())
+        })
+        .unwrap();
+
+    assert_eq!(visited, 0);
+}
+
+#[test]
+fn rar_compression_ratio_is_checked_before_native_output() {
+    let mut reader = rz_formats::open(&fixture()).unwrap();
+    reader.set_ratio_limit(0, 0);
+    let result = reader.for_each(&mut |_, data| {
+        std::io::copy(data, &mut std::io::sink())?;
+        Ok(())
+    });
+    assert!(
+        matches!(result, Err(Error::LimitExceeded(reason)) if reason.contains("compression ratio"))
+    );
+}
+
+#[test]
 fn damaged_rar_files_are_errors_not_crashes() {
     let original = fs::read(fixture()).unwrap();
     let tmp = tempfile::tempdir().unwrap();

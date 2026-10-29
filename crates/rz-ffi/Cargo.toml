@@ -8,9 +8,16 @@ rust-version.workspace = true
 
 [dependencies]
 libarchive2-sys.workspace = true
+unrar_sys = { workspace = true, optional = true }
+widestring = { workspace = true, optional = true }
+zeroize = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile = "3"
+
+[features]
+default = []
+rar = ["dep:unrar_sys", "dep:widestring", "dep:zeroize"]
 
 [lints.rust]
 unsafe_code = "allow"

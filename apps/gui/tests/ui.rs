@@ -287,7 +287,7 @@ fn pictures_and_plain_text_are_previewed_in_the_details_panel(cx: &mut TestAppCo
 
 #[cfg(feature = "rar")]
 #[gpui_kit::test]
-fn rar_build_opens_archive_but_explains_preview_restriction(cx: &mut TestAppContext) {
+fn rar_build_opens_archive_and_safely_opens_a_small_entry(cx: &mut TestAppContext) {
     let archive = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../crates/rz-formats/tests/fixtures/container.rar");
     let (handle, view) = open_window(cx, None);
@@ -304,7 +304,7 @@ fn rar_build_opens_archive_but_explains_preview_restriction(cx: &mut TestAppCont
         cx.update(|cx| {
             matches!(
                 &view.read(cx).notice,
-                Some(Notice::Info(text)) if text.contains("RAR 暂不支持安全预览")
+                Some(Notice::Info(text)) if text.contains("只读")
             )
         })
     });
@@ -312,9 +312,9 @@ fn rar_build_opens_archive_but_explains_preview_restriction(cx: &mut TestAppCont
         assert!(
             matches!(
                 &view.read(cx).notice,
-                Some(Notice::Info(text)) if text.contains("RAR 暂不支持安全预览")
+                Some(Notice::Info(text)) if text.contains("只读")
             ),
-            "RAR preview must explain how to view the entry"
+            "a RAR entry opened through a bounded scratch file must remain read-only"
         );
     });
 }

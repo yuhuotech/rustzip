@@ -1,3 +1,4 @@
+use crate::parallel_deflate::{pack_entry, worker_count as deflate_worker_count};
 use crate::zip_fmt::{map_err, unix_to_dos};
 use rz_core::{resolve_threads, ArchiveWriter, CreateOptions, Error, FileSource, NewEntry, Result};
 use std::collections::BTreeMap;
@@ -10,8 +11,8 @@ use std::time::Duration;
 use zip::write::SimpleFileOptions;
 use zip::{AesMode, CompressionMethod, ZipArchive, ZipWriter};
 
-/// Files above this size are compressed on the writing thread: holding them in
-/// memory to compress elsewhere would cost more than the parallelism gains.
+/// Entries above this size stop participating in cross-entry worker batches.
+/// Eligible unencrypted Deflate entries use the bounded chunked path instead.
 const LARGE_FILE: u64 = 32 << 20;
 
 #[derive(Clone)]
@@ -81,7 +82,7 @@ impl ZipOut {
     }
 }
 
-/// Compresses one file into a complete one-entry zip held in memory.
+/// Compresses one small file into an in-memory one-entry ZIP for ordered merging.
 fn pack_one(settings: &Settings, e: &NewEntry, src: &mut dyn Read) -> Result<Vec<u8>> {
     let mut w = ZipWriter::new(Cursor::new(Vec::new()));
     settings.start(&mut w, e)?;
@@ -131,8 +132,8 @@ impl ArchiveWriter for ZipOut {
         Ok(())
     }
 
-    /// Small files are compressed on worker threads and merged in input order,
-    /// so the result is the same archive a single thread would write.
+    /// Small files are compressed across entries; large unencrypted Deflate entries
+    /// are compressed in bounded chunks and merged in input order.
     fn add_files<'a>(
         &mut self,
         files: &mut dyn Iterator<Item = Result<FileSource<'a>>>,
@@ -209,7 +210,20 @@ impl ArchiveWriter for ZipOut {
                                 &mut next_write,
                             )?;
                         }
-                        self.add_file(&entry, &mut src)?;
+                        let deflate_workers = deflate_worker_count(threads, budget);
+                        if settings.password.is_none() && settings.level > 0 && deflate_workers > 1
+                        {
+                            let packed = pack_entry(
+                                &entry,
+                                &mut src,
+                                settings.level,
+                                deflate_workers,
+                                settings.portable,
+                            )?;
+                            self.writer.merge_archive(packed).map_err(map_err)?;
+                        } else {
+                            self.add_file(&entry, &mut src)?;
+                        }
                         next_write = my_seq + 1;
                         continue;
                     }

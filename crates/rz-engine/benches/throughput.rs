@@ -8,6 +8,7 @@ use rz_core::{CancelToken, CreateOptions, NoProgress};
 use rz_engine::{compress, extract, transform, ExtractOptions, TransformOptions};
 use rz_formats::OutputFormat;
 use std::fs;
+use std::io::{Read, Write};
 use std::path::Path;
 use std::time::Instant;
 
@@ -68,6 +69,21 @@ fn verify_extraction(out: &Path, src: &Path, files: usize) {
             (Err(e), _) | (_, Err(e)) => die(&name, e),
             _ => die(&name, "content differs from the source"),
         }
+    }
+}
+
+fn hash_file(path: &Path) -> [u8; 32] {
+    let mut input = fs::File::open(path).unwrap_or_else(|e| die("open for hash", e));
+    let mut hasher = blake3::Hasher::new();
+    let mut buffer = [0u8; 256 * 1024];
+    loop {
+        let read = input
+            .read(&mut buffer)
+            .unwrap_or_else(|e| die("read for hash", e));
+        if read == 0 {
+            return *hasher.finalize().as_bytes();
+        }
+        hasher.update(&buffer[..read]);
     }
 }
 
@@ -158,6 +174,87 @@ fn main() {
             let _ = fs::remove_file(&archive);
         }
     }
+
+    println!("\nLarge ZIP entry Deflate, 3 samples per size, verified by BLAKE3");
+    let large_source = root.join("large-entry.bin");
+    let block = make_data(0x5eed);
+    let mut thread_cases = vec![1, cpus];
+    thread_cases.sort_unstable();
+    thread_cases.dedup();
+    for size_mib in [40usize, 64, 128] {
+        let mut large_file =
+            fs::File::create(&large_source).unwrap_or_else(|e| die("create large ZIP source", e));
+        for _ in 0..size_mib {
+            large_file
+                .write_all(&block)
+                .unwrap_or_else(|e| die("write large ZIP source", e));
+        }
+        large_file
+            .sync_all()
+            .unwrap_or_else(|e| die("sync large ZIP source", e));
+        let large_bytes = fs::metadata(&large_source)
+            .unwrap_or_else(|e| die("stat large ZIP source", e))
+            .len() as usize;
+        let expected_hash = hash_file(&large_source);
+
+        for threads in &thread_cases {
+            for sample in 1..=3 {
+                let archive = root.join(format!("large-entry-{size_mib}-{threads}-{sample}.zip"));
+                let opts = CreateOptions {
+                    level: 6,
+                    threads: *threads,
+                    ..CreateOptions::default()
+                };
+                let started = Instant::now();
+                compress(
+                    std::slice::from_ref(&large_source),
+                    &archive,
+                    OutputFormat::Zip,
+                    &opts,
+                    &CancelToken::new(),
+                    &mut NoProgress,
+                )
+                .unwrap_or_else(|e| die("compress large ZIP entry", e));
+                let pack = started.elapsed().as_secs_f64();
+
+                let out = root.join(format!("large-entry-out-{size_mib}-{threads}-{sample}"));
+                let started = Instant::now();
+                let mut reader =
+                    rz_formats::open(&archive).unwrap_or_else(|e| die("open large ZIP", e));
+                extract(
+                    &mut *reader,
+                    &out,
+                    &ExtractOptions {
+                        threads: *threads,
+                        ..ExtractOptions::default()
+                    },
+                    &CancelToken::new(),
+                    &mut NoProgress,
+                )
+                .unwrap_or_else(|e| die("extract large ZIP", e));
+                let unpack = started.elapsed().as_secs_f64();
+                let extracted = out.join("large-entry.bin");
+                if hash_file(&extracted) != expected_hash {
+                    die("large ZIP entry", "BLAKE3 differs after extraction");
+                }
+                let packed = fs::metadata(&archive)
+                    .unwrap_or_else(|e| die("stat large ZIP", e))
+                    .len();
+                println!(
+                    "ZIP {:>3} MiB, {:>2} threads, sample {sample}: pack {:>6.0} MiB/s, extract {:>6.0} MiB/s, archive {:.1}%",
+                    size_mib,
+                    threads,
+                    mbps(large_bytes, pack),
+                    mbps(large_bytes, unpack),
+                    packed as f64 / large_bytes as f64 * 100.0
+                );
+                let _ = fs::remove_dir_all(&out);
+                let _ = fs::remove_file(&archive);
+            }
+        }
+    }
+    let _ = fs::remove_file(&large_source);
+
     println!("\nZIP / 7z volume creation and verification");
     let volume_size = 64 * 1024;
     for ext in ["zip", "7z"] {

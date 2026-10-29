@@ -142,3 +142,90 @@ fn many_files_through_the_writer_read_back_in_order() {
     let expected: Vec<String> = (0..500).map(|i| format!("f{i}.txt")).collect();
     assert_eq!(names, expected);
 }
+
+#[test]
+fn large_deflated_entry_round_trips_across_parallel_chunk_boundaries() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("large.zip");
+    let mut seed = 0x5eedu64.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1;
+    let block: Vec<u8> = (0..1024 * 1024usize)
+        .map(|_| {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            (seed >> 24) as u8
+        })
+        .collect();
+    let data: Vec<u8> = block
+        .iter()
+        .copied()
+        .cycle()
+        .take(36 * 1024 * 1024)
+        .collect();
+    let mut writer = create(&path, OutputFormat::Zip, &opts(4)).unwrap();
+    let files = [Ok((
+        entry("大文件.bin", data.len() as u64),
+        Box::new(Cursor::new(data.clone())) as Box<dyn Read + Send>,
+    ))];
+    writer.add_files(&mut files.into_iter()).unwrap();
+    writer.finish().unwrap();
+
+    match std::process::Command::new("unzip")
+        .arg("-t")
+        .arg(&path)
+        .output()
+    {
+        Ok(output) => assert!(
+            output.status.success(),
+            "Info-ZIP rejected the archive; source CRC {:08x}: {}{}",
+            crc32fast::hash(&data),
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        ),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => panic!("could not run Info-ZIP: {error}"),
+    }
+
+    let mut archive = rz_formats::open(&path).unwrap();
+    let entries = archive.entries().unwrap();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].path, "大文件.bin");
+    let mut extracted = Vec::new();
+    archive
+        .open(&entries[0])
+        .unwrap()
+        .read_to_end(&mut extracted)
+        .unwrap();
+    assert_eq!(extracted, data);
+}
+
+#[test]
+fn failed_large_source_stops_parallel_deflate_workers() {
+    struct FailsAfterChunks {
+        remaining: usize,
+    }
+
+    impl Read for FailsAfterChunks {
+        fn read(&mut self, output: &mut [u8]) -> std::io::Result<usize> {
+            if self.remaining == 0 {
+                return Err(std::io::Error::other("source failed"));
+            }
+            let count = output.len().min(self.remaining);
+            output[..count].fill(b'x');
+            self.remaining -= count;
+            Ok(count)
+        }
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("failure.zip");
+    let mut writer = create(&path, OutputFormat::Zip, &opts(4)).unwrap();
+    let files = [Ok((
+        entry("large.bin", 40 * 1024 * 1024),
+        Box::new(FailsAfterChunks {
+            remaining: 2 * 1024 * 1024,
+        }) as Box<dyn Read + Send>,
+    ))];
+    let result = writer.add_files(&mut files.into_iter());
+    assert!(matches!(result, Err(Error::Io(_))), "{result:?}");
+}

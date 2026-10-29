@@ -91,10 +91,7 @@ pub fn names_match(source: File, names: &[String], cancel: &CancelToken) -> Resu
             map_err(error)
         }
     })?;
-    if archive.len() != names.len()
-        || !archive.comment().is_empty()
-        || archive.zip64_comment().is_some()
-    {
+    if archive.len() != names.len() || archive.offset() != 0 {
         return Ok(false);
     }
     for (index, name) in names.iter().enumerate() {
@@ -106,7 +103,7 @@ pub fn names_match(source: File, names: &[String], cancel: &CancelToken) -> Resu
                 map_err(error)
             }
         })?;
-        if entry.name_raw() != name.as_bytes() || !entry.comment().is_empty() {
+        if entry.name_raw() != name.as_bytes() {
             return Ok(false);
         }
     }
@@ -138,6 +135,10 @@ pub fn copy_entries(
     if archive.len() != names.len() {
         return Err(Error::Corrupt("ZIP entry count changed".into()));
     }
+    let archive_comment = archive.comment().to_vec().into_boxed_slice();
+    let zip64_extensible_data = archive
+        .raw_zip64_extensible_data_sector()
+        .map(|data| data.to_vec().into_boxed_slice());
     let done = Rc::new(Cell::new(0));
     let output = Output {
         file: output,
@@ -150,6 +151,10 @@ pub fn copy_entries(
         last: None,
     };
     let mut writer = ZipWriter::new(output);
+    writer.set_raw_comment(archive_comment).map_err(map_err)?;
+    if let Some(data) = zip64_extensible_data {
+        writer.set_raw_zip64_extensible_data_sector(data);
+    }
     for (index, name) in names.iter().enumerate() {
         cancel.check()?;
         let Some(name) = name else { continue };
@@ -163,6 +168,7 @@ pub fn copy_entries(
         let copied = if let Some((_, path, level)) =
             replacement.as_ref().filter(|(idx, _, _)| *idx == index)
         {
+            let file_comment = entry.comment().to_owned();
             drop(entry);
             let meta = std::fs::metadata(path)?;
             let mut options = zip::write::SimpleFileOptions::default()
@@ -180,7 +186,12 @@ pub fn copy_entries(
             if let Some(time) = rz_platform::mtime_of(&meta).and_then(crate::zip_fmt::unix_to_dos) {
                 options = options.last_modified_time(time);
             }
-            writer.start_file(name, options).map_err(map_err)?;
+            writer
+                .start_file(
+                    name,
+                    options.into_full_options().with_file_comment(file_comment),
+                )
+                .map_err(map_err)?;
             let mut source = Source {
                 file: File::open(path)?,
                 cancel,

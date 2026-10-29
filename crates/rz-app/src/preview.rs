@@ -10,8 +10,6 @@ use std::path::Path;
 pub const MAX_IMAGE_BYTES: u64 = 8 * 1024 * 1024;
 /// Text is rendered in the detail panel, so keep both decoding and layout work small.
 pub const MAX_TEXT_BYTES: u64 = 64 * 1024;
-/// RAR's current decoder writes whole entries to disk before returning data.
-pub const RAR_PREVIEW_UNAVAILABLE: &str = "RAR preview requires bounded extraction";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImageFormat {
@@ -143,9 +141,6 @@ pub fn read_entry(
         )));
     }
     let mut reader = rz_formats::open(archive)?;
-    if reader.format_name() == "rar" {
-        return Err(Error::Unsupported(RAR_PREVIEW_UNAVAILABLE.into()));
-    }
     if let Some(pw) = password {
         reader.set_password(pw)?;
     }
@@ -254,22 +249,16 @@ mod tests {
 
     #[cfg(feature = "rar")]
     #[test]
-    fn rar_preview_is_refused_before_extracting_an_entry() {
+    fn rar_preview_uses_the_caller_output_limit() {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../rz-formats/tests/fixtures/container.rar");
-        let entry = Entry {
-            index: 0,
-            path: "small.txt".into(),
-            kind: rz_core::EntryKind::File,
-            size: 1,
-            packed_size: None,
-            modified: None,
-            encrypted: false,
-            unix_mode: None,
-        };
+        let mut reader = rz_formats::open(&path).unwrap();
+        let entry = reader.entries().unwrap().remove(0);
+        let data = read_entry(&path, &entry, None, None, MAX_TEXT_BYTES).unwrap();
+        assert_eq!(data, b"#!/bin/sh\nexit 0\n");
         assert!(matches!(
-            read_entry(&path, &entry, None, None, MAX_TEXT_BYTES),
-            Err(Error::Unsupported(reason)) if reason == RAR_PREVIEW_UNAVAILABLE
+            read_entry(&path, &entry, None, None, 1),
+            Err(Error::LimitExceeded(_))
         ));
     }
 

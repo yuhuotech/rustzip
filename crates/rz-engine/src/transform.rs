@@ -130,6 +130,8 @@ fn transform_inner(
     } else {
         let r = reader.as_mut().ok_or(Error::UnknownFormat)?;
         r.set_read_control(cancel.clone(), opts.limits.max_total);
+        r.set_ratio_limit(opts.limits.max_ratio, opts.limits.ratio_check_above);
+        r.set_decode_config(opts.limits.threads, opts.limits.memory_budget);
         if let Some(enc) = &opts.encoding {
             r.set_encoding(enc)?;
         }

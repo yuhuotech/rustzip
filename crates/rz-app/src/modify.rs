@@ -1018,6 +1018,63 @@ mod tests {
     }
 
     #[test]
+    fn zip_copy_edit_preserves_archive_and_entry_comments_and_extra_fields() {
+        use std::io::Write;
+        use zip::write::SimpleFileOptions;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let archive = tmp.path().join("metadata.zip");
+        let mut writer = zip::ZipWriter::new(File::create(&archive).unwrap());
+        writer.set_comment("archive comment").unwrap();
+        writer.set_raw_zip64_extensible_data_sector(Box::from([0x52, 0x5a, 0x31, 0x00]));
+        let mut options = SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored)
+            .into_full_options()
+            .with_file_comment("entry comment");
+        options.add_extra_field(0xcafe, b"rustzip", false).unwrap();
+        writer.start_file("keep.txt", options).unwrap();
+        writer.write_all(b"preserved metadata").unwrap();
+        writer
+            .start_file("delete.txt", SimpleFileOptions::default())
+            .unwrap();
+        writer.write_all(b"remove me").unwrap();
+        writer.finish().unwrap();
+
+        run(&archive, &Edit::Delete(vec!["delete.txt".into()]), None).unwrap();
+        let expected_extra =
+            Some([0xfe, 0xca, 7, 0, b'r', b'u', b's', b't', b'z', b'i', b'p'].to_vec());
+        {
+            let mut result = zip::ZipArchive::new(File::open(&archive).unwrap()).unwrap();
+            assert_eq!(result.comment(), b"archive comment");
+            assert_eq!(
+                result.raw_zip64_extensible_data_sector(),
+                Some(&[0x52, 0x5a, 0x31, 0x00][..])
+            );
+            let entry = result.by_name("keep.txt").unwrap();
+            assert_eq!(entry.comment(), "entry comment");
+            assert_eq!(entry.extra_data(), expected_extra);
+        }
+        run(
+            &archive,
+            &Edit::Rename {
+                path: "keep.txt".into(),
+                new_name: "renamed.txt".into(),
+            },
+            None,
+        )
+        .unwrap();
+        let mut result = zip::ZipArchive::new(File::open(&archive).unwrap()).unwrap();
+        assert_eq!(result.comment(), b"archive comment");
+        assert_eq!(
+            result.raw_zip64_extensible_data_sector(),
+            Some(&[0x52, 0x5a, 0x31, 0x00][..])
+        );
+        let entry = result.by_name("renamed.txt").unwrap();
+        assert_eq!(entry.comment(), "entry comment");
+        assert_eq!(entry.extra_data(), expected_extra);
+    }
+
+    #[test]
     fn renaming_one_zip_file_preserves_stored_data() {
         use std::io::Write;
         use zip::write::SimpleFileOptions;
@@ -1144,15 +1201,24 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let archive = tmp.path().join("replace.zip");
         let mut writer = zip::ZipWriter::new(File::create(&archive).unwrap());
-        for name in ["keep.txt", "change.txt"] {
-            writer
-                .start_file(
-                    name,
-                    SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored),
-                )
-                .unwrap();
-            writer.write_all(b"original").unwrap();
-        }
+        writer.set_comment("archive comment").unwrap();
+        writer
+            .start_file(
+                "keep.txt",
+                SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored),
+            )
+            .unwrap();
+        writer.write_all(b"keep").unwrap();
+        writer
+            .start_file(
+                "change.txt",
+                SimpleFileOptions::default()
+                    .compression_method(zip::CompressionMethod::Stored)
+                    .into_full_options()
+                    .with_file_comment("replacement comment"),
+            )
+            .unwrap();
+        writer.write_all(b"original").unwrap();
         writer.finish().unwrap();
         let source = tmp.path().join("new.txt");
         fs::write(&source, b"new content").unwrap();
@@ -1166,12 +1232,14 @@ mod tests {
         )
         .unwrap();
         let mut result = zip::ZipArchive::new(File::open(&archive).unwrap()).unwrap();
+        assert_eq!(result.comment(), b"archive comment");
         assert_eq!(
             result.by_name("keep.txt").unwrap().compression(),
             zip::CompressionMethod::Stored
         );
         let mut changed = result.by_name("change.txt").unwrap();
         assert_eq!(changed.compression(), zip::CompressionMethod::Deflated);
+        assert_eq!(changed.comment(), "replacement comment");
         let mut content = Vec::new();
         changed.read_to_end(&mut content).unwrap();
         assert_eq!(content, b"new content");
@@ -1219,7 +1287,7 @@ mod tests {
             .any(|entry| entry.file_name().to_string_lossy().contains(".rz-new-")));
 
         let mut reader = zip::ZipArchive::new(File::open(&archive).unwrap()).unwrap();
-        let offset = reader.by_name("delete.txt").unwrap().data_start();
+        let offset = reader.by_name("delete.txt").unwrap().data_start().unwrap();
         drop(reader);
         let mut file = OpenOptions::new().write(true).open(&archive).unwrap();
         file.seek(SeekFrom::Start(offset)).unwrap();

@@ -45,6 +45,8 @@ mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$bin" "$app/Contents/MacOS/rustzip"
 cp packaging/icons/RustZIP.icns "$app/Contents/Resources/RustZIP.icns"
 cp packaging/licenses/libchm.txt "$app/Contents/Resources/libchm-license.txt"
+cp packaging/licenses/pbz2.txt "$app/Contents/Resources/pbz2-license.txt"
+cp packaging/licenses/pbz2-notice.txt "$app/Contents/Resources/pbz2-notice.txt"
 if [ "${RZ_WITH_RAR:-0}" = "1" ]; then
     cp packaging/licenses/unrar.txt "$app/Contents/Resources/unrar-license.txt"
 fi

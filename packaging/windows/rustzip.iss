@@ -57,6 +57,8 @@ Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: 
 
 [Files]
 Source: "{#SourceExe}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\licenses\pbz2.txt"; DestDir: "{app}\licenses"; DestName: "pbz2.txt"; Flags: ignoreversion
+Source: "..\licenses\pbz2-notice.txt"; DestDir: "{app}\licenses"; DestName: "pbz2-notice.txt"; Flags: ignoreversion
 Source: "{#VcpkgShare}\zlib\copyright"; DestDir: "{app}\licenses"; DestName: "zlib.txt"; Flags: ignoreversion
 Source: "{#VcpkgShare}\bzip2\copyright"; DestDir: "{app}\licenses"; DestName: "bzip2.txt"; Flags: ignoreversion
 Source: "{#VcpkgShare}\liblzma\copyright"; DestDir: "{app}\licenses"; DestName: "liblzma.txt"; Flags: ignoreversion

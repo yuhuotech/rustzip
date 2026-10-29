@@ -5,6 +5,7 @@ mod chm_fmt;
 mod codec;
 mod libarchive_fmt;
 mod parallel_bzip2;
+mod parallel_deflate;
 #[cfg(feature = "rar")]
 mod rar_fmt;
 pub mod recovery;

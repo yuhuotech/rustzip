@@ -10,7 +10,7 @@ rust-version.workspace = true
 rz-core.workspace = true
 rz-ffi.workspace = true
 rz-platform.workspace = true
-zip = { version = "2", default-features = false, features = ["deflate", "bzip2", "zstd", "aes-crypto"] }
+zip = { workspace = true, features = ["deflate", "bzip2", "zstd", "aes-crypto", "unreserved"] }
 tar = "0.4"
 flate2 = "1"
 liblzma = { version = "0.4.9", features = ["parallel", "static"] }
@@ -18,11 +18,13 @@ zstd = { version = "0.14.3", features = ["zstdmt"] }
 bzip2 = "0.6.1"
 lz4_flex.workspace = true
 sevenz-rust2 = { version = "0.24.1", default-features = false, features = ["compress", "aes256", "bzip2", "zstd", "deflate", "util"] }
-unrar = { version = "0.5.8", optional = true }
-tempfile = { version = "3", optional = true }
+tempfile.workspace = true
 encoding_rs = "0.8.42"
 chardetng = "1.0.0"
 libchm = { path = "../../vendor/libchm" }
+zeroize.workspace = true
+pbz2.workspace = true
+crc32fast.workspace = true
 
 [dev-dependencies]
 tempfile = "3"
@@ -33,4 +35,4 @@ workspace = true
 [features]
 # Read-only RAR support through the unRAR source (its license forbids re-creating
 # the RAR compressor, which is why RustZIP never writes RAR). Off by default.
-rar = ["dep:unrar", "dep:tempfile"]
+rar = ["rz-ffi/rar"]

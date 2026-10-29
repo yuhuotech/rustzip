@@ -17,9 +17,10 @@ zeroize.workspace = true
 same-file = "1.0.6"
 
 [dev-dependencies]
+blake3.workspace = true
 tempfile = "3"
 tar = "0.4"
-zip = { version = "2", default-features = false, features = ["deflate"] }
+zip = { workspace = true, features = ["deflate"] }
 
 [[bench]]
 name = "throughput"
