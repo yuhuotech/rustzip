@@ -27,6 +27,11 @@
 - 最新 `nsis` 0.6.0 仍通过 `NsisInstallerBuilder<&[u8]>` 接收整个输入；solid payload 会先解到受预算限制的缓存 `Vec`。预算限制缓解输出膨胀，但输入整包缓冲和缺少调用方取消的边界仍不符合本项目 reader 准入要求。
 - `pdf-engine` 1.0.0 提供单 stream / 单文档内存 / 图像像素上限，但 crate license 是 `AGPL-3.0-only OR LicenseRef-PDFluent-Commercial`；这两种选择都不在当前依赖许可策略内。PDF 仍交给系统阅读器。
 
+## 2026-10-30 当前上游源码核验
+
+- `nsis-rs` 当前主分支 Cargo.toml 声明 0.6.0；上游 0.3.0 起已把未知长度数据的默认解压预算设为 64 MiB，并允许调用方调小预算。但入口仍是 `NsisInstallerBuilder<&[u8]>`，固实数据解码结果保存在 `Vec<u8>`，没有可中断的 `Read` / 回调接口。该更新只补强膨胀上限，仍不满足 D37 的流式输入与分块取消条件。依据：[0.3.0 解码预算变更](https://github.com/ATRAPSLLC/nsis-rs/releases)、[当前 parser 实现](https://github.com/ATRAPSLLC/nsis-rs/blob/f20d03c407674dd670787ebcb2fa9e5f0d65a0ad/src/installer/nsisinstaller.rs)。
+- `dpp` 0.6.1 的 MIT pipeline 已默认将分区数据流入匿名临时文件，并提供文件到 writer 的流式 API；但底层 `udif` 打开时仍按 trailer 声明长度把 plist 和整个 data fork 读入 `Vec`，分区 block 解码也按 block map 声明大小分配缓冲区。`DmgReaderOptions` 只有校验和选项，没有元数据 / block / partition 限额或取消 token；匿名临时分区没有磁盘配额，HFS+ / APFS 遍历会收集 `Vec` 且无调用方取消。故新版改善了通常路径的峰值内存，但仍不满足 D37，DMG 暂不接入。依据：[固定上游提交](https://github.com/Dil4rd/dpp/tree/3a73ee28fdab192fcdfbe8edcad7b520867f2417)、[UDIF reader](https://github.com/Dil4rd/dpp/blob/3a73ee28fdab192fcdfbe8edcad7b520867f2417/udif/src/reader.rs)、[pipeline](https://github.com/Dil4rd/dpp/blob/3a73ee28fdab192fcdfbe8edcad7b520867f2417/dpp/src/pipeline.rs)、[APFS reader](https://github.com/Dil4rd/dpp/blob/3a73ee28fdab192fcdfbe8edcad7b520867f2417/apfs/src/lib.rs)。
+
 候选源码核对点：[`dmg-core` trailer 与 XML plist 缓冲](https://docs.rs/crate/dmg-core/0.1.5/source/src/lib.rs)、[`isomage` WIM 元数据范围](https://github.com/JackDanger/isomage/tree/v2.1.0/src/formats)、[`libchm` 上游源码](https://github.com/trypsynth/libchm/tree/927cec11c4cf8165d28731fe1b3e07b40f8ddf5e)、[RustZIP 的局部补丁和上游来源](../vendor/libchm/PATCHES.md)。NSIS [`from_bytes 与解压上限`](https://github.com/ATRAPSLLC/nsis-rs/blob/f20d03c407674dd670787ebcb2fa9e5f0d65a0ad/src/installer/nsisinstaller.rs#L305-L345)、[`固实流预解压`](https://github.com/ATRAPSLLC/nsis-rs/blob/f20d03c407674dd670787ebcb2fa9e5f0d65a0ad/src/installer/nsisinstaller.rs#L607-L660)。
 
 ## 实现与验证
