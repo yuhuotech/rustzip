@@ -12,7 +12,7 @@
 
 ## 发一个版本
 
-> 主 CI 和 Release workflow 由 Actions 页面手动触发。Release dry-run 可从任意分支运行；正式发布只接受 `v*` tag。独立 Fuzz 工作流每日定时运行 ZIP recovery、CHM、bzip2、RAR 和 NSIS identification targets，不构建或发布安装包。
+> 主 CI 和 Release workflow 由 Actions 页面手动触发。Release dry-run 可从任意分支运行；正式发布只接受 `v*` tag。Fuzz workflow 目标为每日定时运行 ZIP recovery、CHM、bzip2、RAR 和 NSIS identification，不构建或发布安装包；定时触发仍待验收。
 
 1. 改根 `Cargo.toml` 里 `[workspace.package] version`,提交。
 2. 先在 `main` 上手动触发 Release workflow，保留默认 `dry_run=true`；它会生成一次性测试密钥、构建四个平台产物、签名并校验平台集合和实际文件，保存名为 `release-dry-run-bundle` 的 14 天 artifact。测试签名不匹配应用公钥，dry-run 包不能用于更新安装。
