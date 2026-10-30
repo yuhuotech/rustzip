@@ -10,7 +10,7 @@ RustZIP 的主要归档与桌面主流程已实现。2026-10-30 增加 macOS Fin
 
 2026-10-30 后续远端验收：Release dry-run [41064921267](https://github.com/yuhuotech/rustzip/actions/runs/41064921267) 的 macOS arm64 / x86_64、Windows、Linux 构建及四平台 RAR 验证均通过；四个平台的构建期 `RZ_STATS_URL` 子进程检查通过，manifest 汇总验签成功，正式发布按 dry-run 规则跳过。Fuzz run [41064921389](https://github.com/yuhuotech/rustzip/actions/runs/41064921389) 的五个格式 target 和受控 crash artifact 上传 smoke 全部通过；本次为手动 run，尚不能证明每日 schedule 已触发。
 
-当前 HEAD `6fd8e65` 的 Release dry-run [41079816983](https://github.com/yuhuotech/rustzip/actions/runs/41079816983) 四平台常规 / RAR 包、Windows RAR 安装冒烟、汇总验签及 artifacts 上传全部通过；Fuzz run [41079856580](https://github.com/yuhuotech/rustzip/actions/runs/41079856580) 的五个 target 与受控 crash artifact smoke 全部通过。GitHub Actions run list 中 2026-10-30 13:37 UTC 没有 `schedule` 事件，定时触发仍待验收。
+提交 `6fd8e65` 的 Release dry-run [41079816983](https://github.com/yuhuotech/rustzip/actions/runs/41079816983) 四平台常规 / RAR 包、Windows RAR 安装冒烟、汇总验签及 artifacts 上传全部通过；Fuzz run [41079856580](https://github.com/yuhuotech/rustzip/actions/runs/41079856580) 的五个 target 与受控 crash artifact smoke 全部通过。GitHub Actions run list 中 2026-10-30 13:37 UTC 没有 `schedule` 事件，定时触发仍待验收。
 
 四个曾经占位的侧栏功能——常用位置、密码本、格式转换、压缩包修复——在当前代码中已经实现，不能继续列为“未开发”。转换与修复的符号链接和损坏数据边界见 [侧栏实现记录](sidebar-implementation.md) 与 [决策 D9](decisions.md#d9-左栏工具的数据安全与恢复边界)。
 
