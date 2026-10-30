@@ -146,16 +146,32 @@ struct MainRef {
 
 impl Global for MainRef {}
 
-/// Hands paths to the window that is already open; false when there is none yet.
+/// Hands a launch action to the window that is already open; false when there is none yet.
 pub fn open_in_running_window(paths: Vec<PathBuf>, cx: &mut App) -> bool {
+    open_launch_in_running_window(
+        &launch::Launch {
+            open: paths,
+            ..Default::default()
+        },
+        cx,
+    )
+}
+
+pub fn open_launch_in_running_window(launch: &launch::Launch, cx: &mut App) -> bool {
     let Some(main) = cx.try_global::<MainRef>().cloned() else {
         return false;
     };
     let _ = main.window.update(cx, |_, window, cx| {
         if let Some(view) = main.view.upgrade() {
             view.update(cx, |m, cx| {
-                for p in paths {
+                for p in launch.open.iter().cloned() {
                     m.open_path(p, None, window, cx);
+                }
+                for p in launch.extract_here.iter().cloned() {
+                    m.extract_here(p, cx);
+                }
+                if !launch.compress.is_empty() {
+                    m.open_compress(launch.compress.clone(), window, cx);
                 }
             });
         }
@@ -164,40 +180,32 @@ pub fn open_in_running_window(paths: Vec<PathBuf>, cx: &mut App) -> bool {
     true
 }
 
-/// Starts forwarding `file://` addresses received from the system (macOS "Open With",
-/// double click, drop on the Dock icon) to the main window.
-pub fn listen_for_open_urls(app: &Application) -> std::sync::mpsc::Receiver<Vec<PathBuf>> {
-    let (tx, rx) = std::sync::mpsc::channel::<Vec<PathBuf>>();
+/// Forwards local file opens and Finder actions to the main window.
+pub fn listen_for_open_urls(app: &Application) -> std::sync::mpsc::Receiver<launch::Launch> {
+    let (tx, rx) = std::sync::mpsc::channel::<launch::Launch>();
     app.on_open_urls(move |urls| {
-        let paths: Vec<PathBuf> = urls
-            .iter()
-            .filter_map(|u| launch::file_url_to_path(u))
-            .collect();
-        if !paths.is_empty() {
-            let _ = tx.send(paths);
+        let mut request = launch::Launch::default();
+        for parsed in urls.iter().filter_map(|url| launch::parse_system_url(url)) {
+            request.extend(parsed);
+        }
+        if !request.is_empty() {
+            let _ = tx.send(request);
         }
     });
     rx
 }
 
-/// Opens what [`listen_for_open_urls`] received. The system callback has no access to the
-/// app, so the window picks the paths up from this polling task.
-pub fn forward_open_urls(rx: std::sync::mpsc::Receiver<Vec<PathBuf>>, cx: &mut App) {
+/// Dispatches system URL actions on the app thread after the callback returns.
+pub fn forward_open_urls(rx: std::sync::mpsc::Receiver<launch::Launch>, cx: &mut App) {
     cx.spawn(async move |cx| {
         loop {
             cx.background_executor()
                 .timer(std::time::Duration::from_millis(200))
                 .await;
-            while let Ok(paths) = rx.try_recv() {
+            while let Ok(request) = rx.try_recv() {
                 cx.update(|cx| {
-                    if !open_in_running_window(paths.clone(), cx) {
-                        open_main_window(
-                            launch::Launch {
-                                open: paths,
-                                ..Default::default()
-                            },
-                            cx,
-                        );
+                    if !open_launch_in_running_window(&request, cx) {
+                        open_main_window(request, cx);
                     }
                 });
             }

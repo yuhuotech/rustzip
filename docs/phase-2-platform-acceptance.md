@@ -42,11 +42,13 @@
 - CI [40939090908](https://github.com/yuhuotech/rustzip/actions/runs/40939090908) 对提交 `ac18219` 的七个 job 全部通过；Windows、macOS、Ubuntu/Xvfb 的 GUI Clippy 与 GUI all-features 测试通过，RAR 预览回归在三平台构建中通过。三平台 core default / all-features 与 Windows 安装器冒烟通过。
 - 本机全工作区默认 / all-features 测试通过自动更新交接用例；系统程序由后台任务启动，签名验证失败时不会调用启动器。当前没有正式签名 Release 可供端到端安装验收，真实安装流程仍待三平台 Release 演练。
 - 最终工作区默认及 all-features 的格式检查、Clippy、全工作区测试均通过；每套测试有三项按环境条件忽略。Windows 和 macOS 的原生编译及桌面测试也在最终 CI 通过。
+- 2026-10-30：macOS Finder Sync 扩展已加入 app bundle。macOS 27.0.1 ad-hoc 测试包在 Finder 的 ZIP 右键菜单显示 RustZIP 压缩 / 解压选项；压缩入口打开 GUI 创建窗口，解压结果 BLAKE3 与 ZIP 内条目一致。扩展使用本机 PlugInKit 临时注册后已撤销；正式 Developer ID / 公证包及首次启用流程仍待验收。
+- 2026-10-30：RAR Release dry-run [40969974227](https://github.com/yuhuotech/rustzip/actions/runs/40969974227) 的 macOS arm64 / x86_64、Linux x86_64 RAR 包构建与包检查通过；Windows RAR 包编译成功但安装冒烟因未创建日志父目录失败。`ci-smoke.ps1` 已补建独立工作目录，尚未在 Windows runner 复测。macOS Intel 常规包本轮在 plist 后退出，旧日志不足以定位；本机 arm64 到 x86_64 的当前默认 / RAR 完整打包复现及 DMG 校验通过。
 
 ## 未完成的验收
 
 - Windows CI 与安装器自动化验收通过；原生 GUI 的输入法、渲染、钥匙串、通知和人工交互仍待验收。
-- macOS Finder 菜单人工点击、公证、通知横幅投递与权限、屏幕阅读器及真实输入法仍未验收。
+- macOS Finder Sync 右键菜单已实机验收；正式 Developer ID / 公证包的扩展注册与首次启用、公证、通知横幅投递与权限、屏幕阅读器及真实输入法仍待验收。Quick Look 尚未实现。
 - Dolphin / Nemo 的真实桌面点击、Linux 低图形能力设备、三平台百万条真实归档列表仍待验收。
 - 该阶段的默认安装包不启用 RAR。之后 D38 已为 RAR 增加可取消且受 `max_total` 限制的逐块输出；正式发行仍需在三平台验证启用 RAR 的构建、许可证和发行策略，默认包继续关闭 RAR。
 - Release dry-run [40950855468](https://github.com/yuhuotech/rustzip/actions/runs/40950855468) 的汇总验签因 runner 缺少 `libacl` 开发库失败；之后在 `assemble` 加入原生依赖安装 action。修复后的 dry-run [40958424663](https://github.com/yuhuotech/rustzip/actions/runs/40958424663) 四个平台构建、签名和汇总验签通过；下载的 bundle 已确认 `update.json` 中有四个平台资产和对应文件名，正式发布仍未执行。

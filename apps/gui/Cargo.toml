@@ -30,6 +30,7 @@ rz-formats.workspace = true
 rz-services.workspace = true
 zeroize.workspace = true
 sys-locale.workspace = true
+url = "2.5.8"
 
 [target.'cfg(windows)'.build-dependencies]
 winresource = "0.1"

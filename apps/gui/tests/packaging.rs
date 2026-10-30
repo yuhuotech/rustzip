@@ -9,6 +9,10 @@ const LINUX_DOLPHIN: &str = include_str!("../../../packaging/linux/rustzip-servi
 const WINDOWS_INSTALLER: &str = include_str!("../../../packaging/windows/rustzip.iss");
 const MACOS_INFO: &str = include_str!("../../../packaging/macos/Info.plist.in");
 const MACOS_BUILD: &str = include_str!("../../../packaging/macos/build-app.sh");
+const MACOS_FINDER_EXTENSION: &str = include_str!("../../../packaging/macos/finder-sync.swift");
+const MACOS_FINDER_INFO: &str = include_str!("../../../packaging/macos/finder-sync-Info.plist.in");
+const MACOS_FINDER_ENTITLEMENTS: &str =
+    include_str!("../../../packaging/macos/finder-sync.entitlements");
 const LINUX_TARBALL: &str = include_str!("../../../packaging/linux/build-tarball.sh");
 const LINUX_INSTALL: &str = include_str!("../../../packaging/linux/install.sh");
 
@@ -88,6 +92,21 @@ fn chm_is_listed_as_a_read_only_macos_document_type() {
     assert!(MACOS_BUILD.contains("packaging/licenses/libchm.txt"));
     assert!(LINUX_TARBALL.contains("packaging/licenses/libchm.txt"));
     assert!(LINUX_TARBALL.contains("libchm-license.txt"));
+}
+
+#[test]
+fn macos_finder_actions_are_packaged_and_routed_through_the_app() {
+    assert!(MACOS_INFO.contains("<string>rustzip</string>"));
+    assert!(MACOS_BUILD.contains("RustZIPFinderSync.appex"));
+    assert!(MACOS_BUILD.contains("finder-sync-locales"));
+    assert!(MACOS_BUILD.contains("finder-sync.entitlements"));
+    assert!(MACOS_BUILD.contains("set -- -D RUSTZIP_WITH_RAR"));
+    assert!(MACOS_FINDER_INFO.contains("com.apple.FinderSync"));
+    assert!(MACOS_FINDER_ENTITLEMENTS.contains("com.apple.security.app-sandbox"));
+    assert!(MACOS_FINDER_EXTENSION.contains("finder.compress"));
+    assert!(MACOS_FINDER_EXTENSION.contains("finder.extractHere"));
+    assert!(MACOS_FINDER_EXTENSION.contains("#if RUSTZIP_WITH_RAR"));
+    assert!(MACOS_FINDER_EXTENSION.contains("controller.selectedItemURLs()"));
 }
 
 #[test]

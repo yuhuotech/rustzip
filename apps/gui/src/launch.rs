@@ -3,6 +3,10 @@
 
 use std::ffi::OsString;
 use std::path::PathBuf;
+use url::Url;
+
+const MAX_ACTION_PATHS: usize = 4096;
+const MAX_SYSTEM_URL_BYTES: usize = 1_048_576;
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Launch {
@@ -18,6 +22,12 @@ pub struct Launch {
 impl Launch {
     pub fn is_empty(&self) -> bool {
         self.open.is_empty() && self.extract_here.is_empty() && self.compress.is_empty()
+    }
+
+    pub fn extend(&mut self, other: Self) {
+        self.open.extend(other.open);
+        self.extract_here.extend(other.extract_here);
+        self.compress.extend(other.compress);
     }
 }
 
@@ -56,12 +66,12 @@ pub fn file_url_to_path(url: &str) -> Option<PathBuf> {
     let rest = url.strip_prefix("file://")?;
     // Only the local machine: an empty host or `localhost`.
     let path = match rest.strip_prefix("localhost") {
-        Some(p) => p,
-        None => rest,
+        Some("") => "/",
+        Some(p) if p.starts_with('/') => p,
+        Some(_) => return None,
+        None if rest.starts_with('/') => rest,
+        None => return None,
     };
-    if !path.starts_with('/') && path.as_bytes().get(1) != Some(&b':') {
-        return None;
-    }
     let bytes = path.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
     let mut i = 0;
@@ -82,6 +92,63 @@ pub fn file_url_to_path(url: &str) -> Option<PathBuf> {
         _ => text,
     };
     Some(PathBuf::from(text))
+}
+
+/// Parses a local file-open URL or a Finder action dispatched through the app URL scheme.
+pub fn parse_system_url(raw: &str) -> Option<Launch> {
+    if raw.len() > MAX_SYSTEM_URL_BYTES {
+        return None;
+    }
+    if let Some(path) = file_url_to_path(raw) {
+        return Some(Launch {
+            open: vec![path],
+            ..Default::default()
+        });
+    }
+    let url = Url::parse(raw).ok()?;
+    if url.scheme() != "rustzip"
+        || url.username() != ""
+        || url.password().is_some()
+        || url.port().is_some()
+        || url.path() != ""
+        || url.fragment().is_some()
+    {
+        return None;
+    }
+    let action = url.host_str()?;
+    if !matches!(action, "compress" | "extract-here") {
+        return None;
+    }
+    let mut paths = Vec::new();
+    for (key, value) in url.query_pairs() {
+        if key != "path" || paths.len() >= MAX_ACTION_PATHS {
+            return None;
+        }
+        let path = file_url_to_path(&value)?;
+        let usable = match action {
+            "compress" => path.exists(),
+            "extract-here" => path.is_file(),
+            _ => false,
+        };
+        if !usable {
+            return None;
+        }
+        paths.push(path);
+    }
+    if paths.is_empty() {
+        return None;
+    }
+    Some(match action {
+        "compress" => Launch {
+            compress: paths,
+            ..Default::default()
+        },
+        "extract-here" => Launch {
+            extract_here: paths,
+            ..Default::default()
+        },
+        _ => return None,
+    })
 }
 
 #[cfg(test)]
@@ -107,6 +174,7 @@ mod tests {
         // Not local files, or broken escapes.
         assert_eq!(file_url_to_path("https://example.com/a.zip"), None);
         assert_eq!(file_url_to_path("file://server/share/a.zip"), None);
+        assert_eq!(file_url_to_path("file://localhost.evil/tmp/a.zip"), None);
         assert_eq!(file_url_to_path("file:///a%2"), None);
         assert_eq!(file_url_to_path("file:///a%ZZ"), None);
         assert_eq!(file_url_to_path("file:///a%FF.zip"), None);
@@ -137,5 +205,55 @@ mod tests {
         assert_eq!(l.compress, vec![dir.path().to_path_buf(), a]);
         assert!(l.open.is_empty() && !l.is_empty());
         assert!(args(vec![]).is_empty());
+    }
+
+    #[test]
+    fn finder_action_urls_preserve_selected_paths_and_mode() {
+        let dir = tempfile::tempdir().unwrap();
+        let archive = dir.path().join("归档 & 文件.zip");
+        let folder = dir.path().join("要压缩的文件夹");
+        std::fs::write(&archive, b"zip").unwrap();
+        std::fs::create_dir(&folder).unwrap();
+
+        let action_url = |action: &str, paths: &[PathBuf]| {
+            let mut query = url::form_urlencoded::Serializer::new(String::new());
+            for path in paths {
+                let file_url = Url::from_file_path(path).unwrap();
+                query.append_pair("path", file_url.as_str());
+            }
+            format!("rustzip://{action}?{}", query.finish())
+        };
+
+        let open =
+            parse_system_url(&action_url("compress", &[archive.clone(), folder.clone()])).unwrap();
+        assert_eq!(open.compress, vec![archive, folder]);
+        assert!(open.open.is_empty() && open.extract_here.is_empty());
+
+        let extract = parse_system_url(&action_url(
+            "extract-here",
+            &[dir.path().join("归档 & 文件.zip")],
+        ))
+        .unwrap();
+        assert_eq!(extract.extract_here.len(), 1);
+        assert!(extract.compress.is_empty() && extract.open.is_empty());
+    }
+
+    #[test]
+    fn finder_action_urls_reject_remote_and_unknown_inputs() {
+        let dir = tempfile::tempdir().unwrap();
+        let archive = dir.path().join("a.zip");
+        std::fs::write(&archive, b"zip").unwrap();
+        let file_url = Url::from_file_path(&archive).unwrap();
+        let query = url::form_urlencoded::Serializer::new(String::new())
+            .append_pair("path", file_url.as_str())
+            .finish();
+
+        assert!(parse_system_url(&format!("rustzip://delete?{query}")).is_none());
+        assert!(parse_system_url(&format!("rustzip://compress@remote?{query}")).is_none());
+        assert!(
+            parse_system_url("rustzip://compress?path=file%3A%2F%2Fserver%2Fshare%2Fa.zip")
+                .is_none()
+        );
+        assert!(parse_system_url("rustzip://compress?path=file%3A%2F%2F%2Fmissing.zip").is_none());
     }
 }

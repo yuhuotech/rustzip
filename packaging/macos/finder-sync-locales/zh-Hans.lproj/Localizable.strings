@@ -1,0 +1,2 @@
+"finder.compress" = "用 RustZIP 压缩";
+"finder.extractHere" = "用 RustZIP 解压到此处";

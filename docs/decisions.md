@@ -314,3 +314,12 @@
 - 遵守调用方压缩比与总解压大小设置、任务取消和进度回调；每个归档最多接受 1,000,000 个枚举条目。比较不写临时文件或提取数据。
 - `ArchiveReader` 不暴露符号链接目标，因此匹配的符号链接结果必须标记为“未比较”，不能报告为内容相同。
 - GUI 仅从已打开的压缩包标签中选取另一包；CLI `rz diff` 接受共用密码 `-p` 或独立的 `--left-password` / `--right-password`。任务历史只保存比较类型、文件名和汇总，不持久化差异清单或完整路径。
+
+## D45 macOS Finder 右键菜单
+
+- macOS `.app` 嵌入 Finder Sync 扩展，在 Finder 对已选项目的右键菜单中提供 RustZIP 压缩；所有所选条目扩展名都属于已支持归档时，也显示“解压到此处”。RAR 入口只出现在启用 `rar` feature 的构建。
+- 扩展不读取归档或源文件内容；它将所选本地 `file://` URL 经 `rustzip://compress` 或 `rustzip://extract-here` 传给宿主应用。GUI 复用 `Launch` 和现有应用层流程。解析器仅接受本机路径、检查路径存在类型，并限制 URL 长度和条目数。
+- Finder Sync 扩展使用 App Sandbox 和只读用户所选文件权限，不申请共享容器；菜单文案随扩展 bundle 提供十种受支持语言。
+- 动作 URL 由已有锁定版本的 `url` 2.5.8 解析（MIT OR Apache-2.0）；它原本已是工作区传递依赖，此次仅在 GUI 中显式声明。URL 总长限制 1 MiB，单次动作最多 4,096 个路径。
+- Finder Sync 扩展由用户在 macOS 系统设置中启用。该设置授权扩展读取 Finder 所选项目 URL；RustZIP 默认桌面构建仍保持未沙箱化，以继续使用现有系统钥匙串与文件访问流程。
+- 2026-10-30 在 macOS 27.0.1 的本机测试 bundle 中手动点击压缩和解压菜单：压缩打开 RustZIP 创建窗口；解压后文件 BLAKE3 与测试 ZIP 内文件一致。该 ad-hoc 测试不替代 Developer ID 签名安装包、公证后启用验收。

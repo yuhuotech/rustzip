@@ -69,17 +69,20 @@ Windows MSVC 构建通过 CI 的 `native-archive-deps` action 安装 `x64-window
 | 能力 | macOS | Windows | Linux |
 |---|---|---|---|
 | 双击/"打开方式"打开压缩包 | 已做(Info.plist 文档类型 + 系统打开事件) | 已做(安装程序注册,不抢默认程序) | 已做(`.desktop` 的 MimeType) |
-| 右键"用 RustZIP 压缩"/"解压到此处" | **未做**(需要 Finder 扩展或 Services,另做) | 已做(安装程序写注册表) | 安装器写入 Dolphin 的 KIO `servicemenus` 与旧版 `kservices5/ServiceMenus`，并安装 Nemo 动作；Nautilus 50.2.2 的 Scripts 子菜单、压缩入口和逐字节解压已在 Ubuntu 26.04 / Xvfb 验收。Dolphin / Nemo 实机点击仍待验收 |
+| 右键"用 RustZIP 压缩"/"解压到此处" | Finder Sync 扩展已加入 `.app`，macOS 27.0.1 ad-hoc 测试包中两项均实际点击通过；用户需在系统设置启用扩展，Developer ID / 公证包仍待验收 | 已做(安装程序写注册表，原生菜单点击仍待验收) | 安装器写入 Dolphin 的 KIO `servicemenus` 与旧版 `kservices5/ServiceMenus`，并安装 Nemo 动作；Nautilus 50.2.2 的 Scripts 子菜单、压缩入口和逐字节解压已在 Ubuntu 26.04 / Xvfb 验收。Dolphin / Nemo 实机点击仍待验收 |
 | 预览(Quick Look 等) | 未做 | 未做 | 未做 |
 
 macOS 的“打开方式”声明包含已接入的常见只读格式及 LZ4，RAR 仅在显式启用时声明；声明本身不改变系统默认程序，实际 Finder 展示仍需在安装后的系统上验收。
 
 命令行入口:`rustzip --extract-here <压缩包>...` 解压到压缩包所在目录;`rustzip --compress <文件或文件夹>...` 打开新建压缩窗口。
 
-**验证状态**：macOS arm64 `.app` / DMG 的打包、签名校验和启动通过，尚未公证；Linux x86_64 tarball 已在 Ubuntu 26.04 构建，并通过隔离安装 / 卸载和 Nautilus Scripts 菜单验收。Windows runner 已编译 GUI / Inno 安装器并完成自动安装 / 卸载冒烟；原生 GUI 人工验收和正式 Release 流程仍未完成。当前 GitHub Actions 只允许手动触发 CI；Release 需在 `v*` tag 上手动运行。仓库截至 2026-10-30 尚无公开 GitHub Release。
+**验证状态**：macOS arm64 `.app` / DMG 的打包、签名校验和启动通过，尚未公证；Finder Sync 扩展在 macOS 27.0.1 的 ad-hoc 测试包中完成右键压缩 / 解压点击验收。Linux x86_64 tarball 已在 Ubuntu 26.04 构建，并通过隔离安装 / 卸载和 Nautilus Scripts 菜单验收。Windows runner 已编译 GUI / Inno 安装器并完成自动安装 / 卸载冒烟；原生 GUI 人工验收和正式 Release 流程仍未完成。当前 GitHub Actions 只允许手动触发 CI；Release 需在 `v*` tag 上手动运行。仓库截至 2026-10-30 尚无公开 GitHub Release。
 
 - 2026-10-29 Release dry-run [40950855468](https://github.com/yuhuotech/rustzip/actions/runs/40950855468)：Linux、macOS arm64、macOS x86_64 与 Windows x86_64 产物均构建并签名成功；汇总验签 job 在构建 `rz-release` 时因 runner 未安装 `libacl` 开发库而失败，因此未生成验证 bundle，正式发布步骤跳过。已在汇总 job 加入 `native-archive-deps`；修复后的 dry-run 待重新运行。
 - 2026-10-30 修复后的 Release dry-run [40958424663](https://github.com/yuhuotech/rustzip/actions/runs/40958424663) 全部通过：四个平台包均构建并签名，汇总验签成功，上传了 48,267,020 字节的 `release-dry-run-bundle` artifact；下载检查确认 `update.json` 含四个平台及对应包名。公开 Release 的 `publish` job 按 dry-run 条件跳过。该 bundle 可供 14 天检查，不是可安装更新的正式签名包。
+- 2026-10-30 Release dry-run [40969974227](https://github.com/yuhuotech/rustzip/actions/runs/40969974227) 对 `b262828`：macOS arm64 / Linux x86_64 常规包构建成功；macOS arm64、x86_64 和 Linux 的 RAR 测试包均完成验证。Windows 常规包构建成功；RAR 测试包的 GUI 和 Inno Setup 均构建成功，但安装冒烟以退出码 1 失败。根因为脚本指定外部 `dist` 时只创建输出目录，却把 Inno `/LOG` 指向尚不存在的 `$work/install.log`；现已确保先创建 `$work`。
+- 同一 Release run 的 macOS x86_64 常规打包在 plist 校验后退出，旧脚本未打印失败命令，汇总 job 因缺少该平台资产而失败。macOS 27.0.1 本地 arm64 主机使用当前 Finder Sync 代码交叉构建 x86_64 默认与 RAR `.app` / DMG 均通过；RAR 包含 unRAR 许可证，两个 DMG 校验成功。CI 根因仍待用带失败定位的脚本复跑。
+- 本机 Finder Sync ad-hoc 验收包不等同正式签名 Release；签名密钥和公证配置仍未用于公开发布。
 - 2026-10-29 最新 Fuzz 手动 run [40961694769](https://github.com/yuhuotech/rustzip/actions/runs/40961694769) 在提交 `70addea` 上四个 target 均通过并保存 corpus cache：ZIP recovery 743,952 次、CHM 34,172 次、bzip2 8,454 次、RAR 187,945 次，无 crash。每日 schedule 在 03:23 UTC；该次 run 在下次触发时间前结束。
 
 2026-10-28 的手动 CI、macOS 钥匙串 / Launch Services 检查与 Windows 修复见[第二阶段验收](phase-2-platform-acceptance.md)：提交 `30c4201` 的六个 CI 任务全部通过。之后的 CHM 和 RAR 回调改动仍需在最新提交上完成三平台 CI 与打包验收。

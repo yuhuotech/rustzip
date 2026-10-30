@@ -6,7 +6,7 @@
 
 ## 1. 结论
 
-RustZIP 的主要归档与桌面主流程已实现，Windows CI / 安装器自动化验收通过，macOS 和 Ubuntu 有部分实机证据。ZIP 大条目并行 Deflate 已接入，仍需跨平台性能和外部工具矩阵验收；合格 ZIP 编辑快路径现在保留归档 / 条目注释与扩展字段。2026-10-30 已实现 CLI 与 GUI 的压缩包对比。未完成项包括 ZIP 真正原地增量编辑的 D11 决策、WIM / DMG / NSIS 安全 reader、PDF / 音视频预览；跨平台手工验收和正式 release 流程也未闭环。虚拟挂载、云端按需解压、WASM 插件和 SFX 仍列为远期需求。
+RustZIP 的主要归档与桌面主流程已实现。2026-10-30 增加 macOS Finder Sync 压缩 / 解压菜单并在 macOS 27.0.1 ad-hoc 包实机点击验收；Windows RAR 安装冒烟的日志目录错误已修复，待 runner 复测。其余主要缺口为 Quick Look、PDF / 音视频应用内预览、与 D11 崩溃保全约束冲突的 ZIP 真正原地增量编辑，以及安全 / 许可门槛尚未满足的 WIM / DMG / NSIS。Windows 原生交互、Dolphin / Nemo 实机菜单、正式签名发布与 macOS Intel 常规包的 runner 失败仍待验收。虚拟挂载、云端按需解压、WASM 插件和 SFX 仍列为远期需求。
 
 四个曾经占位的侧栏功能——常用位置、密码本、格式转换、压缩包修复——在当前代码中已经实现，不能继续列为“未开发”。转换与修复的符号链接和损坏数据边界见 [侧栏实现记录](sidebar-implementation.md) 与 [决策 D9](decisions.md#d9-左栏工具的数据安全与恢复边界)。
 
@@ -29,7 +29,7 @@ RustZIP 的主要归档与桌面主流程已实现，Windows CI / 安装器自�
 | P1 | 压缩预设 | 极速 / 均衡 / 最小体积、邮件分享（20 MiB 默认分卷）和跨平台兼容预设已接入；自定义分卷、权限规范化用例与 8 MiB 基准通过 | 无；用户指定的分卷大小会直接覆盖预设值 |
 | P1 | 重复文件检测 | GUI 压缩前按内容 BLAKE3 检查同大小普通文件，任务可取消并报告进度；发现重复后可继续压缩或取消，不自动删除；超过 100,000 个文件时可明确选择继续 | 扩充大目录压力样本；自动去重另行评估 |
 | P1 | 多语言和无障碍 | 十种语言的 378 个界面资源键已实现；八种新增语言各有完整词条包，覆盖及占位符测试通过。十种菜单选项逐项切换测试通过；设置和窗口顶栏共用语言下拉菜单，系统首选语言读取可用，侧栏使用简短本地化标签并保留省略保护 | Windows 原生语言设置、真实屏幕阅读器、阿拉伯语 RTL 整页布局仍待平台验收 |
-| P1 | 文件关联与系统菜单 | Nautilus 50.2.2 的 Scripts 子菜单在 Ubuntu 26.04 / Xvfb 显示并实际点击验收；解压两个 Unicode 文件后逐字节比对一致，压缩入口启动 RustZIP 创建窗口。Linux 安装器现将 Dolphin 菜单装入 `$XDG_DATA_HOME/kio/servicemenus`，并保留旧版 KDE Frameworks 的 `kservices5/ServiceMenus`；Nemo 动作随 XDG 数据目录安装。Dolphin / Nemo 实机点击仍待验收；macOS 增加已支持格式的“打开方式”声明，尚未实机验证 | 验收 Plasma 6 / KDE Frameworks Dolphin、旧版 Dolphin 和 Nemo 的真实菜单点击；验收 Windows 菜单与 macOS 格式关联；评估 Finder 右键及 Quick Look |
+| P1 | 文件关联与系统菜单 | macOS Finder Sync 右键扩展已打入 `.app`；macOS 27.0.1 实际点击压缩入口打开创建窗口，解压输出与归档样本 BLAKE3 一致。扩展需用户在系统设置启用；Developer ID / 公证包验收待正式签名。Nautilus 50.2.2 的 Scripts 子菜单在 Ubuntu 26.04 / Xvfb 显示并实际点击验收；Dolphin / Nemo 实机点击仍待验收；Windows 注册表菜单仍待原生实机验收；Quick Look 未实现 | 验收正式签名 / 公证 macOS 包与扩展启用流程；验收 Plasma Dolphin、Nemo 和 Windows 菜单；评估 Quick Look |
 | P1 | 持续 fuzz | nightly ASan 工作流覆盖 ZIP recovery、CHM、bzip2、RAR。最新手动 run [40961694769](https://github.com/yuhuotech/rustzip/actions/runs/40961694769) 对 `70addea` 的四个 target 全部通过并保存 corpus cache：ZIP recovery 743,952 次、CHM 34,172 次、bzip2 8,454 次、RAR 187,945 次，无 crash | 每日 schedule 下一次触发为 2026-10-30 03:23 UTC；触发后检查 schedule run、corpus 增长与 14 天 crash artifact |
 | P1 | 跨平台桌面与打包 | macOS `.app` / DMG arm64 签名与启动通过，尚未公证。Ubuntu 26.04.1 x86_64 的全工作区 all-features 测试与 Clippy 通过（3 项环境条件测试忽略）；Linux tarball 构建、隔离安装 / 卸载、Nautilus 菜单点击通过。真实 Wayland GUI 启动、GNOME Secret Service 唯一标签往返、通知启用投递 / 关闭静默通过。CI [40958398639](https://github.com/yuhuotech/rustzip/actions/runs/40958398639) 的七个 job 全部通过，包括新增对比功能的 GUI、三平台 core 和基准；Windows core 17 分 37 秒、Windows GUI / 安装器 18 分 44 秒。Windows GUI 缓存保存有非致命告警。详细证据见 [第二阶段验收](phase-2-platform-acceptance.md) | Windows 原生输入法 / 渲染 / 钥匙串 / 通知、macOS 公证 / Finder / 通知、Dolphin / Nemo 点击、屏幕阅读器、正式三平台发布流程仍需验收 |
 | P1 | 自动更新与 Release | 有安装包签名校验、更新发现和下载后交给系统安装器的流程；自动化用例覆盖验签后才启动、篡改内容拒绝启动及启动失败提示。dry-run [40958424663](https://github.com/yuhuotech/rustzip/actions/runs/40958424663) 的四个平台构建、签名、汇总验签全部通过；已下载检查 bundle 中 `update.json` 的版本、平台集合和包名 | 正式签名 Release 尚未执行；后续需在三平台验证清单、包校验和安装器交接 |

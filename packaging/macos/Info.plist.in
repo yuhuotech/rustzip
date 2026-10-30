@@ -14,6 +14,13 @@
     <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
     <key>NSHighResolutionCapable</key><true/>
     <key>NSSupportsAutomaticGraphicsSwitching</key><true/>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key><string>com.yuhuotech.rustzip.action</string>
+            <key>CFBundleURLSchemes</key><array><string>rustzip</string></array>
+        </dict>
+    </array>
     <!-- "Open With" and drops on the Dock icon. Rank "Alternate": RustZIP is offered but
          never takes over an archive type from the program the user already chose. -->
     <key>CFBundleDocumentTypes</key>
