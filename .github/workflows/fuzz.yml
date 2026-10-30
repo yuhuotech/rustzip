@@ -3,7 +3,7 @@ name: Fuzz
 on:
   workflow_dispatch:
   schedule:
-    - cron: "53 5 * * *"
+    - cron: "37 7 * * *"
 
 permissions:
   contents: read
