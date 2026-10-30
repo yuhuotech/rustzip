@@ -56,6 +56,11 @@ cp packaging/licenses/libchm.txt "$app/Contents/Resources/libchm-license.txt"
 cp packaging/licenses/pbz2.txt "$app/Contents/Resources/pbz2-license.txt"
 cp packaging/licenses/pbz2-notice.txt "$app/Contents/Resources/pbz2-notice.txt"
 cp packaging/licenses/pdf-renderer.txt "$app/Contents/Resources/pdf-renderer-licenses.txt"
+cp packaging/licenses/audio-playback.txt "$app/Contents/Resources/audio-playback-licenses.txt"
+cp packaging/licenses/rodio-mit.txt "$app/Contents/Resources/rodio-mit.txt"
+cp packaging/licenses/rodio-apache-2.0.txt "$app/Contents/Resources/rodio-apache-2.0.txt"
+cp packaging/licenses/cpal-apache-2.0.txt "$app/Contents/Resources/cpal-apache-2.0.txt"
+cp packaging/licenses/symphonia-mpl-2.0.txt "$app/Contents/Resources/symphonia-mpl-2.0.txt"
 if [ "${RZ_WITH_RAR:-0}" = "1" ]; then
     cp packaging/licenses/unrar.txt "$app/Contents/Resources/unrar-license.txt"
 fi

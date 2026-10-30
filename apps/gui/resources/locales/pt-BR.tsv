@@ -45,6 +45,10 @@ notice_external_read_only	Aberto no aplicativo do sistema. Este arquivo compacta
 notice_preview_too_large	Este arquivo é grande demais para visualizar. Extraia-o para abrir.
 detail_pdf_rendering	Renderizando a prévia do PDF…
 detail_pdf_unavailable	A prévia do PDF não está disponível; clique duas vezes para abrir no visualizador do sistema.
+detail_audio_loading	Carregando prévia de áudio…
+detail_audio_unavailable	A prévia de áudio não está disponível; clique duas vezes para abrir no reprodutor do sistema.
+audio_play	Reproduzir áudio
+audio_stop	Parar áudio
 task_test_passed	{task} concluída: nenhum problema encontrado em {count} itens
 task_edit_complete	{task} concluída: o arquivo compactado agora tem {count} itens
 task_complete_count	{task} concluída: {count} arquivos, {size}

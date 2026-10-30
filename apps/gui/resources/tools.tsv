@@ -44,6 +44,10 @@ notice_external_read_only	已用系统程序打开；这种压缩包只读，改
 notice_preview_too_large	文件太大，不适合预览；请用“解压到…”取出来。	This file is too large to preview. Extract it to view.
 detail_pdf_rendering	正在渲染 PDF 预览…	Rendering PDF preview…
 detail_pdf_unavailable	PDF 预览不可用；双击文件可用系统阅读器打开。	PDF preview is unavailable; double-click the file to open it in your system viewer.
+detail_audio_loading	正在加载音频预览…	Loading audio preview…
+detail_audio_unavailable	音频预览不可用；双击文件可用系统播放器打开。	Audio preview is unavailable; double-click the file to open it in your system player.
+audio_play	播放音频	Play audio
+audio_stop	停止播放	Stop audio
 task_test_passed	{task}通过：{count} 个条目没有发现问题	{task} passed: no issues found in {count} entries
 task_edit_complete	{task}完成：压缩包现在有 {count} 项	{task} complete: the archive now has {count} items
 task_complete_count	{task}完成：{count} 个文件，{size}	{task} complete: {count} files, {size}

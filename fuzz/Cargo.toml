@@ -18,6 +18,7 @@ libfuzzer-sys = "0.4"
 rz-core = { path = "../crates/rz-core" }
 rz-formats = { path = "../crates/rz-formats" }
 hayro = { version = "0.7.1", default-features = false }
+rodio = { version = "0.21.1", default-features = false, features = ["flac", "mp3", "mp4", "vorbis", "wav"] }
 tempfile = "3"
 
 [[bin]]
@@ -59,6 +60,13 @@ bench = false
 [[bin]]
 name = "pdf_parser"
 path = "fuzz_targets/pdf_parser.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "audio_decoder"
+path = "fuzz_targets/audio_decoder.rs"
 test = false
 doc = false
 bench = false

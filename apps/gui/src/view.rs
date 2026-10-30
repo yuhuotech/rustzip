@@ -3,6 +3,7 @@
 //! All decisions (what a folder contains, how a task is doing) come from `rz-app`;
 //! this file decides only where things go on screen.
 
+use crate::audio_preview::{AudioEvent, AudioKey, AudioPlayer};
 use crate::brand::{self, palette};
 use crate::dialog::{Dialog, Tone};
 use crate::open_requests::OpenRequests;
@@ -105,10 +106,17 @@ pub struct Preview {
     pub path: String,
     pub image: Option<Arc<Image>>,
     pub text: Option<String>,
+    pub audio: Option<Arc<[u8]>>,
 }
 
 #[derive(Clone, Copy)]
 enum PdfPreviewStatus {
+    Loading,
+    Unavailable,
+}
+
+#[derive(Clone, Copy)]
+enum AudioPreviewStatus {
     Loading,
     Unavailable,
 }
@@ -273,6 +281,10 @@ pub struct MainView {
     preview_request: u64,
     preview_cancel: Option<(u64, CancelToken)>,
     pdf_preview_status: Option<(PathBuf, String, PdfPreviewStatus)>,
+    audio_preview_status: Option<(PathBuf, String, AudioPreviewStatus)>,
+    audio_player: Option<AudioPlayer>,
+    audio_playing: Option<AudioKey>,
+    audio_generation: u64,
     /// The statistics notice was opened from the settings, so it goes back there.
     pub privacy_from_settings: bool,
     pub page: Page,
@@ -455,6 +467,10 @@ impl MainView {
             preview_request: 0,
             preview_cancel: None,
             pdf_preview_status: None,
+            audio_preview_status: None,
+            audio_player: None,
+            audio_playing: None,
+            audio_generation: 0,
             privacy_from_settings: false,
             page: Page::Archive,
             files_bounds: Rc::default(),
@@ -2021,12 +2037,61 @@ impl MainView {
         if let Some((_, cancel)) = self.preview_cancel.take() {
             cancel.cancel();
         }
+        if self.audio_playing.take().is_some()
+            && let Some(player) = &self.audio_player
+        {
+            player.stop();
+        }
         self.preview_request = self.preview_request.wrapping_add(1);
         self.pdf_preview_status = None;
+        self.audio_preview_status = None;
         self.preview_request
     }
 
-    /// Reads bounded image/text previews and renders PDFs in a resource-limited helper.
+    fn toggle_audio_preview(&mut self, cx: &mut Context<Self>) {
+        let Some(preview) = self.preview.as_ref() else {
+            return;
+        };
+        let Some(data) = preview.audio.clone() else {
+            return;
+        };
+        let same_item_is_playing = self.audio_playing.as_ref().is_some_and(|playing| {
+            playing.archive == preview.archive && playing.path == preview.path
+        });
+        if same_item_is_playing {
+            if let Some(player) = &self.audio_player {
+                player.stop();
+            }
+            self.audio_playing = None;
+        } else {
+            self.audio_generation = self.audio_generation.wrapping_add(1);
+            let key = AudioKey {
+                archive: preview.archive.clone(),
+                path: preview.path.clone(),
+                generation: self.audio_generation,
+            };
+            if self.audio_player.is_none() {
+                match AudioPlayer::new() {
+                    Ok(player) => self.audio_player = Some(player),
+                    Err(_) => {
+                        self.audio_preview_status =
+                            Some((key.archive, key.path, AudioPreviewStatus::Unavailable));
+                        cx.notify();
+                        return;
+                    }
+                }
+            }
+            if let Some(player) = &self.audio_player {
+                player.play(key.clone(), data);
+                self.audio_playing = Some(key);
+                self.audio_preview_status = None;
+                self.ensure_polling(cx);
+            }
+        }
+        cx.notify();
+    }
+
+    /// Reads bounded previews and renders PDFs in a resource-limited helper.
     pub fn load_preview(&mut self, cx: &mut Context<Self>) {
         let Some(row) = self.selected_row() else {
             self.cancel_preview_request();
@@ -2050,6 +2115,7 @@ impl MainView {
         let image_format = rz_app::preview::image_format(&row.name);
         let text_format = rz_app::preview::is_text_format(&row.name);
         let pdf_preview = rz_app::preview::is_pdf_format(&row.name);
+        let audio_preview = rz_app::preview::is_audio_format(&row.name);
         let entry = row.entry.and_then(|ix| a.tree.entries().get(ix).cloned());
         let (Some(entry), RowKind::File) = (entry, row.kind) else {
             self.cancel_preview_request();
@@ -2058,6 +2124,8 @@ impl MainView {
         };
         let limit = if image_format.is_some() {
             rz_app::preview::MAX_IMAGE_BYTES
+        } else if audio_preview {
+            rz_app::preview::MAX_AUDIO_BYTES
         } else if text_format {
             rz_app::preview::MAX_TEXT_BYTES
         } else if pdf_preview {
@@ -2072,8 +2140,11 @@ impl MainView {
         if row.size > limit {
             if pdf_preview {
                 self.pdf_preview_status = Some((archive, row.path, PdfPreviewStatus::Unavailable));
-                cx.notify();
+            } else if audio_preview {
+                self.audio_preview_status =
+                    Some((archive, row.path, AudioPreviewStatus::Unavailable));
             }
+            cx.notify();
             return;
         }
 
@@ -2084,6 +2155,10 @@ impl MainView {
         if pdf_preview {
             self.pdf_preview_status =
                 Some((archive.clone(), path.clone(), PdfPreviewStatus::Loading));
+            cx.notify();
+        } else if audio_preview {
+            self.audio_preview_status =
+                Some((archive.clone(), path.clone(), AudioPreviewStatus::Loading));
             cx.notify();
         }
 
@@ -2105,6 +2180,8 @@ impl MainView {
                             return Err(Error::UnknownFormat);
                         }
                         crate::pdf_preview::render_first_page(&data, &cancel_bg)
+                    } else if audio_preview {
+                        Ok(data)
                     } else {
                         if image_format.is_some()
                             && !crate::image_preview::dimensions_within_limit(&data)
@@ -2129,11 +2206,21 @@ impl MainView {
                 match &data {
                     Err(Error::Cancelled) => {
                         this.pdf_preview_status = None;
+                        this.audio_preview_status = None;
                         return;
                     }
                     Err(_) if pdf_preview => {
                         this.pdf_preview_status =
                             Some((archive.clone(), path.clone(), PdfPreviewStatus::Unavailable));
+                        cx.notify();
+                        return;
+                    }
+                    Err(_) if audio_preview => {
+                        this.audio_preview_status = Some((
+                            archive.clone(),
+                            path.clone(),
+                            AudioPreviewStatus::Unavailable,
+                        ));
                         cx.notify();
                         return;
                     }
@@ -2146,7 +2233,9 @@ impl MainView {
                 } else {
                     image_format
                 };
-                let (image, text) = if let Some(format) = display_image_format {
+                let (image, text, audio) = if audio_preview {
+                    (None, None, Some(Arc::<[u8]>::from(data)))
+                } else if let Some(format) = display_image_format {
                     let format = match format {
                         rz_app::preview::ImageFormat::Png => ImageFormat::Png,
                         rz_app::preview::ImageFormat::Jpeg => ImageFormat::Jpeg,
@@ -2154,19 +2243,21 @@ impl MainView {
                         rz_app::preview::ImageFormat::Webp => ImageFormat::Webp,
                         rz_app::preview::ImageFormat::Bmp => ImageFormat::Bmp,
                     };
-                    (Some(Arc::new(Image::from_bytes(format, data))), None)
+                    (Some(Arc::new(Image::from_bytes(format, data))), None, None)
                 } else {
                     let Some(text) = rz_app::preview::decode_text(data) else {
                         return;
                     };
-                    (None, Some(text))
+                    (None, Some(text), None)
                 };
                 this.pdf_preview_status = None;
+                this.audio_preview_status = None;
                 this.preview = Some(Preview {
                     archive,
                     path,
                     image,
                     text,
+                    audio,
                 });
                 cx.notify();
             });
@@ -2176,6 +2267,24 @@ impl MainView {
 
     /// Re-reads the task list and announces tasks that just ended.
     pub fn refresh_tasks(&mut self, cx: &mut Context<Self>) {
+        let audio_events = self
+            .audio_player
+            .as_ref()
+            .map(AudioPlayer::drain_events)
+            .unwrap_or_default();
+        for event in audio_events {
+            match event {
+                AudioEvent::Ended(key) if self.audio_playing.as_ref() == Some(&key) => {
+                    self.audio_playing = None;
+                }
+                AudioEvent::Failed(key) if self.audio_playing.as_ref() == Some(&key) => {
+                    self.audio_playing = None;
+                    self.audio_preview_status =
+                        Some((key.archive, key.path, AudioPreviewStatus::Unavailable));
+                }
+                AudioEvent::Ended(_) | AudioEvent::Failed(_) => {}
+            }
+        }
         self.task_view = self.tasks.snapshot();
         for t in self.task_view.clone() {
             if !t.state.is_finished() || !self.announced.insert(t.id) {
@@ -2403,7 +2512,8 @@ impl MainView {
                 let keep = this
                     .update(cx, |this, cx| {
                         this.refresh_tasks(cx);
-                        let busy = this.task_view.iter().any(|t| !t.state.is_finished());
+                        let busy = this.task_view.iter().any(|t| !t.state.is_finished())
+                            || this.audio_playing.is_some();
                         if !busy {
                             this.polling = false;
                         }
@@ -4426,6 +4536,20 @@ impl MainView {
                     .as_ref()
                     .filter(|(archive, path, _)| archive == &a.path && path == &row.path)
                     .map(|(_, _, status)| *status);
+                let audio_preview = self
+                    .preview
+                    .as_ref()
+                    .filter(|pv| pv.archive == a.path && pv.path == row.path)
+                    .and_then(|pv| pv.audio.clone());
+                let audio_status = self
+                    .audio_preview_status
+                    .as_ref()
+                    .filter(|(archive, path, _)| archive == &a.path && path == &row.path)
+                    .map(|(_, _, status)| *status);
+                let audio_is_playing = self
+                    .audio_playing
+                    .as_ref()
+                    .is_some_and(|playing| playing.archive == a.path && playing.path == row.path);
                 let (tile_bg, tile_fg) = crate::rows::badge_colors(&row, cx);
                 v_flex()
                     .gap_4()
@@ -4464,6 +4588,37 @@ impl MainView {
                                 let label = match status {
                                     PdfPreviewStatus::Loading => "detail_pdf_rendering",
                                     PdfPreviewStatus::Unavailable => "detail_pdf_unavailable",
+                                };
+                                d.child(
+                                    div()
+                                        .px_3()
+                                        .text_size(px(11.))
+                                        .text_color(p.fg3)
+                                        .text_center()
+                                        .child(self.tool_text(label)),
+                                )
+                            })
+                            .when_some(audio_preview, |d, _| {
+                                let label = if audio_is_playing {
+                                    "audio_stop"
+                                } else {
+                                    "audio_play"
+                                };
+                                d.child(
+                                    Button::new("audio-toggle")
+                                        .ghost()
+                                        .small()
+                                        .label(self.tool_text(label))
+                                        .accessibility_label(self.tool_text(label))
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.toggle_audio_preview(cx)
+                                        })),
+                                )
+                            })
+                            .when_some(audio_status, |d, status| {
+                                let label = match status {
+                                    AudioPreviewStatus::Loading => "detail_audio_loading",
+                                    AudioPreviewStatus::Unavailable => "detail_audio_unavailable",
                                 };
                                 d.child(
                                     div()

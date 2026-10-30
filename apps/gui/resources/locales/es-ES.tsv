@@ -45,6 +45,10 @@ notice_external_read_only	Abierto en la aplicación del sistema. Este archivo es
 notice_preview_too_large	El archivo es demasiado grande para la vista previa. Extráelo para verlo.
 detail_pdf_rendering	Generando vista previa del PDF…
 detail_pdf_unavailable	La vista previa del PDF no está disponible; haz doble clic para abrirlo en el visor del sistema.
+detail_audio_loading	Cargando vista previa de audio…
+detail_audio_unavailable	La vista previa de audio no está disponible; haz doble clic para abrirlo en el reproductor del sistema.
+audio_play	Reproducir audio
+audio_stop	Detener audio
 task_test_passed	{task} completado: no se han encontrado problemas en {count} elementos
 task_edit_complete	{task} completado: el archivo comprimido ahora contiene {count} elementos
 task_complete_count	{task} completado: {count} archivos, {size}

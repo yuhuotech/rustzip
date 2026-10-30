@@ -45,6 +45,10 @@ notice_external_read_only	Ouvert dans l’application système. Cette archive es
 notice_preview_too_large	Ce fichier est trop volumineux pour être prévisualisé. Extrayez-le pour le consulter.
 detail_pdf_rendering	Rendu de l’aperçu PDF…
 detail_pdf_unavailable	Aperçu PDF indisponible ; double-cliquez pour ouvrir le fichier dans le lecteur système.
+detail_audio_loading	Chargement de l’aperçu audio…
+detail_audio_unavailable	Aperçu audio indisponible ; double-cliquez pour ouvrir le fichier dans le lecteur système.
+audio_play	Lire l’audio
+audio_stop	Arrêter l’audio
 task_test_passed	{task} terminé : aucun problème détecté dans {count} éléments
 task_edit_complete	{task} terminé : l’archive contient maintenant {count} éléments
 task_complete_count	{task} terminé : {count} fichiers, {size}

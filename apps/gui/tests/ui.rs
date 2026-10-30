@@ -238,11 +238,27 @@ fn folders_open_on_double_click_and_the_way_back_works(cx: &mut TestAppContext) 
 }
 
 #[gpui_kit::test]
-fn pictures_and_plain_text_are_previewed_in_the_details_panel(cx: &mut TestAppContext) {
+fn pictures_text_and_small_audio_are_previewed_in_the_details_panel(cx: &mut TestAppContext) {
     let tmp = tempfile::tempdir().unwrap();
     let src = tmp.path().join("pics");
     fs::create_dir_all(&src).unwrap();
     fs::write(src.join("note.txt"), "text").unwrap();
+    let samples = [128; 32];
+    let mut wav = Vec::new();
+    wav.extend_from_slice(b"RIFF");
+    wav.extend_from_slice(&(36u32 + samples.len() as u32).to_le_bytes());
+    wav.extend_from_slice(b"WAVEfmt ");
+    wav.extend_from_slice(&16u32.to_le_bytes());
+    wav.extend_from_slice(&1u16.to_le_bytes());
+    wav.extend_from_slice(&1u16.to_le_bytes());
+    wav.extend_from_slice(&8_000u32.to_le_bytes());
+    wav.extend_from_slice(&8_000u32.to_le_bytes());
+    wav.extend_from_slice(&1u16.to_le_bytes());
+    wav.extend_from_slice(&8u16.to_le_bytes());
+    wav.extend_from_slice(b"data");
+    wav.extend_from_slice(&(samples.len() as u32).to_le_bytes());
+    wav.extend_from_slice(&samples);
+    fs::write(src.join("track.wav"), wav).unwrap();
     image::RgbaImage::from_pixel(8, 8, image::Rgba([10, 150, 130, 255]))
         .save(src.join("pic.png"))
         .unwrap();
@@ -269,7 +285,7 @@ fn pictures_and_plain_text_are_previewed_in_the_details_panel(cx: &mut TestAppCo
         draw(cx, handle);
     };
 
-    // Rows are note.txt, pic.png.
+    // Rows are note.txt, pic.png, track.wav.
     select(cx, 1);
     cx.update(|cx| {
         let pv = view.read(cx).preview.as_ref().expect("a preview");
@@ -283,6 +299,22 @@ fn pictures_and_plain_text_are_previewed_in_the_details_panel(cx: &mut TestAppCo
         assert_eq!(pv.path, "pics/note.txt");
         assert_eq!(pv.text.as_deref(), Some("text"));
         assert!(pv.image.is_none());
+    });
+    select(cx, 2);
+    wait_until(cx, handle, |cx| {
+        cx.update(|cx| {
+            view.read(cx)
+                .preview
+                .as_ref()
+                .is_some_and(|pv| pv.audio.is_some())
+        })
+    });
+    cx.update(|cx| {
+        let pv = view.read(cx).preview.as_ref().expect("audio preview");
+        assert_eq!(pv.path, "pics/track.wav");
+        assert!(pv.audio.as_ref().is_some_and(|data| !data.is_empty()));
+        assert!(pv.image.is_none());
+        assert!(pv.text.is_none());
     });
 }
 

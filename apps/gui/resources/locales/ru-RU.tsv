@@ -45,6 +45,10 @@ notice_external_read_only	Открыто в системном приложен�
 notice_preview_too_large	Файл слишком большой для предпросмотра. Распакуйте его, чтобы открыть.
 detail_pdf_rendering	Создаётся предпросмотр PDF…
 detail_pdf_unavailable	Предпросмотр PDF недоступен; дважды щёлкните, чтобы открыть файл в системном просмотрщике.
+detail_audio_loading	Загрузка предпросмотра аудио…
+detail_audio_unavailable	Предпросмотр аудио недоступен; дважды щёлкните файл, чтобы открыть его в системном проигрывателе.
+audio_play	Воспроизвести аудио
+audio_stop	Остановить аудио
 task_test_passed	{task} завершено: проблем не найдено в элементах — {count}
 task_edit_complete	{task} завершено: теперь в архиве элементов — {count}
 task_complete_count	{task} завершено: файлов — {count}, {size}

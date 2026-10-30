@@ -68,6 +68,11 @@ Source: "{#VcpkgShare}\lz4\copyright"; DestDir: "{app}\licenses"; DestName: "lz4
 Source: "{#VcpkgShare}\openssl\copyright"; DestDir: "{app}\licenses"; DestName: "openssl.txt"; Flags: ignoreversion
 Source: "..\licenses\libchm.txt"; DestDir: "{app}\licenses"; DestName: "libchm.txt"; Flags: ignoreversion
 Source: "..\licenses\pdf-renderer.txt"; DestDir: "{app}\licenses"; DestName: "pdf-renderer.txt"; Flags: ignoreversion
+Source: "..\licenses\audio-playback.txt"; DestDir: "{app}\licenses"; DestName: "audio-playback.txt"; Flags: ignoreversion
+Source: "..\licenses\rodio-mit.txt"; DestDir: "{app}\licenses"; DestName: "rodio-mit.txt"; Flags: ignoreversion
+Source: "..\licenses\rodio-apache-2.0.txt"; DestDir: "{app}\licenses"; DestName: "rodio-apache-2.0.txt"; Flags: ignoreversion
+Source: "..\licenses\cpal-apache-2.0.txt"; DestDir: "{app}\licenses"; DestName: "cpal-apache-2.0.txt"; Flags: ignoreversion
+Source: "..\licenses\symphonia-mpl-2.0.txt"; DestDir: "{app}\licenses"; DestName: "symphonia-mpl-2.0.txt"; Flags: ignoreversion
 Source: "..\licenses\inno-chinese-translation.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
 #ifdef RarEnabled
 Source: "..\licenses\unrar.txt"; DestDir: "{app}"; DestName: "unrar-license.txt"; Flags: ignoreversion

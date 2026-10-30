@@ -146,6 +146,29 @@ fn parallel_bzip_decoder_licenses_are_in_every_desktop_package() {
 }
 
 #[test]
+fn audio_playback_licenses_are_in_every_desktop_package() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    for file in [
+        "audio-playback.txt",
+        "rodio-mit.txt",
+        "rodio-apache-2.0.txt",
+        "cpal-apache-2.0.txt",
+        "symphonia-mpl-2.0.txt",
+    ] {
+        assert!(root.join("../../packaging/licenses").join(file).is_file());
+        assert!(MACOS_BUILD.contains(&format!("packaging/licenses/{file}")));
+        assert!(LINUX_TARBALL.contains(&format!("packaging/licenses/{file}")));
+        assert!(WINDOWS_INSTALLER.contains(file));
+        let installed_name = if file == "audio-playback.txt" {
+            "audio-playback-licenses.txt"
+        } else {
+            file
+        };
+        assert!(LINUX_INSTALL.contains(installed_name));
+    }
+}
+
+#[test]
 fn windows_installer_uses_the_bundled_simplified_chinese_language_file() {
     let language = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../packaging/windows/ChineseSimplified.isl");
@@ -173,6 +196,21 @@ fn windows_installer_includes_the_pdf_renderer_and_all_reader_licenses() {
             .join("../../packaging/licenses/libchm.txt")
             .is_file()
     );
+    for name in [
+        "audio-playback.txt",
+        "rodio-mit.txt",
+        "rodio-apache-2.0.txt",
+        "cpal-apache-2.0.txt",
+        "symphonia-mpl-2.0.txt",
+    ] {
+        assert!(WINDOWS_INSTALLER.contains(name));
+        assert!(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../packaging/licenses")
+                .join(name)
+                .is_file()
+        );
+    }
 }
 
 #[cfg(not(feature = "rar"))]
@@ -299,6 +337,8 @@ fn linux_packaging_keeps_rar_features_and_descriptors_in_sync() {
         assert!(package.join("install.sh").is_file());
         assert!(package.join("rz-pdf-renderer").is_file());
         assert!(package.join("pdf-renderer-licenses.txt").is_file());
+        assert!(package.join("audio-playback-licenses.txt").is_file());
+        assert!(package.join("symphonia-mpl-2.0.txt").is_file());
         for name in ["rustzip.desktop", "rustzip-extract.nemo_action"] {
             let descriptor = fs::read_to_string(package.join(name)).unwrap();
             assert_eq!(
@@ -345,6 +385,16 @@ fn linux_packaging_keeps_rar_features_and_descriptors_in_sync() {
             assert!(
                 prefix
                     .join("share/doc/rustzip/pdf-renderer-licenses.txt")
+                    .is_file()
+            );
+            assert!(
+                prefix
+                    .join("share/doc/rustzip/audio-playback-licenses.txt")
+                    .is_file()
+            );
+            assert!(
+                prefix
+                    .join("share/doc/rustzip/symphonia-mpl-2.0.txt")
                     .is_file()
             );
 

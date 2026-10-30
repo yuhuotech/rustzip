@@ -20,6 +20,7 @@ path = "src/main.rs"
 [dependencies]
 gpui-kit = "0.8.0"
 image = { version = "0.25", default-features = false, features = ["bmp", "gif", "jpeg", "png", "webp"] }
+rodio = { version = "0.21.1", default-features = false, features = ["playback", "flac", "mp3", "mp4", "vorbis", "wav"] }
 notify-rust.workspace = true
 # Only for the local time zone; formatting stays in rz-app.
 chrono = { version = "0.4", default-features = false, features = ["clock"] }

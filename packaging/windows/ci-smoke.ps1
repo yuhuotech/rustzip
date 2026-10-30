@@ -57,7 +57,7 @@ try {
         if (Test-Path $installLog) { Get-Content $installLog | ForEach-Object { Write-Host $_ } }
         throw "Installer failed: $($process.ExitCode)"
     }
-    $installedFiles = @("rustzip.exe", "rz-pdf-renderer.exe", "licenses\zlib.txt", "licenses\libchm.txt", "licenses\pbz2.txt", "licenses\pbz2-notice.txt", "licenses\pdf-renderer.txt", "licenses\inno-chinese-translation.txt")
+    $installedFiles = @("rustzip.exe", "rz-pdf-renderer.exe", "licenses\zlib.txt", "licenses\libchm.txt", "licenses\pbz2.txt", "licenses\pbz2-notice.txt", "licenses\pdf-renderer.txt", "licenses\audio-playback.txt", "licenses\rodio-mit.txt", "licenses\rodio-apache-2.0.txt", "licenses\cpal-apache-2.0.txt", "licenses\symphonia-mpl-2.0.txt", "licenses\inno-chinese-translation.txt")
     if ($RarEnabled) { $installedFiles += "unrar-license.txt" }
     foreach ($file in $installedFiles) {
         if (-not (Test-Path -LiteralPath (Join-Path $install $file))) {

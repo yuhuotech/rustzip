@@ -33,6 +33,11 @@ cp packaging/licenses/libchm.txt "$stage/libchm-license.txt"
 cp packaging/licenses/pbz2.txt "$stage/pbz2-license.txt"
 cp packaging/licenses/pbz2-notice.txt "$stage/pbz2-notice.txt"
 cp packaging/licenses/pdf-renderer.txt "$stage/pdf-renderer-licenses.txt"
+cp packaging/licenses/audio-playback.txt "$stage/audio-playback-licenses.txt"
+cp packaging/licenses/rodio-mit.txt "$stage/rodio-mit.txt"
+cp packaging/licenses/rodio-apache-2.0.txt "$stage/rodio-apache-2.0.txt"
+cp packaging/licenses/cpal-apache-2.0.txt "$stage/cpal-apache-2.0.txt"
+cp packaging/licenses/symphonia-mpl-2.0.txt "$stage/symphonia-mpl-2.0.txt"
 if [ "${RZ_WITH_RAR:-0}" = "1" ]; then
     sed 's|MimeType=|MimeType=application/vnd.rar;application/x-rar;|' \
         "$stage/rustzip.desktop" > "$stage/rustzip.desktop.tmp"

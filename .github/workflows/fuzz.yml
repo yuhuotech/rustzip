@@ -9,6 +9,7 @@ on:
       - "Cargo.lock"
       - "fuzz/**"
       - "apps/pdf-renderer/**"
+      - "apps/gui/src/audio_preview.rs"
       - "apps/gui/src/pdf_preview.rs"
       - "crates/rz-app/src/preview.rs"
       - "crates/rz-core/**"
@@ -62,6 +63,9 @@ jobs:
           - target: pdf_parser
             features: ""
             max_len: 16777216
+          - target: audio_decoder
+            features: ""
+            max_len: 8388608
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/native-archive-deps
@@ -93,6 +97,8 @@ jobs:
             python3 fuzz/make_nsis_seed.py "fuzz/corpus/$FUZZ_TARGET/synthetic-pe-overlay"
           elif [[ "$FUZZ_TARGET" == "pdf_parser" ]]; then
             python3 fuzz/make_pdf_seed.py "fuzz/corpus/$FUZZ_TARGET/minimal.pdf"
+          elif [[ "$FUZZ_TARGET" == "audio_decoder" ]]; then
+            python3 fuzz/make_wav_seed.py "fuzz/corpus/$FUZZ_TARGET/minimal.wav"
           else
             cp -R "fuzz/seeds/$FUZZ_TARGET/." "fuzz/corpus/$FUZZ_TARGET/"
           fi

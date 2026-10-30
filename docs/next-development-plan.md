@@ -6,7 +6,7 @@
 
 ## 1. 结论
 
-RustZIP 的主要归档与桌面主流程已实现。2026-10-30 增加 macOS Finder Sync 压缩 / 解压菜单并在 macOS 27.0.1 ad-hoc 包实机点击验收；ZIP Quick Look 视图扩展已实现，ZIP/ZIP64 安全 smoke 和系统 WebKit 加载通过。本轮验证了临时 `.app` 经 Launch Services 注册并将 Quick Look provider election 设为 use 后，PlugInKit 可发现 provider，`qlmanage` 能启动扩展；Release matrix 新增可本机通过的注册 smoke，Finder 空格键可见内容因桌面捕获不可用仍未验收，临时注册已撤销。本次 GUI 的 ZIP 文件名编码设置支持自动、UTF-8、GBK、Shift-JIS、EUC-KR、Big5 和 Windows-1252；GUI 持久化回归、Rust 1.96 全工作区 all-features 测试、Clippy 及三平台 CI [41026008129](https://github.com/yuhuotech/rustzip/actions/runs/41026008129) 七个 job 均通过。线上官网和数据库健康检查通过，`RZ_STATS_URL` 已配置；同一构建缓存目录内验证设置该变量会触发重编译并嵌入正确地址。最新 Release dry-run [41026007832](https://github.com/yuhuotech/rustzip/actions/runs/41026007832) 的常规和四平台 RAR 构建、安装冒烟与汇总验签均通过；公开发布 job 跳过。最新五目标 fuzz run [41026029882](https://github.com/yuhuotech/rustzip/actions/runs/41026029882) 全部通过。其余主要缺口为 PDF / 音视频应用内预览、与 D11 崩溃保全约束冲突的 ZIP 真正原地增量编辑，以及安全 / 许可门槛尚未满足的 WIM / DMG / NSIS reader。Windows 原生交互、Dolphin / Nemo 实机菜单和正式签名发布仍待验收。虚拟挂载、云端按需解压、WASM 插件和 SFX 仍列为远期需求。
+RustZIP 的主要归档与桌面主流程已实现。2026-10-30 增加 macOS Finder Sync 压缩 / 解压菜单并在 macOS 27.0.1 ad-hoc 包实机点击验收；ZIP Quick Look 视图扩展已实现，ZIP/ZIP64 安全 smoke 和系统 WebKit 加载通过。本轮验证了临时 `.app` 经 Launch Services 注册并将 Quick Look provider election 设为 use 后，PlugInKit 可发现 provider，`qlmanage` 能启动扩展；Release matrix 新增可本机通过的注册 smoke，Finder 空格键可见内容因桌面捕获不可用仍未验收，临时注册已撤销。本次 GUI 的 ZIP 文件名编码设置支持自动、UTF-8、GBK、Shift-JIS、EUC-KR、Big5 和 Windows-1252；GUI 持久化回归、Rust 1.96 全工作区 all-features 测试、Clippy 及三平台 CI [41026008129](https://github.com/yuhuotech/rustzip/actions/runs/41026008129) 七个 job 均通过。线上官网和数据库健康检查通过，`RZ_STATS_URL` 已配置；同一构建缓存目录内验证设置该变量会触发重编译并嵌入正确地址。最新 Release dry-run [41026007832](https://github.com/yuhuotech/rustzip/actions/runs/41026007832) 的常规和四平台 RAR 构建、安装冒烟与汇总验签均通过；公开发布 job 跳过。最新五目标 fuzz run [41026029882](https://github.com/yuhuotech/rustzip/actions/runs/41026029882) 全部通过。PDF 首屏与受限音频播放已实现，Windows PDF helper 安装、三平台音频运行和视频预览验收仍待完成；视频缺少满足许可与资源隔离要求的 renderer。其他主要缺口为受 D11 崩溃保全约束限制的 ZIP 真正原地增量编辑，以及尚无合规 reader 的 WIM / DMG / NSIS。Windows 原生交互、Dolphin / Nemo 实机菜单和正式签名发布仍待验收。虚拟挂载、云端按需解压、WASM 插件和 SFX 仍列为远期需求。
 
 2026-10-30 后续远端验收：Release dry-run [41064921267](https://github.com/yuhuotech/rustzip/actions/runs/41064921267) 的 macOS arm64 / x86_64、Windows、Linux 构建及四平台 RAR 验证均通过；四个平台的构建期 `RZ_STATS_URL` 子进程检查通过，manifest 汇总验签成功，正式发布按 dry-run 规则跳过。Fuzz run [41064921389](https://github.com/yuhuotech/rustzip/actions/runs/41064921389) 的五个格式 target 和受控 crash artifact 上传 smoke 全部通过；本次为手动 run，尚不能证明每日 schedule 已触发。
 
@@ -16,7 +16,7 @@ RustZIP 的主要归档与桌面主流程已实现。2026-10-30 增加 macOS Fin
 
 2026-10-31 D30 PDF 预览实现与本机验证：`cargo test -p rz-app -p rustzip-gui -p rz-pdf-renderer --all-features` 和对应 Clippy 通过；覆盖正常首屏、超大页面、300 MiB Flate 炸弹和 helper 自身 10 秒 watchdog。macOS `.app` / DMG 打包、helper 签名及 Quick Look provider 注册通过；Linux 安装 / 卸载 smoke 通过；renderer 对 Windows MSVC 与 Linux GNU 的交叉编译检查通过。Windows 安装器冒烟和 CI runner 仍待验收。
 
-2026-10-31 音视频预览候选复核：官方 Symphonia 可做音频 demux / 解码，许可证为 MPL-2.0；Rodio 通过 CPAL 播放，Linux 构建需要 ALSA 开发库；MIT 的 `mp4` crate 可读取 MP4 容器与音轨信息，但本身不是视频解码器。尚未选定同时满足视频解码、跨平台分发和不可信输入资源上限的后端，应用内音视频预览继续作为待开发项；双击交给系统程序的路径保留。依据：[Symphonia](https://github.com/pdeljanov/Symphonia)、[Rodio](https://github.com/RustAudio/rodio)、[MP4 reader](https://github.com/alfg/mp4-rust)。
+2026-10-31 音视频预览候选复核：官方 Symphonia 可做音频 demux / 解码，许可证为 MPL-2.0；Rodio 通过 CPAL 播放，Linux 构建需要 ALSA 开发库；MIT 的 `mp4` crate 可读取 MP4 容器与音轨信息，但本身不是视频解码器。音频已按 D51 接入受限播放；视频尚未选定同时满足解码、跨平台分发和不可信输入资源上限的后端，仍交给系统程序打开。依据：[Symphonia](https://github.com/pdeljanov/Symphonia)、[Rodio](https://github.com/RustAudio/rodio)、[MP4 reader](https://github.com/alfg/mp4-rust)。
 
 提交 `9deb72c` 的 Release dry-run [41090713832](https://github.com/yuhuotech/rustzip/actions/runs/41090713832) 完成四平台常规与 RAR 包验证、Windows 安装 / 卸载关联 smoke、macOS Quick Look 注册、manifest 验签和 bundles 上传；公开 `publish` 跳过。Fuzz cron 在 `16:53 UTC` 探测及 workflow 于 `17:11 UTC` 重新注册后的 `17:35 UTC` 探测均未产生 schedule run；workflow 状态 active，已恢复 `13:37 UTC` cron。
 
@@ -35,7 +35,7 @@ RustZIP 的主要归档与桌面主流程已实现。2026-10-30 增加 macOS Fin
 | P0 | bzip2 多线程 | 单文件和 tar.bz2 按块并行压缩；读取通过 `pbz2` 并行解码单流和串接 member，按线程 / 内存预算估算限 worker；压缩与解压均有顺序回退，系统 bzip2 互通用例通过 | 扩大外部样本、损坏 / 取消边界和三平台验收 |
 | P0 | 大文件 Deflate | `.gz` / `.tar.gz` 在多线程模式下以最多 900,000 字节块压成有序标准 gzip members；未加密 ZIP 大条目已分块并行 Deflate，通过 Info-ZIP `unzip -t`、引擎往返、取消清理和 BLAKE3 校验。40 / 64 / 128 MiB 每种三轮的中位数见[基准记录](benchmarks/2026-10-29-zip-large-deflate.md) | Windows / macOS 7-Zip、WinZip 外部互通与其他数据类型性能样本；ZIP 加密继续顺序编码 |
 | P0 | 校验和 | `rz-app` 流式 SHA-256 / BLAKE3、CLI `rz h` 和最近文件 / 常用位置的 GUI 入口已接入；标准向量、分块进度、取消、非普通文件拒绝及 workspace 回归通过 | 无；保留与归档 CRC 校验的语义区分 |
-| P1 | 预览 | 图片 / UTF-8 文本保持原有限制；macOS Quick Look 列出有限 ZIP 目录。PDF 由隔离 helper 渲染首屏，限制 16 MiB 输入、256 MiB 同时存活 heap 分配、512 MiB 累计分配、10 秒、8 MiB PNG 和 16,777,216 像素；PDF parser 已增加 nightly ASan fuzz target，push 后 CI 验收待完成 | 补 Windows 安装器冒烟和三平台 CI 验收；Finder 空格键可见页面及正式签名 / 公证包仍待人工验收；音视频继续评估 |
+| P1 | 预览 | 图片 / UTF-8 文本保持原有限制；PDF 使用满足 D30 的隔离 helper。音频已接入 MP3 / FLAC / Vorbis / WAV / M4A 后台播放，限制 8 MiB 源数据和 15 分钟；音频 decoder nightly ASan fuzz target 已加入，CI 待验收。macOS Quick Look 只列有限 ZIP 目录 | 验收三平台打包 / 运行、Windows PDF helper 安装器及 Finder 空格键可见页面；视频继续评估安全 renderer |
 | P1 | 压缩包内编辑 | 添加、删除、重命名已实现；可用系统程序编辑条目并自动写回。符合条件的单卷、无密码 ZIP 删除 / 重命名 / 条目写回复制原压缩数据，保留归档 / 条目注释、自定义扩展字段和 ZIP64 扩展数据；替换条目时仍保留原注释；自解压前缀、非 UTF-8 名称、加密、分卷及其他操作回退完整重打包；仍非原地增量写入 | 扩大厂商扩展字段和跨平台替换验证；原地增量写入仍需先解决与 D11 崩溃保全的决策冲突 |
 | P1 | 完成后动作与通知 | 设置可控解压完成后显示目录；历史记录为本次运行内成功任务提供本次运行结果定位，不持久化结果路径；可选系统通知只发通用成功 / 失败信息，默认关闭。Ubuntu GNOME 开启时实际投递、关闭时静默均已通过 | 验收 macOS / Windows 通知实际投递与设置切换；关机等高影响动作暂不纳入 |
 | P1 | 压缩预设 | 极速 / 均衡 / 最小体积、邮件分享（20 MiB 默认分卷）和跨平台兼容预设已接入；自定义分卷、权限规范化用例与 8 MiB 基准通过 | 无；用户指定的分卷大小会直接覆盖预设值 |
@@ -44,7 +44,7 @@ RustZIP 的主要归档与桌面主流程已实现。2026-10-30 增加 macOS Fin
 | P1 | 多语言和无障碍 | 十种语言的 381 个界面资源键已实现；八种新增语言各有完整词条包，覆盖及占位符测试通过。十种菜单选项逐项切换测试通过；设置和窗口顶栏共用语言下拉菜单，系统首选语言读取可用，侧栏使用简短本地化标签并保留省略保护 | Windows 原生语言设置、真实屏幕阅读器、阿拉伯语 RTL 整页布局仍待平台验收 |
 | P1 | ZIP 文件名编码 | 核心自动识别及 CLI 手动指定已实现；GUI 全局设置可选自动、UTF-8、GBK、Shift-JIS、EUC-KR、Big5、Windows-1252，关闭并重新打开压缩包后生效。十种语言资源均已更新；macOS GUI 设置持久化回归及 Rust 1.96 全工作区 all-features 测试通过 | 本轮三平台 CI 通过后关闭此项平台验证 |
 | P1 | 文件关联与系统菜单 | macOS Finder Sync 右键扩展已打入 `.app` 并在 macOS 27.0.1 实际点击验收；用户需启用扩展，Developer ID / 公证包待验收。ZIP Quick Look 扩展已打包；临时包注册后 provider 在 PlugInKit 可见并被 `qlmanage` 启动。注册 smoke 已由 Release dry-run [41043955928](https://github.com/yuhuotech/rustzip/actions/runs/41043955928) 的 macOS arm64 / x86_64 runner 通过，Finder 空格键可见 UI 仍待验收。Nautilus 50.2.2 Scripts 菜单在 Ubuntu 26.04 / Xvfb 已点击验收；Dolphin / Nemo 和 Windows 注册表菜单的原生点击仍待验收 | 验收 Finder 可见页面与正式签名包；验收 Plasma Dolphin、Nemo 和 Windows 菜单 |
-| P1 | 持续 fuzz | nightly ASan 工作流覆盖 ZIP recovery、CHM、bzip2、RAR、NSIS；PDF parser target 已加入，自动 push run 待验收。手动 run [41064921389](https://github.com/yuhuotech/rustzip/actions/runs/41064921389) 的原五个 target 与受控 crash artifact 上传 smoke 全部通过；受控 sentinel 不是格式崩溃 | 确认六个 target 的自动 push run；每日 13:37 UTC schedule 尚未观测到自动 run，需等待定时事件 |
+| P1 | 持续 fuzz | nightly ASan 工作流现覆盖 ZIP recovery、CHM、bzip2、RAR、NSIS、PDF parser、audio decoder。audio decoder 本机 ASan 100 次 smoke 通过；此前 PDF 代码提交的六目标 push run [41121300850](https://github.com/yuhuotech/rustzip/actions/runs/41121300850) 不包含本次新增的 audio target，当前提交的七目标 push run 待触发。手动 run [41064921389](https://github.com/yuhuotech/rustzip/actions/runs/41064921389) 的原五个 target 与受控 crash artifact 上传 smoke 全部通过 | 验收七目标 push run；每日 13:37 UTC schedule 尚未观测到自动 run，需等待定时事件 |
 | P1 | 跨平台桌面与打包 | macOS `.app` / DMG arm64 签名与启动通过，尚未公证。Ubuntu 26.04.1 x86_64 的全工作区 all-features 测试与 Clippy 通过（3 项环境条件测试忽略）；Linux tarball 构建、隔离安装 / 卸载、Nautilus 菜单点击通过。真实 Wayland GUI 启动、GNOME Secret Service 唯一标签往返、通知启用投递 / 关闭静默通过。最新 CI [41086116233](https://github.com/yuhuotech/rustzip/actions/runs/41086116233) 七个 job 全部通过，覆盖三平台 core、三平台 GUI 和 benchmark；此前 CI [40958398639](https://github.com/yuhuotech/rustzip/actions/runs/40958398639) 的 Windows core 17 分 37 秒、Windows GUI / 安装器 18 分 44 秒，GUI 缓存保存有非致命告警。详细证据见 [第二阶段验收](phase-2-platform-acceptance.md) | Windows 原生输入法 / 渲染 / 钥匙串 / 通知、macOS 公证 / Finder / 通知、Dolphin / Nemo 点击、屏幕阅读器、正式三平台发布流程仍需验收 |
 | P1 | 自动更新与 Release | 有安装包签名校验、更新发现和下载后交给系统安装器的流程；自动化用例覆盖验签后才启动、篡改内容拒绝启动及启动失败提示。提交 `51fffdb` 的 dry-run [41064921267](https://github.com/yuhuotech/rustzip/actions/runs/41064921267) 四平台常规包与 RAR 包构建、各平台构建期统计 URL 检查、manifest 汇总验签全部通过，公开发布按 dry-run 规则跳过 | 正式签名 Release 尚未执行；正式签名 / 公证、三平台更新器交接和真实安装流程仍需验收 |
 | P2 | 压缩包对比 | 已接入 GUI 已打开标签对比和 CLI `rz diff`；按路径 / 类型识别新增、删除和类型变化，同路径同大小普通文件流式计算 BLAKE3；遵守取消、进度、总输出和压缩比限制。ZIP、加密 7z（可分别输入密码）、RAR、CHM、ISO 9660、LHA/LZH、RPM、XAR 与 tar.gz 对比回归通过；单包最多 1,000,000 条目，符号链接目标标记未比较 | 扩展真实外部工具样本、大归档性能采样和跨平台验收 |
@@ -75,7 +75,7 @@ RustZIP 的主要归档与桌面主流程已实现。2026-10-30 增加 macOS Fin
 
 ### 阶段 C：完成高频 P1 体验
 
-1. ~~实现受限大小的纯文本应用内预览。~~ 64 KiB 白名单 UTF-8 内容在详情栏等宽显示；PDF 首屏预览已按 D50 接入隔离 helper，待三平台验收；音视频仍交给系统程序，之后评估是否需要应用内播放。
+1. ~~实现受限大小的纯文本应用内预览。~~ 64 KiB 白名单 UTF-8 内容在详情栏等宽显示；PDF 首屏预览已按 D50 接入隔离 helper；音频已按 D51 接入后台播放；Windows PDF helper 安装、三平台音频运行与视频 renderer 仍待验收 / 评估。
 2. ~~将“邮件分享”预设建立在分卷能力之上；实现跨平台兼容预设。~~ 邮件分享对 ZIP / 7z 采用 20 MiB 默认分卷，用户可覆盖；跨平台预设规范化源权限并省略 7z Windows 文件属性。
 3. ~~为重复文件检测明确判定规则并先提示用户。~~ 已按同大小 + 内容 BLAKE3 找出重复组，确认前不压缩；目录上限与越界后的继续提示已覆盖；自动去重仍需单独评估其安全边界。
 4. ~~接入可选系统通知、解压完成后定位和任务记录中的本次运行结果定位。~~ Ubuntu GNOME 通知启用 / 关闭实测通过；继续验收 macOS / Windows 的实际投递和设置切换。
@@ -104,7 +104,7 @@ RustZIP 的主要归档与桌面主流程已实现。2026-10-30 增加 macOS Fin
 1. 优先完成 Windows 原生 GUI、安装器、文件关联及注册表菜单验收，并补上 Windows CI / 发布证据。
 2. 完成 macOS 系统钥匙串与通知验收；验证 Dolphin / Nemo 菜单点击和 Linux GUI CI。
 3. ~~评估 WIM、DMG、CHM、NSIS 等只读格式候选并按安全门槛接入。~~ CHM 已接入只读 reader；WIM / DMG 魔数分流到明确不支持；NSIS 已加 PE overlay FirstHeader 识别，但读取仍待符合 D37 的后端。其余格式只有后端满足流式、取消、资源上限和独立样本要求后再接入，证据见[第三阶段记录](phase-3-format-assessment.md)。
-4. ~~评估 PDF 原生预览的硬资源上限。~~ D50 以隔离子进程的分配预算、双层时限和输出像素限制接入首屏 PDF；macOS 包装、Linux 安装脚本、renderer 跨目标检查和恶意输入回归通过，Windows 安装器与三平台 CI 仍待验收。音视频继续调用系统程序，直到资源和平台成本明确。
+4. ~~评估 PDF 原生预览的硬资源上限。~~ D50 以隔离子进程的分配预算、双层时限和输出像素限制接入首屏 PDF；macOS 包装、Linux 安装脚本、renderer 跨目标检查和恶意输入回归通过，Windows 安装器与三平台 CI 仍待验收。音频按 D51 限制输入和时长后接入；视频继续调用系统程序，直到资源和平台成本明确。
 5. 完成 Windows 安装器和三平台 release 工作流演练，验证更新的验签、下载与安装器交接后再发布首个正式版本。
 
 没有为各阶段给出日历工期：长尾格式范围、Windows / Linux 设备与打包环境仍需先确认，当前估时会产生较大偏差。

@@ -45,6 +45,10 @@ notice_external_read_only	시스템 앱에서 열었습니다. 이 압축 파일
 notice_preview_too_large	파일이 너무 커서 미리 볼 수 없습니다. 압축을 풀어 확인하세요.
 detail_pdf_rendering	PDF 미리 보기를 렌더링하는 중…
 detail_pdf_unavailable	PDF 미리 보기를 사용할 수 없습니다. 두 번 클릭해 시스템 뷰어에서 여세요.
+detail_audio_loading	오디오 미리 보기를 불러오는 중…
+detail_audio_unavailable	오디오 미리 보기를 사용할 수 없습니다. 두 번 클릭해 시스템 플레이어에서 여세요.
+audio_play	오디오 재생
+audio_stop	오디오 정지
 task_test_passed	{task} 완료: 항목 {count}개에서 문제를 찾지 못했습니다
 task_edit_complete	{task} 완료: 압축 파일에 이제 항목 {count}개가 있습니다
 task_complete_count	{task} 완료: 파일 {count}개, {size}

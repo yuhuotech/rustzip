@@ -4,6 +4,7 @@
 //! into windows. Colours come from `brand`, never from the views.
 
 pub mod assets;
+mod audio_preview;
 pub mod brand;
 pub mod dialog;
 pub mod history;
