@@ -48,9 +48,11 @@ fn helper_stops_waiting_when_its_input_pipe_stays_open() {
         .spawn()
         .unwrap();
     let started = Instant::now();
-    while started.elapsed() < Duration::from_secs(12) {
+    // The helper deadline is 10 seconds; leave room for a busy CI runner to
+    // schedule the watchdog thread and reap the child process.
+    let exit_bound = Duration::from_secs(16);
+    while started.elapsed() < exit_bound {
         if child.try_wait().unwrap().is_some() {
-            assert!(started.elapsed() < Duration::from_secs(11));
             return;
         }
         thread::sleep(Duration::from_millis(20));

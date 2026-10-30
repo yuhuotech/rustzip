@@ -10,6 +10,7 @@ pub const MAX_PIXELS: u64 = 16_777_216;
 pub const MAX_AXIS: u32 = 8_192;
 const MAX_SAMPLE_BYTES: u32 = 8 * 1024 * 1024;
 const MAX_MP4_IO_OPERATIONS: usize = 16_384;
+const MAX_MP4_BOX_DEPTH: usize = 16;
 const MAX_REFERENCE_FRAMES: u32 = 16;
 
 struct BoundedCursor<'a> {
@@ -49,6 +50,129 @@ impl Seek for BoundedCursor<'_> {
         self.charge()?;
         self.cursor.seek(position)
     }
+}
+
+fn read_be_u32(input: &[u8], offset: usize, end: usize) -> Result<u32, &'static str> {
+    let bytes = input
+        .get(offset..offset.checked_add(4).ok_or("MP4 box offset overflow")?)
+        .filter(|_| offset.saturating_add(4) <= end)
+        .ok_or("MP4 box header is truncated")?;
+    let bytes: [u8; 4] = bytes
+        .try_into()
+        .map_err(|_| "MP4 box header is truncated")?;
+    Ok(u32::from_be_bytes(bytes))
+}
+
+fn child_box_prefix(
+    input: &[u8],
+    box_type: [u8; 4],
+    parent_type: Option<[u8; 4]>,
+    payload_start: usize,
+    box_end: usize,
+) -> Result<Option<usize>, &'static str> {
+    let prefix = match &box_type {
+        b"moov" | b"trak" | b"mdia" | b"minf" | b"stbl" | b"edts" | b"dinf" | b"mvex" | b"moof"
+        | b"traf" | b"udta" | b"ilst" | b"wave" => Some(0),
+        b"dref" | b"stsd" => Some(8),
+        b"avc1" | b"hev1" | b"vp09" => Some(78),
+        b"mp4a" => Some(28),
+        _ if parent_type == Some(*b"ilst")
+            && [*b"\xA9nam", *b"\xA9day", *b"covr", *b"desc"].contains(&box_type) =>
+        {
+            Some(0)
+        }
+        _ => None,
+    };
+    if box_type == *b"meta" {
+        let version_and_flags = read_be_u32(input, payload_start, box_end)?;
+        if version_and_flags == 0 {
+            return Ok(Some(4));
+        }
+        let possible_hdlr =
+            input.get(payload_start.saturating_add(4)..payload_start.saturating_add(8));
+        if possible_hdlr == Some(b"hdlr") {
+            return Ok(Some(0));
+        }
+        return Err("MP4 metadata box header is invalid");
+    }
+    Ok(prefix)
+}
+
+fn validate_box_region(
+    input: &[u8],
+    start: usize,
+    end: usize,
+    depth: usize,
+    parent_type: Option<[u8; 4]>,
+    box_count: &mut usize,
+) -> Result<(), &'static str> {
+    if depth > MAX_MP4_BOX_DEPTH || start > end || end > input.len() {
+        return Err("MP4 box tree exceeds the preview limit");
+    }
+
+    let mut offset = start;
+    while offset < end {
+        *box_count = box_count.checked_add(1).ok_or("MP4 box count overflow")?;
+        if *box_count > MAX_MP4_IO_OPERATIONS {
+            return Err("MP4 box count exceeds the preview limit");
+        }
+        let short_size = read_be_u32(input, offset, end)?;
+        let type_start = offset.checked_add(4).ok_or("MP4 box offset overflow")?;
+        let type_end = type_start.checked_add(4).ok_or("MP4 box offset overflow")?;
+        let box_type: [u8; 4] = input
+            .get(type_start..type_end)
+            .filter(|_| type_end <= end)
+            .ok_or("MP4 box header is truncated")?
+            .try_into()
+            .map_err(|_| "MP4 box header is truncated")?;
+        if short_size == 1 {
+            return Err("MP4 extended-size boxes are not supported for preview");
+        }
+        let box_size = if short_size == 0 {
+            end - offset
+        } else {
+            usize::try_from(short_size).map_err(|_| "MP4 box size is invalid")?
+        };
+        let remaining = end - offset;
+        if box_size < 8 || box_size > remaining {
+            return Err("MP4 box size exceeds its container");
+        }
+        let box_end = offset
+            .checked_add(box_size)
+            .ok_or("MP4 box offset overflow")?;
+        let payload_start = offset.checked_add(8).ok_or("MP4 box offset overflow")?;
+        if let Some(prefix) =
+            child_box_prefix(input, box_type, parent_type, payload_start, box_end)?
+        {
+            let children_start = payload_start
+                .checked_add(prefix)
+                .ok_or("MP4 box offset overflow")?;
+            if children_start > box_end {
+                return Err("MP4 container header exceeds its box size");
+            }
+            validate_box_region(
+                input,
+                children_start,
+                box_end,
+                depth + 1,
+                Some(box_type),
+                box_count,
+            )?;
+        }
+        offset = box_end;
+        if short_size == 0 {
+            break;
+        }
+    }
+    if offset != end {
+        return Err("MP4 box tree does not end at the declared boundary");
+    }
+    Ok(())
+}
+
+fn validate_mp4_box_tree(input: &[u8]) -> Result<(), &'static str> {
+    let mut box_count = 0;
+    validate_box_region(input, 0, input.len(), 0, None, &mut box_count)
 }
 
 fn avcc_record(track: &mp4::Mp4Track) -> Result<Vec<u8>, &'static str> {
@@ -138,7 +262,42 @@ fn validate_configuration(config: &rust_h264::nal::AvccConfig<'_>) -> Result<(),
     Ok(())
 }
 
+fn validate_sample_time(track: &mp4::Mp4Track, sample_id: u32) -> Result<(), &'static str> {
+    let mut first_sample = 1u32;
+    let mut elapsed = 0u64;
+    for entry in &track.trak.mdia.minf.stbl.stts.entries {
+        let end_sample = first_sample
+            .checked_add(entry.sample_count)
+            .ok_or("MP4 time-to-sample table overflows")?;
+        if sample_id < end_sample {
+            let sample_offset = u64::from(sample_id - first_sample)
+                .checked_mul(u64::from(entry.sample_delta))
+                .ok_or("MP4 sample time overflows")?;
+            elapsed
+                .checked_add(sample_offset)
+                .ok_or("MP4 sample time overflows")?;
+            return Ok(());
+        }
+        first_sample = end_sample;
+        let run_duration = u64::from(entry.sample_count)
+            .checked_mul(u64::from(entry.sample_delta))
+            .ok_or("MP4 time-to-sample duration overflows")?;
+        elapsed = elapsed
+            .checked_add(run_duration)
+            .ok_or("MP4 time-to-sample duration overflows")?;
+    }
+    Err("MP4 time-to-sample table does not cover the keyframe")
+}
+
 fn first_sync_sample(track: &mp4::Mp4Track) -> Result<(u32, u32), &'static str> {
+    let sample_to_chunk = &track.trak.mdia.minf.stbl.stsc.entries;
+    if sample_to_chunk.is_empty()
+        || sample_to_chunk
+            .iter()
+            .any(|entry| entry.first_chunk == 0 || entry.samples_per_chunk == 0)
+    {
+        return Err("MP4 sample-to-chunk table is invalid");
+    }
     let sample_count = track.sample_count();
     if sample_count == 0 {
         return Err("MP4 video track has no samples");
@@ -155,6 +314,7 @@ fn first_sync_sample(track: &mp4::Mp4Track) -> Result<(u32, u32), &'static str> 
     if sample_id == 0 || sample_id > sample_count {
         return Err("MP4 keyframe index is invalid");
     }
+    validate_sample_time(track, sample_id)?;
     let sizes = &track.trak.mdia.minf.stbl.stsz;
     let sample_size = if sizes.sample_size > 0 {
         sizes.sample_size
@@ -226,9 +386,13 @@ pub fn render_first_frame(input: &[u8]) -> Result<Vec<u8>, &'static str> {
     if input.len() < 8 || &input[4..8] != b"ftyp" {
         return Err("input is not an MP4 video");
     }
+    validate_mp4_box_tree(input)?;
 
     let mut reader = Mp4Reader::read_header(BoundedCursor::new(input), input.len() as u64)
         .map_err(|_| "MP4 container parsing failed")?;
+    if reader.timescale() == 0 {
+        return Err("MP4 movie time scale is invalid");
+    }
     if reader.is_fragmented() {
         return Err("fragmented MP4 video is not supported for preview");
     }
@@ -243,6 +407,9 @@ pub fn render_first_frame(input: &[u8]) -> Result<Vec<u8>, &'static str> {
             .tracks()
             .get(&track_id)
             .ok_or("MP4 H.264 track disappeared")?;
+        if track.timescale() == 0 {
+            return Err("MP4 video track time scale is invalid");
+        }
         let (sample_id, sample_size) = first_sync_sample(track)?;
         (sample_id, sample_size, avcc_record(track)?)
     };
@@ -305,6 +472,24 @@ mod tests {
     #[test]
     fn rejects_an_mp4_with_a_nonadvancing_nested_box() {
         let malformed = include_bytes!("../tests/fixtures/mp4-box-loop.mp4");
+        assert!(render_first_frame(malformed).is_err());
+    }
+
+    #[test]
+    fn rejects_zero_samples_per_chunk_without_panicking() {
+        let malformed = include_bytes!("../tests/fixtures/zero-samples-per-chunk.mp4");
+        assert!(render_first_frame(malformed).is_err());
+    }
+
+    #[test]
+    fn rejects_incomplete_time_to_sample_table_without_panicking() {
+        let malformed = include_bytes!("../tests/fixtures/missing-stts-entry.mp4");
+        assert!(render_first_frame(malformed).is_err());
+    }
+
+    #[test]
+    fn rejects_extended_box_sizes_before_untrusted_allocations() {
+        let malformed = include_bytes!("../tests/fixtures/extended-box-size.mp4");
         assert!(render_first_frame(malformed).is_err());
     }
 

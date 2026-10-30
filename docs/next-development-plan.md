@@ -8,6 +8,8 @@
 
 RustZIP 的主要归档与桌面主流程已实现。2026-10-30 增加 macOS Finder Sync 压缩 / 解压菜单并在 macOS 27.0.1 ad-hoc 包实机点击验收；ZIP Quick Look 视图扩展已实现，ZIP/ZIP64 安全 smoke 和系统 WebKit 加载通过。本轮验证了临时 `.app` 经 Launch Services 注册并将 Quick Look provider election 设为 use 后，PlugInKit 可发现 provider，`qlmanage` 能启动扩展；Release matrix 新增可本机通过的注册 smoke，Finder 空格键可见内容因桌面捕获不可用仍未验收，临时注册已撤销。本次 GUI 的 ZIP 文件名编码设置支持自动、UTF-8、GBK、Shift-JIS、EUC-KR、Big5 和 Windows-1252；GUI 持久化回归、Rust 1.96 全工作区 all-features 测试、Clippy 及三平台 CI [41026008129](https://github.com/yuhuotech/rustzip/actions/runs/41026008129) 七个 job 均通过。线上官网和数据库健康检查通过，`RZ_STATS_URL` 已配置；同一构建缓存目录内验证设置该变量会触发重编译并嵌入正确地址。最新 Release dry-run [41026007832](https://github.com/yuhuotech/rustzip/actions/runs/41026007832) 的常规和四平台 RAR 构建、安装冒烟与汇总验签均通过；公开发布 job 跳过。最新五目标 fuzz run [41026029882](https://github.com/yuhuotech/rustzip/actions/runs/41026029882) 全部通过。PDF 首屏、受限音频播放和 MP4 / M4V / MOV 的 H.264 首帧预览均已实现；helper 的三平台打包 / 运行仍待 CI 和实机验收。其他主要缺口为受 D11 崩溃保全约束限制的 ZIP 真正原地增量编辑，以及尚无合规 reader 的 WIM / DMG / NSIS。Windows 原生交互、Dolphin / Nemo 实机菜单和正式签名发布仍待验收；其他视频编码与容器仍由系统程序打开。虚拟挂载、云端按需解压、WASM 插件和 SFX 仍列为远期需求。
 
+2026-10-31 更新：ZIP 编辑已增加 D53 staged append / reflink 快路径，符合条件的单卷无密码编辑在同目录暂存副本中复用原条目数据，完成校验后原子替换；D11 仍禁止直接改写原文件。macOS reflink 文件系统上的三档、每档三轮基准已记录。MP4 parser 的远端 Fuzz 崩溃已在本地修复并加入回归 fixture；本机 ASan fuzz 30 秒运行 61,003 次、峰值 RSS 441 MiB，无崩溃。锁定 Rust 1.96 后，全工作区格式检查、all-features Clippy 和测试均通过；Clippy 仅报告第三方 `block v0.1.6` future-incompatibility 提醒。远端修复复验、三平台 helper 安装 / 运行以及 WIM / DMG / NSIS reader 仍待完成。
+
 2026-10-30 后续远端验收：Release dry-run [41064921267](https://github.com/yuhuotech/rustzip/actions/runs/41064921267) 的 macOS arm64 / x86_64、Windows、Linux 构建及四平台 RAR 验证均通过；四个平台的构建期 `RZ_STATS_URL` 子进程检查通过，manifest 汇总验签成功，正式发布按 dry-run 规则跳过。Fuzz run [41064921389](https://github.com/yuhuotech/rustzip/actions/runs/41064921389) 的五个格式 target 和受控 crash artifact 上传 smoke 全部通过；本次为手动 run，尚不能证明每日 schedule 已触发。
 
 提交 `6fd8e65` 的 Release dry-run [41079816983](https://github.com/yuhuotech/rustzip/actions/runs/41079816983) 四平台常规 / RAR 包、Windows RAR 安装冒烟、汇总验签及 artifacts 上传全部通过；Fuzz run [41079856580](https://github.com/yuhuotech/rustzip/actions/runs/41079856580) 的五个 target 与受控 crash artifact smoke 全部通过。GitHub Actions run list 中 2026-10-30 13:37 UTC 没有 `schedule` 事件，定时触发仍待验收。
@@ -38,7 +40,7 @@ RustZIP 的主要归档与桌面主流程已实现。2026-10-30 增加 macOS Fin
 | P0 | 大文件 Deflate | `.gz` / `.tar.gz` 在多线程模式下以最多 900,000 字节块压成有序标准 gzip members；未加密 ZIP 大条目已分块并行 Deflate，通过 Info-ZIP `unzip -t`、引擎往返、取消清理和 BLAKE3 校验。40 / 64 / 128 MiB 每种三轮的中位数见[基准记录](benchmarks/2026-10-29-zip-large-deflate.md) | Windows / macOS 7-Zip、WinZip 外部互通与其他数据类型性能样本；ZIP 加密继续顺序编码 |
 | P0 | 校验和 | `rz-app` 流式 SHA-256 / BLAKE3、CLI `rz h` 和最近文件 / 常用位置的 GUI 入口已接入；标准向量、分块进度、取消、非普通文件拒绝及 workspace 回归通过 | 无；保留与归档 CRC 校验的语义区分 |
 | P1 | 预览 | 图片 / UTF-8 文本保持原有限制；PDF 使用满足 D30 的隔离 helper；音频支持 MP3 / FLAC / Vorbis / WAV / M4A，限制 8 MiB 输入、72 MB PCM 和 3 分钟；视频支持不超过 16 MiB 的 MP4 / M4V / MOV H.264 首帧，helper 限制内存、时间、像素和输出。音频 / 视频 decoder nightly ASan target 已加入，CI 待验收 | 验收两种 helper 的三平台安装 / 运行、Windows PDF helper 安装器及 Finder 空格键可见页面；其他视频格式继续评估 |
-| P1 | 压缩包内编辑 | 添加、删除、重命名已实现；可用系统程序编辑条目并自动写回。符合条件的单卷、无密码 ZIP 删除 / 重命名 / 条目写回复制原压缩数据，保留归档 / 条目注释、自定义扩展字段和 ZIP64 扩展数据；替换条目时仍保留原注释；自解压前缀、非 UTF-8 名称、加密、分卷及其他操作回退完整重打包；仍非原地增量写入 | 扩大厂商扩展字段和跨平台替换验证；原地增量写入仍需先解决与 D11 崩溃保全的决策冲突 |
+| P1 | 压缩包内编辑 | 添加、删除、重命名已实现；可用系统程序编辑条目并自动写回。符合条件的 ZIP 编辑优先在 reflink 暂存副本中写入变更条目并重建中央目录，未改动条目复用原 local records；不支持 COW 时回退 raw-copy。自解压前缀、非 UTF-8 名称、加密、分卷及其他操作回退完整重打包；完成后校验并原子替换，见 D53 | macOS reflink 卷 8 / 40 / 128 MiB × 3 轮基准已记录；Linux / Windows 外部工具与性能验收仍待做，原文件原地改写受 D11 约束 |
 | P1 | 完成后动作与通知 | 设置可控解压完成后显示目录；历史记录为本次运行内成功任务提供本次运行结果定位，不持久化结果路径；可选系统通知只发通用成功 / 失败信息，默认关闭。Ubuntu GNOME 开启时实际投递、关闭时静默均已通过 | 验收 macOS / Windows 通知实际投递与设置切换；关机等高影响动作暂不纳入 |
 | P1 | 压缩预设 | 极速 / 均衡 / 最小体积、邮件分享（20 MiB 默认分卷）和跨平台兼容预设已接入；自定义分卷、权限规范化用例与 8 MiB 基准通过 | 无；用户指定的分卷大小会直接覆盖预设值 |
 | P1 | 密码本与自动尝试 | 密码本已接入归档打开及解压、测试、编辑、转换/修复任务的密码失败路径：只在启用“记住密码”时运行，优先试归档文件名标签，候选总数最多 16 个；后台可取消，未匹配时保留手动输入。Rust 1.96 全工作区 all-features 测试与 Clippy 通过，GUI 65 项测试包含 ZIP 自动重试和失败回退 | Windows 系统钥匙串仍待实机验收 |
@@ -51,6 +53,8 @@ RustZIP 的主要归档与桌面主流程已实现。2026-10-30 增加 macOS Fin
 | P1 | 自动更新与 Release | 有安装包签名校验、更新发现和下载后交给系统安装器的流程；自动化用例覆盖验签后才启动、篡改内容拒绝启动及启动失败提示。提交 `51fffdb` 的 dry-run [41064921267](https://github.com/yuhuotech/rustzip/actions/runs/41064921267) 四平台常规包与 RAR 包构建、各平台构建期统计 URL 检查、manifest 汇总验签全部通过，公开发布按 dry-run 规则跳过 | 正式签名 Release 尚未执行；正式签名 / 公证、三平台更新器交接和真实安装流程仍需验收 |
 | P2 | 压缩包对比 | 已接入 GUI 已打开标签对比和 CLI `rz diff`；按路径 / 类型识别新增、删除和类型变化，同路径同大小普通文件流式计算 BLAKE3；遵守取消、进度、总输出和压缩比限制。ZIP、加密 7z（可分别输入密码）、RAR、CHM、ISO 9660、LHA/LZH、RPM、XAR 与 tar.gz 对比回归通过；单包最多 1,000,000 条目，符号链接目标标记未比较 | 扩展真实外部工具样本、大归档性能采样和跨平台验收 |
 | P2 | 虚拟磁盘挂载、云端按需解压、WASM 插件、自解压包 | 尚未实现，仍属远期需求 | 分别评估平台成本、威胁模型与许可后再立项 |
+
+当前未完成项分为三类：D37 下尚无安全且许可证合规的 WIM / DMG / NSIS reader；PDF / 音视频 helper 和部分桌面系统集成仍待三平台或实机验收；ZIP 原归档原地写入受 D11 崩溃保全约束，当前交付的是暂存副本 reflink / append 快路径。远期需求不属于当前主流程验收范围。
 
 格式范围的依据：产品规格承诺 LZ4 读写及一组只读长尾格式；当前识别枚举已包含 ZIP、tar、gzip、7z、RAR、xz、zstd、bzip2、LZ4、ISO 9660、CAB、CPIO、AR、LHA/LZH、XAR、CHM、WIM、DMG 和 NSIS。CHM 可读；WIM / DMG 仅识别并明确不支持；NSIS 只识别有效 PE overlay FirstHeader，仍不读取。RAR 仍只通过可选 `unrar` 后端只读。
 
@@ -121,4 +125,4 @@ RustZIP 的主要归档与桌面主流程已实现。2026-10-30 增加 macOS Fin
 - 7z 多块路径的本机 `parallel` 与 `selective` 两组测试共 14 项通过；新增 8 MiB 多块基准中单线程约 228 MiB/s、多线程约 846 MiB/s。该数字仅为单次小样本，不能代替性能回归结论。
 - bzip2 多线程压缩使用标准连续流；3.1 MB 单文件由本机系统 `bzip2 -dc` 逐字节解码通过，tar.bz2 由系统 `bsdtar` 解出并逐字节比对通过，低预算回退往返通过，注入输出错误后工作线程正常退出。8 MiB 基准单线程约 21 MiB/s、多线程约 161 MiB/s；单次样本不能代替回归结论。
 - 本机 `cargo test -p rz-formats -p rz-engine -p rz-app --all-features` 通过，包括可选 RAR 用例；两个要求非 root Unix 账户的既有用例被忽略。本机针对涉及的六个包运行 `cargo clippy --all-targets -- -D warnings` 通过，未覆盖其余工作区包或其他平台。
-- ZIP 压缩数据复用覆盖删除、重命名和单文件写回（包括 UTF-8 名称、隐式目录）；D42 扩展到归档注释、条目注释、自定义扩展字段和 ZIP64 扩展数据。取消、损坏数据、外部替换、密码回退、跨进程编辑和中途终止用例在本机通过。该快路径继续生成新归档、校验后替换，不是原地增量写入。`RZ_BENCH_MB=8 cargo bench -p rz-app --bench zip_edit` 对照完整重打包并按文件哈希验证；样本不足以证明普遍性能。ZIP 大条目分块 Deflate 在 40 / 64 / 128 MiB 每尺寸三轮，完整结果见基准记录。
+- ZIP 压缩数据复用覆盖删除、重命名和单文件写回（包括 UTF-8 名称、隐式目录）；D42 扩展到归档注释、条目注释、自定义扩展字段和 ZIP64 扩展数据。D53 增加 staged append / reflink 路径；它仍校验暂存结果并原子替换，不直接改写原文件。既有 raw-copy 与完整重打包基准不代表新路径的性能，新的多尺寸、多轮采样和外部工具回归仍待执行。

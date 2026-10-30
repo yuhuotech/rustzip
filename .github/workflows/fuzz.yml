@@ -29,7 +29,7 @@ on:
         type: boolean
         default: false
   schedule:
-    - cron: "37 13 * * *"
+    - cron: "30 23 * * *"
 
 permissions:
   contents: read
@@ -109,6 +109,9 @@ jobs:
           elif [[ "$FUZZ_TARGET" == "video_decoder" ]]; then
             cp apps/video-renderer/tests/fixtures/small-h264.mp4 apps/video-renderer/tests/fixtures/small-h264.mov \
               apps/video-renderer/tests/fixtures/mp4-box-loop.mp4 \
+              apps/video-renderer/tests/fixtures/zero-samples-per-chunk.mp4 \
+              apps/video-renderer/tests/fixtures/missing-stts-entry.mp4 \
+              apps/video-renderer/tests/fixtures/extended-box-size.mp4 \
               "fuzz/corpus/$FUZZ_TARGET/"
           else
             cp -R "fuzz/seeds/$FUZZ_TARGET/." "fuzz/corpus/$FUZZ_TARGET/"

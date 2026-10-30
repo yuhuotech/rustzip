@@ -39,13 +39,14 @@
 - `RZ_BENCH_MB=8 cargo bench -p rz-engine --bench throughput` 全矩阵完成并校验输出；ZIP 单条目基准以 BLAKE3 校验 40 / 64 / 128 MiB 样本，每尺寸每设置 3 轮。详细环境和中位数见[基准记录](benchmarks/2026-10-29-zip-large-deflate.md)。
 - 2026-10-30 本轮在锁定 Rust 1.96.0 下完成验证：`cargo fmt --all -- --check`、`cargo clippy --workspace --all-targets --all-features -- -D warnings`、`cargo test --workspace --all-features` 均通过。GUI 编码设置持久化回归、RAR FFI 回调 4 项、RAR 引擎 8 项及全工作区测试通过；4 项真实钥匙串或非 root Unix 用例按环境条件忽略。Clippy 仍提示第三方 `block v0.1.6` future-incompatibility。
 - 2026-10-30 密码本自动尝试接入任务密码失败路径后，再次使用锁定 Rust 1.96.0 执行 `cargo fmt --all -- --check`、`cargo clippy --workspace --all-targets --all-features -- -D warnings` 和 `cargo test --workspace --all-features`，均通过。GUI 全部 65 项 UI 集成用例通过，覆盖加密 ZIP 候选重试和候选不匹配后的手动重试；RAR FFI 4 项及引擎 8 项通过。两项非 root Unix 用例和真实钥匙串用例按环境条件忽略。Clippy 仍提示第三方 `block v0.1.6` future-incompatibility。
+- 2026-10-31 本机切换到明确的 Rust 1.96.0 编译器和隔离 target 后，`cargo fmt --all -- --check`、全工作区 all-features Clippy 和 `cargo test --workspace --all-features` 均通过。视频 renderer 7 项、helper 资源限制 3 项、RAR FFI 4 项和 RAR 引擎 9 项全部通过；按环境条件忽略项由测试输出注明。此前共享 target 混有 Rust 1.99.1 元数据，未清理原缓存，改用独立目录完成验证。Clippy 提示第三方 `block v0.1.6` future-incompatibility。
 
 ## 后续仍需完成
 
 - ZIP 9.1.3 的 8 MiB 编辑对照基准已运行；仍需多尺寸、多次采样。最新三平台 CI [41086116233](https://github.com/yuhuotech/rustzip/actions/runs/41086116233) 七个 job 全部通过，含三平台 core / GUI、Windows 安装器 smoke 和 benchmark；真实签名 Release 和系统交互验收仍待完成。
-- ZIP 大条目分块 Deflate 已接入；本机 40 / 64 / 128 MiB × 3 轮基准通过内容校验，仍需 Windows / macOS 外部工具矩阵和其他文件类型性能样本。合格 ZIP 编辑快路径的注释和扩展字段保真见 D42；真正原地增量编辑仍需先处理 D11 的崩溃保全边界。
-- 持续 fuzz 当前最新手动 run [41079856580](https://github.com/yuhuotech/rustzip/actions/runs/41079856580) 的五个 target 与受控 crash artifact smoke 全部通过；前次 [41046064115](https://github.com/yuhuotech/rustzip/actions/runs/41046064115) 的 492-byte artifact 已下载并确认内容。每日 13:37 UTC 的 schedule 尚未观测到 run，手动 dispatch 不作为 schedule 验收。
+- ZIP 大条目分块 Deflate 已接入；本机 40 / 64 / 128 MiB × 3 轮基准通过内容校验，仍需 Windows / macOS 外部工具矩阵和其他文件类型性能样本。D53 的 ZIP staged append / reflink 路径保留 D11 的暂存、校验和原子替换边界；macOS reflink 卷上的 8 / 40 / 128 MiB × 3 轮编辑基准已通过内容哈希核对，结果见[ZIP staged incremental 基准](benchmarks/2026-10-31-zip-staged-incremental.md)。Windows / Linux 外部工具和性能验收仍待完成，原文件原地改写仍未实现。
+- Fuzz run [41134178445](https://github.com/yuhuotech/rustzip/actions/runs/41134178445) 的七个普通 target 通过，`video_decoder` 发现 MP4 sample-table panic；本地加入 box-tree、extended-size、`stsc` / `stts` 覆盖校验和三个回归 seed 后，nightly ASan 30 秒完成 61,003 次变异、峰值 RSS 441 MiB，无崩溃。修复后的远端结果待验收。workflow 已配置每日 23:30 UTC，schedule 触发结果待观察。
 - WIM / DMG 仍只有签名识别；NSIS 仅有受限 FirstHeader 识别。三种格式的浏览 / 测试 / 提取 reader 仍需通过 D37。
-- PDF / 音频 / 视频应用内预览，关机等高影响完成后动作。
+- PDF、音频和视频首屏 / 播放能力已实现；剩余 PDF / 音视频 helper 的三平台安装与运行、Finder 空格键可见页面及 Windows 原生交互验收。关机等高影响完成后动作仍不纳入当前版本。
 - 压缩包对比、虚拟挂载、云端按需解压、WASM 插件和 SFX 仍为远期需求。
 - macOS Finder Sync 右键菜单已在本机 ad-hoc 包实测通过；提交 `fabff8b` 的 [CI 41026008129](https://github.com/yuhuotech/rustzip/actions/runs/41026008129) 七个 job 全部通过，[Release dry-run 41026007832](https://github.com/yuhuotech/rustzip/actions/runs/41026007832) 的四平台常规 / RAR 测试包、Windows RAR 安装冒烟及 manifest 验签也全部通过。正式签名 Release 和真实用户交互仍待完成，详见[发布验收](release.md)。
