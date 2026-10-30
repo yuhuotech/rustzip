@@ -30,7 +30,7 @@ codesign --verify --deep --strict "$app"
 pluginkit -a "$appex"
 pluginkit -e use -p "$extension_point" -i "$bundle_id"
 
-matches="$(pluginkit -m -v -p "$extension_point" -i "$bundle_id")"
+matches="$(pluginkit -m -v -p "$extension_point" -i "$bundle_id" | tr '\n' ' ')"
 if [[ "$matches" != +* || "$matches" != *"$appex"* ]]; then
     echo "Quick Look provider was not registered as enabled for this app" >&2
     printf '%s\n' "$matches" >&2

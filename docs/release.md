@@ -44,7 +44,7 @@ Dry-run 默认不创建 GitHub Release，也不提交 Apple notarization 请求�
 
 服务端由仓库 `web/` 提供:`POST /api/v1/telemetry` 只接受上述 7 个字段,按安装 ID 和日期幂等去重。原始 UUID 在写入数据库前用 HMAC-SHA-256 转换;不保存文件信息或请求 IP。健康检查为 `GET /api/health`。数据库查询和本地验证方法见 [`web/README.md`](../web/README.md)。
 
-Vercel build 会在部署期间自动应用 Neon Postgres migrations;检查部署日志确认迁移成功,并确认 `/api/health` 返回 200。2026-10-30 线上健康检查返回 `{"status":"ok","database":"ok"}`，仓库 `RZ_STATS_URL` 已设置为完整接口地址。应用更新仍使用 GitHub Release 内的签名 `update.json`,不依赖 Vercel。
+Vercel build 会在部署期间自动应用 Neon Postgres migrations;检查部署日志确认迁移成功,并确认 `/api/health` 返回 200。2026-10-30 线上健康检查返回 `{"status":"ok","database":"ok"}`，仓库 `RZ_STATS_URL` 已设置为完整接口地址。`rz-services/build.rs` 声明该变量为 Cargo build input，变量改动会重建并更新桌面包里的默认统计地址；本机在同一 target 缓存目录中验证了“未设置 → 设置 URL”会重编译并嵌入正确地址。应用更新仍使用 GitHub Release 内的签名 `update.json`,不依赖 Vercel。
 
 ## 本地打包(不发布)
 
