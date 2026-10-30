@@ -47,6 +47,8 @@ task_test_passed	{task} завершено: проблем не найдено �
 task_edit_complete	{task} завершено: теперь в архиве элементов — {count}
 task_complete_count	{task} завершено: файлов — {count}, {size}
 task_password_needed	Для задачи «{task}» нужен пароль
+task_password_searching	Проверяются пароли из хранилища для задачи «{task}»…
+task_password_stop	Остановить попытки
 task_failed_detail	Задача «{task}» не выполнена: {reason}
 open_archive_tooltip	Открыть архив
 encrypted_badge	Зашифрован
@@ -339,7 +341,7 @@ settings_smart_extract_hint	Если в архиве есть несколько
 settings_check_updates	Автоматически проверять обновления
 settings_check_updates_hint	При запуске искать новые версии в фоновом режиме. Подписи пакетов обновлений проверяются.
 settings_remember_passwords	Запоминать пароли
-settings_remember_passwords_hint	После открытия зашифрованного архива сохранить пароль в системном хранилище ключей и попробовать его в следующий раз.
+settings_remember_passwords_hint	Успешные пароли сохраняются. Если пароль нужен при открытии архива или чтении зашифрованного файла, сначала проверяется пароль с именем архива, затем остальные пароли из хранилища; всего не более 16 попыток.
 settings_forget_passwords	Удалить сохранённые пароли
 settings_install_stats	Анонимная статистика установок
 settings_install_stats_hint	Передаются только анонимный идентификатор, версия, система и язык. Имена файлов и действия не собираются.

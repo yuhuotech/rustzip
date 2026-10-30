@@ -47,6 +47,8 @@ task_test_passed	{task} completado: no se han encontrado problemas en {count} el
 task_edit_complete	{task} completado: el archivo comprimido ahora contiene {count} elementos
 task_complete_count	{task} completado: {count} archivos, {size}
 task_password_needed	{task} necesita una contraseña
+task_password_searching	Buscando contraseñas del libro para {task}…
+task_password_stop	Detener búsqueda
 task_failed_detail	{task} ha fallado: {reason}
 open_archive_tooltip	Abrir archivo comprimido
 encrypted_badge	Cifrado
@@ -339,7 +341,7 @@ settings_smart_extract_hint	Si el archivo comprimido contiene varios archivos su
 settings_check_updates	Buscar actualizaciones automáticamente
 settings_check_updates_hint	Busca nuevas versiones en segundo plano al iniciar. Se verifica la firma de los paquetes de actualización.
 settings_remember_passwords	Recordar contraseñas
-settings_remember_passwords_hint	Al abrir un archivo cifrado, guarda su contraseña en el llavero del sistema y pruébala la próxima vez.
+settings_remember_passwords_hint	Guarda las contraseñas que funcionen. Si al abrir o leer una entrada cifrada hace falta una contraseña, probará primero la asociada al nombre del archivo y después el libro, con 16 intentos como máximo.
 settings_forget_passwords	Borrar contraseñas guardadas
 settings_install_stats	Estadísticas anónimas de instalación
 settings_install_stats_hint	Solo se envían un identificador anónimo, la versión, el sistema y el idioma. No se recopilan nombres de archivos ni actividad.

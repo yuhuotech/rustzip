@@ -47,6 +47,8 @@ task_test_passed	اكتمل {task}: لم تُكتشف مشكلات في {count} 
 task_edit_complete	اكتمل {task}: يحتوي الأرشيف الآن على {count} عناصر
 task_complete_count	اكتمل {task}: {count} ملفات، {size}
 task_password_needed	يحتاج {task} إلى كلمة مرور
+task_password_searching	تُجرّب كلمات دفتر المرور للمهمة {task}…
+task_password_stop	إيقاف المحاولات
 task_failed_detail	فشل {task}: {reason}
 open_archive_tooltip	فتح أرشيف
 encrypted_badge	مشفّر
@@ -339,7 +341,7 @@ settings_smart_extract_hint	عند وجود عدة ملفات في جذر الأ
 settings_check_updates	التحقق من التحديثات تلقائيًا
 settings_check_updates_hint	التحقق من الإصدارات الجديدة في الخلفية عند بدء التشغيل. يتم التحقق من توقيع حزم التحديث.
 settings_remember_passwords	تذكر كلمات المرور
-settings_remember_passwords_hint	بعد فتح أرشيف مشفّر، احفظ كلمة مروره في مخزن مفاتيح النظام وجرّبها في المرة التالية.
+settings_remember_passwords_hint	تُحفظ كلمات المرور الناجحة. إذا لزم إدخال كلمة مرور عند فتح الأرشيف أو قراءة عنصر مشفّر، تُجرّب كلمة المرور المرتبطة باسم الأرشيف أولاً ثم كلمات دفتر المرور، بحد أقصى 16 محاولة إجمالاً.
 settings_forget_passwords	مسح كلمات المرور المحفوظة
 settings_install_stats	إحصاءات تثبيت مجهولة
 settings_install_stats_hint	يتم إرسال معرّف مجهول والإصدار والنظام واللغة فقط. لا تُجمع أسماء الملفات أو أنشطة الاستخدام.

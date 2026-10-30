@@ -4,8 +4,10 @@
 
 use crate::view::{MainView, Notice, PasswordTarget};
 use gpui_kit::{Context, Window};
+use rz_app::passwords::{MAX_AUTO_PASSWORD_CANDIDATES, PasswordBook, find_password_with_cancel};
 use rz_app::stats::{StatsState, report_if_due};
 use rz_app::update::{Fetcher, Update, Updater, current_platform};
+use rz_core::CancelToken;
 use rz_services::{
     HttpFetcher, HttpSender, UPDATE_MANIFEST_URL, UPDATE_PUBLIC_KEY, environment, stats_url,
 };
@@ -17,6 +19,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub enum UpdateState {
     Available(Update),
     Downloading(Update),
+}
+
+enum PasswordSearchFailure {
+    Keychain,
+    Archive(rz_core::Error),
 }
 
 /// The name an archive is remembered under: its file name, never its location.
@@ -305,29 +312,169 @@ impl MainView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let (vault, label) = (self.vault.clone(), password_label(&path));
+        let (vault, label, lookup_path) = (self.vault.clone(), password_label(&path), path.clone());
+        let cancel = CancelToken::new();
+        self.password_search_cancel = Some((request_id, cancel.clone()));
         cx.spawn_in(window, async move |this, cx| {
-            let saved = cx
+            let search = cancel.clone();
+            let result = cx
                 .background_executor()
-                .spawn(async move { vault.get(&label) })
+                .spawn(async move {
+                    let candidates = match PasswordBook::new(vault).try_candidates_with_cancel(
+                        Some(&label),
+                        MAX_AUTO_PASSWORD_CANDIDATES,
+                        &search,
+                    ) {
+                        Ok(candidates) => candidates,
+                        Err(rz_core::Error::Cancelled) => {
+                            return Err(PasswordSearchFailure::Archive(rz_core::Error::Cancelled));
+                        }
+                        Err(_) => return Err(PasswordSearchFailure::Keychain),
+                    };
+                    find_password_with_cancel(&lookup_path, &candidates, &search)
+                        .map_err(PasswordSearchFailure::Archive)
+                })
                 .await;
-            let _ = this.update_in(cx, |this, window, cx| match saved {
-                Some(pw) if this.open_requests.is_active(request_id) => {
-                    this.open_path(path, Some(pw), window, cx);
+            let _ = this.update_in(cx, |this, window, cx| {
+                if this
+                    .password_search_cancel
+                    .as_ref()
+                    .is_some_and(|(id, _)| *id == request_id)
+                {
+                    this.password_search_cancel = None;
                 }
-                None if this.open_requests.is_active(request_id) => {
-                    this.open_requests.finish_active(request_id);
-                    this.loading = None;
-                    this.ask_password(PasswordTarget::Open(path), false, window, cx);
+                if !this.open_requests.is_active(request_id) {
+                    return;
                 }
-                _ => {}
+                match result {
+                    Ok(Some(password)) => {
+                        this.open_path(path, Some(password.to_string()), window, cx);
+                    }
+                    Ok(None) => {
+                        this.open_requests.finish_active(request_id);
+                        this.loading = None;
+                        this.ask_password(PasswordTarget::Open(path), false, window, cx);
+                    }
+                    Err(PasswordSearchFailure::Keychain) => {
+                        this.open_requests.finish_active(request_id);
+                        this.loading = None;
+                        this.say(Notice::Error(this.tool_text("vault_error").into()), cx);
+                        this.ask_password(PasswordTarget::Open(path), false, window, cx);
+                    }
+                    Err(PasswordSearchFailure::Archive(rz_core::Error::Cancelled)) => {
+                        this.open_requests.finish_active(request_id);
+                        this.loading = None;
+                        this.ask_password(PasswordTarget::Open(path), false, window, cx);
+                    }
+                    Err(PasswordSearchFailure::Archive(error)) => {
+                        this.open_requests.finish_active(request_id);
+                        this.loading = None;
+                        let message =
+                            crate::text::open_error(&this.settings.language, &path, &error);
+                        this.say(Notice::Error(message.into()), cx);
+                        this.ask_password(PasswordTarget::Open(path), false, window, cx);
+                    }
+                }
             });
         })
         .detach();
     }
 
+    /// Tries the password book for a task that has reached an encrypted entry.
+    pub(crate) fn try_password_book_for_task(
+        &mut self,
+        task_id: rz_app::tasks::TaskId,
+        archive: PathBuf,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        if !self.settings.remember_passwords || self.password_task_searches.contains_key(&task_id) {
+            return false;
+        }
+        let (vault, label, lookup_path) = (
+            self.vault.clone(),
+            password_label(&archive),
+            archive.clone(),
+        );
+        let cancel = CancelToken::new();
+        self.password_task_searches.insert(task_id, cancel.clone());
+        cx.spawn(async move |this, cx| {
+            let search = cancel.clone();
+            let result = cx
+                .background_executor()
+                .spawn(async move {
+                    let candidates = match PasswordBook::new(vault).try_candidates_with_cancel(
+                        Some(&label),
+                        MAX_AUTO_PASSWORD_CANDIDATES,
+                        &search,
+                    ) {
+                        Ok(candidates) => candidates,
+                        Err(rz_core::Error::Cancelled) => {
+                            return Err(PasswordSearchFailure::Archive(rz_core::Error::Cancelled));
+                        }
+                        Err(_) => return Err(PasswordSearchFailure::Keychain),
+                    };
+                    find_password_with_cancel(&lookup_path, &candidates, &search)
+                        .map_err(PasswordSearchFailure::Archive)
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                let Some(active_search) = this.password_task_searches.remove(&task_id) else {
+                    return;
+                };
+                if active_search.is_cancelled() || !this.settings.remember_passwords {
+                    return;
+                }
+                let still_password_failure = this.tasks.get(task_id).is_some_and(|task| {
+                    task.state == rz_app::tasks::TaskState::Failed
+                        && task
+                            .error
+                            .is_some_and(|error| error.code == rz_app::tasks::ErrorCode::Password)
+                });
+                if !still_password_failure {
+                    return;
+                }
+                match result {
+                    Ok(Some(password)) => {
+                        if this
+                            .retry_task_with_password(task_id, password.as_str(), cx)
+                            .is_some()
+                        {
+                            this.remember_password(&archive, password.as_str(), cx);
+                        }
+                    }
+                    Ok(None) => {
+                        let title = this
+                            .tasks
+                            .get(task_id)
+                            .map_or_else(|| password_label(&archive), |task| task.title);
+                        this.say(
+                            Notice::Error(
+                                this.tool_text("task_password_needed")
+                                    .replace("{task}", &title),
+                            ),
+                            cx,
+                        );
+                    }
+                    Err(PasswordSearchFailure::Keychain) => {
+                        this.say(Notice::Error(this.tool_text("vault_error").into()), cx);
+                    }
+                    Err(PasswordSearchFailure::Archive(rz_core::Error::Cancelled)) => {}
+                    Err(PasswordSearchFailure::Archive(error)) => {
+                        let message =
+                            crate::text::open_error(&this.settings.language, &archive, &error);
+                        this.say(Notice::Error(message.into()), cx);
+                    }
+                }
+            });
+        })
+        .detach();
+        true
+    }
+
     /// Removes every remembered password, for the settings page.
     pub fn forget_all_passwords(&mut self, cx: &mut Context<Self>) {
+        self.cancel_password_search();
+        self.cancel_all_password_task_searches();
         let vault = self.vault.clone();
         cx.background_executor()
             .spawn(async move {

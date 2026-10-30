@@ -260,6 +260,9 @@ pub struct MainView {
     pub overlay: Option<Overlay>,
     pub loading: Option<PathBuf>,
     pub(crate) open_requests: OpenRequests,
+    pub(crate) password_search_cancel: Option<(u64, rz_core::CancelToken)>,
+    pub(crate) password_task_sources: HashMap<TaskId, PathBuf>,
+    pub(crate) password_task_searches: HashMap<TaskId, rz_core::CancelToken>,
     pub preview: Option<Preview>,
     /// The statistics notice was opened from the settings, so it goes back there.
     pub privacy_from_settings: bool,
@@ -436,6 +439,9 @@ impl MainView {
             history_path: None,
             loading: None,
             open_requests: OpenRequests::default(),
+            password_search_cancel: None,
+            password_task_sources: HashMap::new(),
+            password_task_searches: HashMap::new(),
             preview: None,
             privacy_from_settings: false,
             page: Page::Archive,
@@ -562,7 +568,14 @@ impl MainView {
 
     fn supersede_active_open(&mut self) {
         self.open_requests.supersede_active();
+        self.cancel_password_search();
         self.loading = None;
+    }
+
+    pub(crate) fn cancel_password_search(&mut self) {
+        if let Some((_, cancel)) = self.password_search_cancel.take() {
+            cancel.cancel();
+        }
     }
 
     /// Opens an archive without blocking the window.
@@ -606,6 +619,9 @@ impl MainView {
     /// background without taking focus away from the archive the user opened most recently.
     pub fn begin_open_request(&mut self, path: &Path) -> (u64, bool) {
         let request = self.open_requests.begin(path);
+        if request.1 {
+            self.cancel_password_search();
+        }
         self.loading = Some(path.to_path_buf());
         self.notice = None;
         request
@@ -1929,7 +1945,17 @@ impl MainView {
     }
 
     fn submit(&mut self, spec: JobSpec, cx: &mut Context<Self>) -> TaskId {
+        let password_source = match &spec {
+            JobSpec::Transform { archive, .. }
+            | JobSpec::Extract { archive, .. }
+            | JobSpec::Test { archive, .. }
+            | JobSpec::Edit { archive, .. } => Some(archive.clone()),
+            _ => None,
+        };
         let id = self.tasks.submit(spec);
+        if let Some(archive) = password_source {
+            self.password_task_sources.insert(id, archive);
+        }
         self.notice = None;
         // Callers may need to attach a test/edit record before a fast task is observed as done.
         self.task_view = self.tasks.snapshot();
@@ -2048,6 +2074,8 @@ impl MainView {
                     .as_ref()
                     .is_some_and(|e| e.code == ErrorCode::Password);
             if !needs_password {
+                self.cancel_password_task_search(t.id);
+                self.password_task_sources.remove(&t.id);
                 if let Some(path) = self.tests.remove(&t.id) {
                     let verdict = match t.state {
                         TaskState::Done => Some(true),
@@ -2163,13 +2191,28 @@ impl MainView {
                 }
                 // Retried as a new task once the password is in, so there is nothing to record.
                 (TaskState::Failed, Some(err), _) if err.code == ErrorCode::Password => {
-                    self.say(
-                        Notice::Error(
-                            self.tool_text("task_password_needed")
-                                .replace("{task}", &t.title),
-                        ),
-                        cx,
-                    );
+                    let source = self.password_task_sources.get(&t.id).cloned();
+                    let searching = self.settings.remember_passwords
+                        && source.is_some_and(|archive| {
+                            self.try_password_book_for_task(t.id, archive, cx)
+                        });
+                    if searching {
+                        self.say(
+                            Notice::Info(
+                                self.tool_text("task_password_searching")
+                                    .replace("{task}", &t.title),
+                            ),
+                            cx,
+                        );
+                    } else {
+                        self.say(
+                            Notice::Error(
+                                self.tool_text("task_password_needed")
+                                    .replace("{task}", &t.title),
+                            ),
+                            cx,
+                        );
+                    }
                 }
                 (TaskState::Failed, Some(err), _)
                     if t.kind == JobKind::DuplicateScan && err.code == ErrorCode::LimitExceeded =>
@@ -2262,6 +2305,7 @@ impl MainView {
     }
 
     pub fn cancel_task(&mut self, id: TaskId, cx: &mut Context<Self>) {
+        self.cancel_password_task_search(id);
         self.tasks.cancel(id);
         self.refresh_tasks(cx);
     }
@@ -2280,8 +2324,59 @@ impl MainView {
     }
 
     pub fn clear_finished(&mut self, cx: &mut Context<Self>) {
+        let finished: Vec<_> = self
+            .tasks
+            .snapshot()
+            .into_iter()
+            .filter(|task| task.state.is_finished())
+            .map(|task| task.id)
+            .collect();
+        for id in finished {
+            self.cancel_password_task_search(id);
+            self.password_task_sources.remove(&id);
+        }
         self.tasks.clear_finished();
         self.refresh_tasks(cx);
+    }
+
+    pub(crate) fn cancel_password_task_search(&mut self, id: TaskId) -> bool {
+        let Some(cancel) = self.password_task_searches.remove(&id) else {
+            return false;
+        };
+        cancel.cancel();
+        true
+    }
+
+    pub(crate) fn cancel_all_password_task_searches(&mut self) {
+        for cancel in self
+            .password_task_searches
+            .drain()
+            .map(|(_, cancel)| cancel)
+        {
+            cancel.cancel();
+        }
+    }
+
+    pub(crate) fn retry_task_with_password(
+        &mut self,
+        id: TaskId,
+        password: &str,
+        cx: &mut Context<Self>,
+    ) -> Option<TaskId> {
+        self.cancel_password_task_search(id);
+        let new = self.tasks.retry_with_password(id, password)?;
+        if let Some(path) = self.edits.remove(&id) {
+            self.edits.insert(new, path);
+        }
+        if let Some(path) = self.tests.remove(&id) {
+            self.tests.insert(new, path);
+        }
+        if let Some(path) = self.password_task_sources.remove(&id) {
+            self.password_task_sources.insert(new, path);
+        }
+        self.refresh_tasks(cx);
+        self.ensure_polling(cx);
+        Some(new)
     }
 
     pub fn hash_file(&mut self, path: PathBuf, cx: &mut Context<Self>) {
@@ -2331,17 +2426,7 @@ impl MainView {
         match p.target {
             PasswordTarget::Open(path) => self.open_path(path, Some(pw), window, cx),
             PasswordTarget::Task(id) => {
-                if let Some(new) = self.tasks.retry_with_password(id, &pw) {
-                    // The retry is a new task; it inherits what the failed one was for.
-                    if let Some(path) = self.edits.remove(&id) {
-                        self.edits.insert(new, path);
-                    }
-                    if let Some(path) = self.tests.remove(&id) {
-                        self.tests.insert(new, path);
-                    }
-                    self.refresh_tasks(cx);
-                    self.ensure_polling(cx);
-                }
+                let _ = self.retry_task_with_password(id, &pw, cx);
             }
         }
         cx.notify();
@@ -2576,7 +2661,12 @@ impl MainView {
     /// Changes one setting, stores it, and redraws.
     pub fn change_settings(&mut self, f: impl FnOnce(&mut Settings), cx: &mut Context<Self>) {
         let old_language = self.settings.language.clone();
+        let was_remembering_passwords = self.settings.remember_passwords;
         f(&mut self.settings);
+        if was_remembering_passwords && !self.settings.remember_passwords {
+            self.cancel_password_search();
+            self.cancel_all_password_task_searches();
+        }
         let language = self.settings.language.clone();
         self.save_settings(cx);
         if language != old_language {
@@ -4485,6 +4575,7 @@ impl MainView {
             .as_ref()
             .is_some_and(|e| e.code == ErrorCode::Password)
             && t.state == TaskState::Failed;
+        let password_searching = self.password_task_searches.contains_key(&id);
         v_flex()
             .id(("task", id as usize))
             .gap_1()
@@ -4511,7 +4602,20 @@ impl MainView {
                                 .xsmall()
                                 .label(self.tool_text("task_enter_password"))
                                 .on_click(cx.listener(move |this, _, window, cx| {
+                                    this.cancel_password_task_search(id);
                                     this.ask_password(PasswordTarget::Task(id), false, window, cx);
+                                })),
+                        )
+                    })
+                    .when(password_searching, |d| {
+                        d.child(
+                            Button::new(("task-password-stop", id as usize))
+                                .outline()
+                                .xsmall()
+                                .label(self.tool_text("task_password_stop"))
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    this.cancel_password_task_search(id);
+                                    cx.notify();
                                 })),
                         )
                     })

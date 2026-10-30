@@ -331,7 +331,7 @@
 - Quick Look 扩展使用 App Sandbox 和只读用户所选文件权限，按系统请求的 URL 读取。条目名必须经 HTML 转义；不得使用网络资源、脚本或解压内容。
 - `.7z`、RAR、tar 系和其他类型暂不注册 Quick Look provider，避免在应用层之外重复引入未验证的解析后端。
 - `packaging/macos/test-quicklook.sh` 的 Swift smoke 覆盖常规 ZIP、ZIP64 EOCD / 越界长度、CJK / 特殊字符名称、HTML 转义、损坏中央目录、多卷输入和 16 MiB 上限。macOS 27.0.1 上 `qlmanage -p -x` 曾启动 Quick Look 扩展并确认 WebKit HTML 页面加载。2026-10-30 使用临时包验证：先经 Launch Services 注册父 `.app`，再显式注册 `.appex` 并设置 PlugInKit election 为 use 后，provider 出现在 `com.apple.quicklook.preview` 列表，`qlmanage` 启动了 `RustZIPQuickLook` 进程。该次 Finder 空格键可见 UI 因桌面捕获不可用而未验收；临时 PlugInKit 和 Launch Services 注册已撤销。正式签名 / 公证包仍需完成 Finder 可见界面与注册验收。
-- `.github/workflows/release.yml` 的 macOS dry-run / release matrix 运行 `packaging/macos/verify-quicklook-registration.sh`：先注册父 app，再将 provider 设为 PlugInKit `use`，确认 provider identifier、extension point 和实际 appex 路径均匹配，退出时恢复默认 election 并移除临时注册。macOS 27.0.1 本机对当前打包产物运行该脚本通过；Finder Spacebar 可见页面仍需 GUI 实测。
+- `.github/workflows/release.yml` 的 macOS dry-run / release matrix 运行 `packaging/macos/verify-quicklook-registration.sh`：先注册父 app，再将 provider 设为 PlugInKit `use`，确认 provider identifier、extension point 和实际 appex 路径均匹配，退出时恢复默认 election 并移除临时注册。macOS 27.0.1 本机及 Release dry-run [41043955928](https://github.com/yuhuotech/rustzip/actions/runs/41043955928) 的 arm64 / x86_64 runner 均通过该 smoke；Finder Spacebar 可见页面仍需 GUI 实测。
 
 ## D47 NSIS 内容识别边界
 
@@ -342,3 +342,10 @@
 - `sniff_nsis` 由 synthetic PE overlay 单元用例和 nightly `nsis` fuzz target 覆盖；种子只包含虚构头部与零填充，不包含可执行代码。本机 nightly ASan 运行 119,304 次、GitHub fuzz run [41010338879](https://github.com/yuhuotech/rustzip/actions/runs/41010338879) 运行 3,287,482 次，均无崩溃并保存了 corpus cache。
 - FirstHeader 的签名字段依据 [NSIS 官方 `fileform.h`](https://github.com/NSIS-Dev/NSIS/blob/master/Source/exehead/fileform.h)；识别代码不依赖第三方解析器或新增依赖。
 - 另以 [上游 `deflate_nonsolid.exe` fixture](https://github.com/ATRAPSLLC/nsis-rs/blob/f20d03c407674dd670787ebcb2fa9e5f0d65a0ad/tests/fixtures/deflate_nonsolid.exe) 做本机只读冒烟：文件头确认为 NSIS，`rz l` 返回 NSIS 专属“不支持读取”错误。该 fixture 仅临时下载到 `/tmp`，不进入 RustZIP 分发内容。
+
+## D48 密码本候选自动尝试
+
+- 自动尝试继续受 D8 的“记住密码”开关控制，默认关闭。开启后，归档打开或解压 / 测试 / 编辑 / 转换 / 修复任务因缺密码失败时，先尝试以归档文件名为标签的已保存密码，再按密码本索引逆序检查其他候选；总数最多 16 个不同密码。
+- 候选密码只从用户主动保存的系统钥匙串 / 密码本读取；每个候选仅验证一个最小的加密普通文件，最大读取 64 MiB。7z reader 不提供逐条目加密标记，因此只对一个 64 MiB 内的普通文件做有界试读；没有可验证的文件时不声称找到密码。所有失败后仍要求用户手动输入。
+- 搜索在后台执行：未完成的归档打开搜索会随导航取消；任务搜索可从任务行停止，关闭“记住密码”或清空密码本也会取消。候选内容使用 `Zeroizing`，不写日志。密码本读取失败需提示钥匙串错误，同时保留手动输入路径。
+- 此实现补齐 `product.md` 中“常用密码自动尝试”要求，不改变 D8 的归档文件名标签保存规则、默认关闭和系统钥匙串存储。

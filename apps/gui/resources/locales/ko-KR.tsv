@@ -47,6 +47,8 @@ task_test_passed	{task} 완료: 항목 {count}개에서 문제를 찾지 못했�
 task_edit_complete	{task} 완료: 압축 파일에 이제 항목 {count}개가 있습니다
 task_complete_count	{task} 완료: 파일 {count}개, {size}
 task_password_needed	{task}에 암호가 필요합니다
+task_password_searching	{task}의 암호 보관함 후보를 확인하는 중…
+task_password_stop	시도 중지
 task_failed_detail	{task} 실패: {reason}
 open_archive_tooltip	압축 파일 열기
 encrypted_badge	암호화됨
@@ -339,7 +341,7 @@ settings_smart_extract_hint	압축 파일에 루트 파일이 여러 개 있으�
 settings_check_updates	업데이트 자동 확인
 settings_check_updates_hint	시작할 때 백그라운드에서 새 버전을 확인합니다. 업데이트 파일의 서명을 확인합니다.
 settings_remember_passwords	암호 기억
-settings_remember_passwords_hint	암호화된 압축 파일을 열면 암호를 시스템 키체인에 저장하고 다음에 자동으로 시도합니다.
+settings_remember_passwords_hint	성공한 암호를 저장합니다. 압축 파일을 열거나 암호화 항목을 읽을 때 암호가 필요하면 파일 이름에 연결된 암호를 먼저 시도하고, 암호 보관함의 다른 암호를 포함해 총 최대 16개를 시도합니다.
 settings_forget_passwords	저장된 암호 지우기
 settings_install_stats	익명 설치 통계
 settings_install_stats_hint	익명 ID, 버전, 운영체제, 언어만 전송합니다. 파일 이름과 사용 활동은 수집하지 않습니다.

@@ -4,11 +4,11 @@
 //! Manager, Secret Service), so storage sits behind [`SecretStore`]. A store
 //! backed by the system keychain belongs to the GUI layer.
 
-use rz_core::{EntryKind, Error, Result};
+use rz_core::{CancelToken, EntryKind, Error, Result};
 use std::collections::BTreeMap;
 use std::io::Read;
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use zeroize::Zeroizing;
 
 pub trait SecretStore: Send + Sync {
@@ -26,6 +26,36 @@ pub trait SecretStore: Send + Sync {
     fn set(&self, label: &str, secret: &str) -> Result<()>;
     fn delete(&self, label: &str) -> Result<()>;
     fn labels(&self) -> Vec<String>;
+}
+
+impl<T: SecretStore + ?Sized> SecretStore for Arc<T> {
+    fn try_get(&self, label: &str) -> Result<Option<String>> {
+        (**self).try_get(label)
+    }
+
+    fn try_labels(&self) -> Result<Vec<String>> {
+        (**self).try_labels()
+    }
+
+    fn is_persistent(&self) -> bool {
+        (**self).is_persistent()
+    }
+
+    fn get(&self, label: &str) -> Option<String> {
+        (**self).get(label)
+    }
+
+    fn set(&self, label: &str, secret: &str) -> Result<()> {
+        (**self).set(label, secret)
+    }
+
+    fn delete(&self, label: &str) -> Result<()> {
+        (**self).delete(label)
+    }
+
+    fn labels(&self) -> Vec<String> {
+        (**self).labels()
+    }
 }
 
 /// A store that lives only in memory: for tests and for users who choose not to save passwords.
@@ -74,42 +104,71 @@ impl SecretStore for MemoryStore {
     }
 }
 
-/// The largest entry read to check a password; bigger ones are checked on a prefix only
-/// when the format verifies passwords before decoding (zip AES).
+/// The largest entry read to check a password.
 const PROBE_LIMIT: u64 = 64 << 20;
+/// Bound automatic password attempts so opening an archive cannot turn into an
+/// unbounded sequence of full-entry integrity checks.
+pub const MAX_AUTO_PASSWORD_CANDIDATES: usize = 16;
 
 /// Finds which candidate opens `archive`, trying each in order.
 ///
 /// Returns `Ok(None)` when none fits. `Err` is reserved for an archive that cannot
-/// be read at all. The check reads the smallest encrypted file completely, so a
-/// wrong password is caught by the archive's own integrity check and not just by luck.
+/// be read at all. The check reads a small encrypted file completely, so a wrong
+/// password is caught by the archive's own integrity check and not just by luck.
 pub fn find_password(archive: &Path, candidates: &[String]) -> Result<Option<String>> {
-    for pw in candidates {
+    let candidates = candidates
+        .iter()
+        .cloned()
+        .map(Zeroizing::new)
+        .collect::<Vec<_>>();
+    find_password_with_cancel(archive, &candidates, &CancelToken::new())
+        .map(|password| password.map(|password| password.to_string()))
+}
+
+/// Finds a matching candidate while keeping each attempt bounded and cancellable.
+///
+/// Password values are zeroized when this call returns. The candidate count is
+/// capped even when the caller supplies a larger list.
+pub fn find_password_with_cancel(
+    archive: &Path,
+    candidates: &[Zeroizing<String>],
+    cancel: &CancelToken,
+) -> Result<Option<Zeroizing<String>>> {
+    if candidates.is_empty() {
+        return Ok(None);
+    }
+    let Some(probe) = password_probe(archive, cancel)? else {
+        return Ok(None);
+    };
+    for pw in candidates.iter().take(MAX_AUTO_PASSWORD_CANDIDATES) {
+        cancel.check()?;
         let mut reader = rz_formats::open(archive)?;
-        reader.set_password(pw)?;
+        reader.set_read_control(cancel.clone(), PROBE_LIMIT);
+        reader.set_password(pw.as_str())?;
         let entries = match reader.entries() {
             Ok(e) => e,
             // An encrypted header (7z) rejects a wrong password right here.
             Err(Error::Password) => continue,
             Err(e) => return Err(e),
         };
-        let probe = entries
-            .iter()
-            .filter(|e| e.kind == EntryKind::File && e.encrypted)
-            .chain(entries.iter().filter(|e| e.kind == EntryKind::File))
-            .filter(|e| e.size <= PROBE_LIMIT)
-            .min_by_key(|e| (!e.encrypted, e.size));
-        let Some(probe) = probe else {
-            // Nothing to decrypt: any password "works", so do not claim one did.
-            return Ok(None);
+        let entry_index = match probe {
+            PasswordProbe::Header => {
+                return Ok(Some(Zeroizing::new(pw.to_string())));
+            }
+            PasswordProbe::Entry(index) => index,
         };
-        let ok = match reader.open(probe) {
+        let Some(entry) = entries.iter().find(|entry| entry.index == entry_index) else {
+            return Err(Error::Corrupt("password probe entry disappeared".into()));
+        };
+        let ok = match reader.open(entry) {
             Ok(mut data) => {
                 let mut sink = [0u8; 64 * 1024];
                 loop {
+                    cancel.check()?;
                     match data.read(&mut sink) {
                         Ok(0) => break true,
                         Ok(_) => {}
+                        Err(_) if cancel.is_cancelled() => return Err(Error::Cancelled),
                         Err(_) => break false,
                     }
                 }
@@ -118,10 +177,69 @@ pub fn find_password(archive: &Path, candidates: &[String]) -> Result<Option<Str
             Err(e) => return Err(e),
         };
         if ok {
-            return Ok(Some(pw.clone()));
+            return Ok(Some(Zeroizing::new(pw.to_string())));
         }
     }
     Ok(None)
+}
+
+#[derive(Clone, Copy)]
+enum PasswordProbe {
+    Header,
+    Entry(usize),
+}
+
+fn password_probe(archive: &Path, cancel: &CancelToken) -> Result<Option<PasswordProbe>> {
+    cancel.check()?;
+    let mut reader = rz_formats::open(archive)?;
+    reader.set_read_control(cancel.clone(), PROBE_LIMIT);
+    let format = reader.format_name();
+    let entries = match reader.entries() {
+        Ok(entries) => entries,
+        Err(Error::Password) => return Ok(Some(PasswordProbe::Header)),
+        Err(error) => return Err(error),
+    };
+
+    if let Some(entry) = entries
+        .iter()
+        .filter(|entry| {
+            entry.kind == EntryKind::File && entry.encrypted && entry.size <= PROBE_LIMIT
+        })
+        .min_by_key(|entry| entry.size)
+    {
+        return Ok(Some(PasswordProbe::Entry(entry.index)));
+    }
+
+    if format != "7z" {
+        return Ok(None);
+    }
+    let Some(entry) = entries
+        .iter()
+        .filter(|entry| entry.kind == EntryKind::File && entry.size <= PROBE_LIMIT)
+        .min_by_key(|entry| entry.size)
+    else {
+        return Ok(None);
+    };
+    let index = entry.index;
+    let mut data = match reader.open(entry) {
+        Ok(data) => data,
+        Err(Error::Password | Error::Corrupt(_) | Error::Io(_)) => {
+            return Ok(Some(PasswordProbe::Entry(index)));
+        }
+        Err(error) => return Err(error),
+    };
+    let mut sink = [0u8; 64 * 1024];
+    loop {
+        cancel.check()?;
+        match data.read(&mut sink) {
+            Ok(0) => return Ok(None),
+            Ok(_) => {}
+            // 7z readers do not expose per-file encryption flags, so a failed
+            // unpassworded read is the only safe signal to probe this entry.
+            Err(_) if cancel.is_cancelled() => return Err(Error::Cancelled),
+            Err(_) => return Ok(Some(PasswordProbe::Entry(index))),
+        }
+    }
 }
 
 /// Remembered passwords, tried most recently added first.
@@ -155,9 +273,79 @@ impl<S: SecretStore> PasswordBook<S> {
             .collect()
     }
 
+    /// Collects a bounded list of saved passwords, preferring one archive label.
+    ///
+    /// Keychain indexes append labels as passwords are added, so reverse iteration
+    /// tries newer general-purpose entries first after the archive-specific label.
+    pub fn try_candidates(
+        &self,
+        preferred_label: Option<&str>,
+        maximum: usize,
+    ) -> Result<Vec<Zeroizing<String>>> {
+        self.try_candidates_with_cancel(preferred_label, maximum, &CancelToken::new())
+    }
+
+    /// Collects saved candidates while checking cancellation between store operations.
+    pub fn try_candidates_with_cancel(
+        &self,
+        preferred_label: Option<&str>,
+        maximum: usize,
+        cancel: &CancelToken,
+    ) -> Result<Vec<Zeroizing<String>>> {
+        cancel.check()?;
+        let maximum = maximum.min(MAX_AUTO_PASSWORD_CANDIDATES);
+        if maximum == 0 {
+            return Ok(Vec::new());
+        }
+
+        let mut passwords = Vec::with_capacity(maximum);
+        if let Some(label) = preferred_label {
+            cancel.check()?;
+            if let Some(password) = self.store.try_get(label)? {
+                passwords.push(Zeroizing::new(password));
+            }
+        }
+
+        cancel.check()?;
+        let mut labels = self.store.try_labels()?;
+        labels.reverse();
+        for label in labels {
+            cancel.check()?;
+            if passwords.len() >= maximum {
+                break;
+            }
+            if Some(label.as_str()) == preferred_label {
+                continue;
+            }
+            if let Some(password) = self.store.try_get(&label)? {
+                let password = Zeroizing::new(password);
+                if !passwords
+                    .iter()
+                    .any(|candidate: &Zeroizing<String>| candidate.as_str() == password.as_str())
+                {
+                    passwords.push(password);
+                }
+            }
+        }
+        cancel.check()?;
+        Ok(passwords)
+    }
+
     /// Looks for a saved password that opens the archive.
     pub fn find_for(&self, archive: &Path) -> Result<Option<String>> {
-        find_password(archive, &self.candidates())
+        self.find_for_with_cancel(archive, &CancelToken::new())
+            .map(|password| password.map(|password| password.to_string()))
+    }
+
+    /// Looks for a saved password and allows the caller to cancel the search.
+    pub fn find_for_with_cancel(
+        &self,
+        archive: &Path,
+        cancel: &CancelToken,
+    ) -> Result<Option<Zeroizing<String>>> {
+        let candidates =
+            self.try_candidates_with_cancel(None, MAX_AUTO_PASSWORD_CANDIDATES, cancel)?;
+        find_password_with_cancel(archive, &candidates, cancel)
     }
 }
 
@@ -224,6 +412,23 @@ mod tests {
         let junk = dir.path().join("junk.zip");
         let _ = std::fs::write(&junk, "nope");
         assert!(find_password(&junk, &pws(&["a"])).is_err());
+    }
+
+    #[test]
+    fn cancelled_password_search_stops_before_probing_the_archive() {
+        let dir = tempfile::tempdir().unwrap_or_else(|_| unreachable!());
+        let archive = make(dir.path(), "s.zip", "hunter2");
+        let candidates = pws(&["hunter2"])
+            .into_iter()
+            .map(Zeroizing::new)
+            .collect::<Vec<_>>();
+        let cancel = CancelToken::new();
+        cancel.cancel();
+
+        assert!(matches!(
+            find_password_with_cancel(&archive, &candidates, &cancel),
+            Err(Error::Cancelled)
+        ));
     }
 
     #[test]

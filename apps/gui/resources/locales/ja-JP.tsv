@@ -47,6 +47,8 @@ task_test_passed	{task}が完了しました: {count}件に問題はありませ
 task_edit_complete	{task}が完了しました: 圧縮ファイルに{count}件の項目があります
 task_complete_count	{task}が完了しました: {count}ファイル、{size}
 task_password_needed	{task}にはパスワードが必要です
+task_password_searching	{task}のパスワード帳を検索しています…
+task_password_stop	検索を停止
 task_failed_detail	{task}に失敗しました: {reason}
 open_archive_tooltip	圧縮ファイルを開く
 encrypted_badge	暗号化済み
@@ -339,7 +341,7 @@ settings_smart_extract_hint	圧縮ファイル内に複数の単独ファイル�
 settings_check_updates	アップデートを自動で確認
 settings_check_updates_hint	起動時にバックグラウンドで新しいバージョンを確認します。アップデートの署名を検証します。
 settings_remember_passwords	パスワードを記憶
-settings_remember_passwords_hint	暗号化された圧縮ファイルを開いた後、パスワードをシステムのキーチェーンに保存し、次回自動で試します。
+settings_remember_passwords_hint	成功したパスワードを保存します。アーカイブを開くとき、または暗号化項目の読み取りにパスワードが必要なとき、ファイル名に対応するものを先に、続いてパスワード帳を合計最大16件まで試します。
 settings_forget_passwords	保存したパスワードを消去
 settings_install_stats	匿名のインストール統計
 settings_install_stats_hint	匿名ID、バージョン、OS、言語のみを送信します。ファイル名や利用状況は収集しません。

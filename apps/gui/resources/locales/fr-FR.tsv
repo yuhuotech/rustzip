@@ -47,6 +47,8 @@ task_test_passed	{task} terminé : aucun problème détecté dans {count} élém
 task_edit_complete	{task} terminé : l’archive contient maintenant {count} éléments
 task_complete_count	{task} terminé : {count} fichiers, {size}
 task_password_needed	{task} nécessite un mot de passe
+task_password_searching	Recherche de mots de passe pour {task}…
+task_password_stop	Arrêter la recherche
 task_failed_detail	Échec de {task} : {reason}
 open_archive_tooltip	Ouvrir une archive
 encrypted_badge	Chiffré
@@ -339,7 +341,7 @@ settings_smart_extract_hint	Si l’archive contient plusieurs fichiers à la rac
 settings_check_updates	Rechercher automatiquement les mises à jour
 settings_check_updates_hint	Rechercher les nouvelles versions en arrière-plan au démarrage. La signature des mises à jour est vérifiée.
 settings_remember_passwords	Mémoriser les mots de passe
-settings_remember_passwords_hint	Après l’ouverture d’une archive chiffrée, enregistrer son mot de passe dans le trousseau système et l’essayer la prochaine fois.
+settings_remember_passwords_hint	Les mots de passe valides sont enregistrés. Si l’ouverture ou la lecture d’une entrée chiffrée demande un mot de passe, RustZIP essaie d’abord celui associé au nom de l’archive, puis le carnet, avec 16 essais au total.
 settings_forget_passwords	Effacer les mots de passe enregistrés
 settings_install_stats	Statistiques d’installation anonymes
 settings_install_stats_hint	Seuls un identifiant anonyme, la version, le système et la langue sont envoyés. Les noms de fichiers et l’activité ne sont pas collectés.

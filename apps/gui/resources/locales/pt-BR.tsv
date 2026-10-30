@@ -47,6 +47,8 @@ task_test_passed	{task} concluída: nenhum problema encontrado em {count} itens
 task_edit_complete	{task} concluída: o arquivo compactado agora tem {count} itens
 task_complete_count	{task} concluída: {count} arquivos, {size}
 task_password_needed	{task} precisa de uma senha
+task_password_searching	Tentando senhas do catálogo para {task}…
+task_password_stop	Parar tentativas
 task_failed_detail	{task} falhou: {reason}
 open_archive_tooltip	Abrir arquivo compactado
 encrypted_badge	Criptografado
@@ -339,7 +341,7 @@ settings_smart_extract_hint	Quando um arquivo compactado tiver vários arquivos 
 settings_check_updates	Verificar atualizações automaticamente
 settings_check_updates_hint	Verifique novas versões em segundo plano ao iniciar. A assinatura dos pacotes de atualização é verificada.
 settings_remember_passwords	Lembrar senhas
-settings_remember_passwords_hint	Depois de abrir um arquivo compactado criptografado, salve a senha no chaveiro do sistema e tente-a na próxima vez.
+settings_remember_passwords_hint	Senhas válidas são salvas. Se for necessária uma senha ao abrir o arquivo ou ler uma entrada criptografada, o RustZIP tenta primeiro a senha associada ao nome do arquivo e depois o catálogo, com até 16 tentativas no total.
 settings_forget_passwords	Apagar senhas salvas
 settings_install_stats	Estatísticas anônimas de instalação
 settings_install_stats_hint	Somente um ID anônimo, a versão, o sistema e o idioma são enviados. Nomes de arquivos e atividade de uso não são coletados.

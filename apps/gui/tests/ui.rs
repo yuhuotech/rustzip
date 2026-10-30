@@ -10,6 +10,7 @@ use gpui_kit::test::TestWindowExt;
 use gpui_kit::{AppContext, Entity, TestAppContext, WindowHandle, base::Root};
 use rustzip_gui::brand::{self, Palette};
 use rustzip_gui::view::{Format, MainView, Notice, Overlay, PasswordTarget, Preset, load_archive};
+use rz_app::passwords::SecretStore;
 use rz_app::settings::Settings;
 use rz_app::tasks::{ErrorCode, JobSpec, TaskState};
 use rz_core::{CancelToken, CreateOptions, NoProgress};
@@ -1225,7 +1226,11 @@ fn a_remembered_password_opens_the_archive_without_asking(cx: &mut TestAppContex
     });
     with_view(cx, handle, &view, |v, _, cx| v.close_tab(0, cx));
 
-    // Opening again needs no typing.
+    // The file-name password fails, so the next password-book entry must open it.
+    with_view(cx, handle, &view, |v, _, _| {
+        v.vault.set("hidden.7z", "stale-secret").unwrap();
+        v.vault.set("work.zip", "pw2").unwrap();
+    });
     open_sync(cx, handle, &view, &archive, None);
     cx.run_until_parked();
     draw(cx, handle);
@@ -1236,6 +1241,8 @@ fn a_remembered_password_opens_the_archive_without_asking(cx: &mut TestAppContex
             "the saved password should have been tried"
         );
         assert_eq!(v.archives.len(), 1);
+        assert_eq!(v.current().unwrap().password.as_deref(), Some("pw2"));
+        assert_eq!(v.vault.get("hidden.7z").as_deref(), Some("pw2"));
     });
 
     // A stale saved password falls back to asking.
@@ -1248,6 +1255,99 @@ fn a_remembered_password_opens_the_archive_without_asking(cx: &mut TestAppContex
     open_sync(cx, handle, &view, &archive, None);
     cx.run_until_parked();
     cx.update(|cx| assert!(matches!(view.read(cx).overlay, Some(Overlay::Password(_)))));
+}
+
+#[gpui_kit::test]
+fn password_book_candidates_retry_an_encrypted_zip_extraction_task(cx: &mut TestAppContext) {
+    let tmp = tempfile::tempdir().unwrap();
+    let archive = make_archive(tmp.path(), "candidate.zip", Some("book-secret"));
+    let output = tmp.path().join("out");
+    let (handle, view) = open_window(cx, None);
+    with_view(cx, handle, &view, |v, _, _| {
+        v.settings.remember_passwords = true;
+        v.settings.open_folder_when_done = false;
+        v.vault.set("candidate.zip", "stale-secret").unwrap();
+        v.vault.set("work.zip", "book-secret").unwrap();
+    });
+
+    // ZIP central-directory names are readable without the entry password.
+    open_sync(cx, handle, &view, &archive, None);
+    with_view(cx, handle, &view, |v, _, cx| {
+        v.start_extract(output.clone(), None, cx);
+    });
+    wait_for_tasks(cx, handle, &view);
+    cx.update(|cx| {
+        assert_eq!(view.read(cx).task_view[0].state, TaskState::Failed);
+        assert_eq!(
+            view.read(cx).task_view[0]
+                .error
+                .as_ref()
+                .map(|error| error.code),
+            Some(ErrorCode::Password)
+        );
+    });
+    wait_until(cx, handle, |cx| {
+        cx.update(|cx| view.read(cx).tasks.snapshot().len() >= 2)
+    });
+    wait_for_tasks(cx, handle, &view);
+    cx.run_until_parked();
+    cx.update(|cx| {
+        let v = view.read(cx);
+        assert_eq!(v.task_view.len(), 2);
+        assert_eq!(v.task_view[1].state, TaskState::Done);
+        assert_eq!(v.vault.get("candidate.zip").as_deref(), Some("book-secret"));
+    });
+    assert!(output.join("proj/readme.txt").exists());
+}
+
+#[gpui_kit::test]
+fn password_book_miss_keeps_manual_task_retry_available(cx: &mut TestAppContext) {
+    let tmp = tempfile::tempdir().unwrap();
+    let archive = make_archive(tmp.path(), "fallback.zip", Some("manual-secret"));
+    let output = tmp.path().join("out");
+    let (handle, view) = open_window(cx, None);
+    with_view(cx, handle, &view, |v, _, _| {
+        v.settings.remember_passwords = true;
+        v.settings.open_folder_when_done = false;
+        v.vault.set("common.zip", "wrong-secret").unwrap();
+    });
+    open_sync(cx, handle, &view, &archive, None);
+    with_view(cx, handle, &view, |v, _, cx| {
+        v.start_extract(output.clone(), None, cx);
+    });
+    wait_for_tasks(cx, handle, &view);
+    wait_until(cx, handle, |cx| {
+        cx.update(|cx| {
+            matches!(view.read(cx).notice, Some(Notice::Error(ref message)) if message.contains("需要密码"))
+        })
+    });
+
+    let failed = cx.update(|cx| {
+        let v = view.read(cx);
+        assert_eq!(v.task_view.len(), 1);
+        v.task_view[0].id
+    });
+    with_view(cx, handle, &view, |v, window, cx| {
+        v.ask_password(PasswordTarget::Task(failed), false, window, cx);
+    });
+    let input = cx.update(|cx| match &view.read(cx).overlay {
+        Some(Overlay::Password(prompt)) => prompt.input.clone(),
+        _ => panic!("missing task password prompt"),
+    });
+    cx.update_window(handle.into(), |_, window, cx| {
+        input.update(cx, |state, cx| state.set_value("manual-secret", window, cx));
+    })
+    .unwrap();
+    with_view(cx, handle, &view, |v, window, cx| {
+        v.submit_password(window, cx);
+    });
+    wait_for_tasks(cx, handle, &view);
+    cx.update(|cx| {
+        let tasks = &view.read(cx).task_view;
+        assert_eq!(tasks.len(), 2);
+        assert_eq!(tasks[1].state, TaskState::Done, "{:?}", tasks[1].error);
+    });
+    assert!(output.join("proj/readme.txt").exists());
 }
 
 #[gpui_kit::test]

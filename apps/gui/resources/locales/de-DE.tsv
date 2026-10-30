@@ -47,6 +47,8 @@ task_test_passed	{task} abgeschlossen: Keine Probleme in {count} Einträgen gefu
 task_edit_complete	{task} abgeschlossen: Das Archiv enthält jetzt {count} Elemente
 task_complete_count	{task} abgeschlossen: {count} Dateien, {size}
 task_password_needed	{task} benötigt ein Passwort
+task_password_searching	Passwortbuch wird für {task} durchsucht …
+task_password_stop	Versuch beenden
 task_failed_detail	{task} fehlgeschlagen: {reason}
 open_archive_tooltip	Archiv öffnen
 encrypted_badge	Verschlüsselt
@@ -339,7 +341,7 @@ settings_smart_extract_hint	Mehrere lose Dateien in einem Archiv werden in einen
 settings_check_updates	Automatisch nach Updates suchen
 settings_check_updates_hint	Beim Start im Hintergrund nach neuen Versionen suchen. Updatepakete werden auf ihre Signatur geprüft.
 settings_remember_passwords	Passwörter merken
-settings_remember_passwords_hint	Nach dem Öffnen eines verschlüsselten Archivs das Passwort im Systemschlüsselbund speichern und beim nächsten Mal ausprobieren.
+settings_remember_passwords_hint	Erfolgreiche Passwörter werden gespeichert. Wenn beim Öffnen oder Lesen eines verschlüsselten Eintrags ein Passwort nötig ist, wird zuerst der Archiveintrag und danach das Passwortbuch geprüft, insgesamt höchstens 16 Kandidaten.
 settings_forget_passwords	Gespeicherte Passwörter löschen
 settings_install_stats	Anonyme Installationsstatistik
 settings_install_stats_hint	Nur eine anonyme ID, Version, Betriebssystem und Sprache werden gesendet. Dateinamen und Nutzungsaktivitäten werden nicht erfasst.
