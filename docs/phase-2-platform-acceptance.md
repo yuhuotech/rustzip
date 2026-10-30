@@ -55,7 +55,7 @@
 ## 未完成的验收
 
 - Windows CI 与安装器自动化验收通过；原生 GUI 的输入法、渲染、钥匙串、通知和人工交互仍待验收。
-- macOS Finder Sync 右键菜单已实机验收；ZIP Quick Look 视图扩展已打包 / 签名，`qlmanage` 可启动 provider。2026-10-30 在 macOS 27.0.1 临时包中先将父 `.app` 注册到 Launch Services，再显式注册 Quick Look `.appex` 并将 PlugInKit election 设为 use，PlugInKit 已返回 `com.yuhuotech.rustzip.quicklook`。本轮 `qlmanage -p -x` 确实启动 RustZIPQuickLook 进程；本机 UI 捕获未能启动，因此 Finder 空格键可见页面仍未验收。临时 provider 与 Launch Services 注册均已撤销。新增的 Release macOS runner smoke 会注册后检查 provider，并在退出时撤销临时状态；本机对同一脚本验证通过，远端 runner 验收待下一轮 dry-run。正式 Developer ID / 公证包的注册、公证、通知横幅投递与权限、屏幕阅读器及真实输入法仍待验收。
+- macOS Finder Sync 右键菜单已实机验收；ZIP Quick Look 视图扩展已打包 / 签名，`qlmanage` 可启动 provider。2026-10-30 在 macOS 27.0.1 临时包中先将父 `.app` 注册到 Launch Services，再显式注册 Quick Look `.appex` 并将 PlugInKit election 设为 use，PlugInKit 已返回 `com.yuhuotech.rustzip.quicklook`。本轮 `qlmanage -p -x` 确实启动 RustZIPQuickLook 进程；本机 UI 捕获未能启动，因此 Finder 空格键可见页面仍未验收。临时 provider 与 Launch Services 注册均已撤销。新增的 Release macOS runner smoke 在 [41043955928](https://github.com/yuhuotech/rustzip/actions/runs/41043955928) 的 arm64 / x86_64 job 均通过；正式 Developer ID / 公证包的注册、公证、Finder 可见页面、通知横幅投递与权限、屏幕阅读器及真实输入法仍待验收。
 - Dolphin / Nemo 的真实桌面点击、Linux 低图形能力设备、三平台百万条真实归档列表仍待验收。
 - 默认安装包仍关闭 RAR。Release dry-run [41012225195](https://github.com/yuhuotech/rustzip/actions/runs/41012225195) 已验证 macOS arm64 / x86_64、Linux、Windows 四个 RAR 测试包及随包许可证，并通过 Windows 安装 / 关联 / 卸载冒烟；正式签名发布及发行策略仍待确认。
 - Release dry-run [40950855468](https://github.com/yuhuotech/rustzip/actions/runs/40950855468) 的汇总验签因 runner 缺少 `libacl` 开发库失败；之后在 `assemble` 加入原生依赖安装 action。修复后的 dry-run [40958424663](https://github.com/yuhuotech/rustzip/actions/runs/40958424663) 四个平台构建、签名和汇总验签通过；下载的 bundle 已确认 `update.json` 中有四个平台资产和对应文件名，正式发布仍未执行。

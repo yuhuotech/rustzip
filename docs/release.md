@@ -70,7 +70,7 @@ Windows MSVC 构建通过 CI 的 `native-archive-deps` action 安装 `x64-window
 |---|---|---|---|
 | 双击/"打开方式"打开压缩包 | 已做(Info.plist 文档类型 + 系统打开事件) | 已做(安装程序注册,不抢默认程序) | 已做(`.desktop` 的 MimeType) |
 | 右键"用 RustZIP 压缩"/"解压到此处" | Finder Sync 扩展已加入 `.app`，macOS 27.0.1 ad-hoc 测试包中两项均实际点击通过；用户需在系统设置启用扩展，Developer ID / 公证包仍待验收 | 已做(安装程序写注册表，原生菜单点击仍待验收) | 安装器写入 Dolphin 的 KIO `servicemenus` 与旧版 `kservices5/ServiceMenus`，并安装 Nemo 动作；Nautilus 50.2.2 的 Scripts 子菜单、压缩入口和逐字节解压已在 Ubuntu 26.04 / Xvfb 验收。Dolphin / Nemo 实机点击仍待验收 |
-| 预览(Quick Look 等) | ZIP 目录视图扩展已打包并签名；Swift smoke 通过。macOS 27.0.1 临时 `.app` 经 Launch Services / PlugInKit 注册后 provider 可见并由 `qlmanage` 启动；Release macOS matrix 现运行注册 smoke 并撤销临时状态。Finder 空格键可见页面与公证包仍待验收 | 未做 | 未做 |
+| 预览(Quick Look 等) | ZIP 目录视图扩展已打包并签名；Swift smoke 通过。macOS 27.0.1 临时 `.app` 经 Launch Services / PlugInKit 注册后 provider 可见并由 `qlmanage` 启动；Release dry-run [41043955928](https://github.com/yuhuotech/rustzip/actions/runs/41043955928) 的 macOS arm64 / x86_64 注册 smoke 通过并撤销临时状态。Finder 空格键可见页面与公证包仍待验收 | 未做 | 未做 |
 
 macOS 的“打开方式”声明包含已接入的常见只读格式及 LZ4，RAR 仅在显式启用时声明；声明本身不改变系统默认程序，实际 Finder 展示仍需在安装后的系统上验收。
 
@@ -87,6 +87,7 @@ macOS 的“打开方式”声明包含已接入的常见只读格式及 LZ4，R
 - 当前 HEAD `67b4c2e` 的 Release dry-run [41012225195](https://github.com/yuhuotech/rustzip/actions/runs/41012225195) 全部通过：四个平台常规包构建 / 签名、四目标 RAR 包构建检查、Windows RAR 安装 / 关联 / 卸载冒烟、manifest 汇总验签及两个 bundles 上传成功；公开 `publish` job 按 dry-run 条件跳过，未创建正式 Release。
 - 提交 `fabff8b` 的 Release dry-run [41026007832](https://github.com/yuhuotech/rustzip/actions/runs/41026007832) 全部通过：四个平台常规包构建签名、四平台 RAR 包验证、Windows RAR 安装 / 关联 / 卸载、manifest 汇总验签及两个 bundle 上传成功；`publish` 按 dry-run 条件跳过，未创建公开 Release。
 - 提交 `fabff8b` 的三平台 CI [41026008129](https://github.com/yuhuotech/rustzip/actions/runs/41026008129) 七个 job 全部通过；五目标 Fuzz [41026029882](https://github.com/yuhuotech/rustzip/actions/runs/41026029882) 均成功并保存 corpus cache。
+- 提交 `51fffdb` 的 Release dry-run [41064921267](https://github.com/yuhuotech/rustzip/actions/runs/41064921267) 全部通过：四平台 Release 包及 RAR 验证包、各平台构建期 `RZ_STATS_URL` 子进程检查、manifest 汇总验签均成功；`publish` 按 dry-run 规则跳过。Fuzz run [41064921389](https://github.com/yuhuotech/rustzip/actions/runs/41064921389) 的五个 target 和受控 crash artifact 上传 smoke 全部通过。
 - 本机 Finder Sync ad-hoc 验收包不等同正式签名 Release；签名密钥和公证配置仍未用于公开发布。
 - 2026-10-29 最新 Fuzz 手动 run [40961694769](https://github.com/yuhuotech/rustzip/actions/runs/40961694769) 在提交 `70addea` 上四个 target 均通过并保存 corpus cache：ZIP recovery 743,952 次、CHM 34,172 次、bzip2 8,454 次、RAR 187,945 次，无 crash。每日 schedule 在 03:23 UTC；该次 run 在下次触发时间前结束。
 

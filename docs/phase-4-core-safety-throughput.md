@@ -15,6 +15,7 @@
 - **RAR all-features GUI 矩阵**：GUI CI 对 Windows、macOS、Ubuntu/Xvfb 运行 all-features Clippy / 测试；[40939090908](https://github.com/yuhuotech/rustzip/actions/runs/40939090908) 七个 job 全绿，包含 RAR 安全预览和图片尺寸检查。
 - **fuzz**：新增 bzip2、RAR fuzz target 和 bzip2 seed。nightly ASan 对 bzip2、CHM、RAR、ZIP recovery 分别运行约 15 秒，约 11,000、21,000、67,000、91,000 次变异，未发现崩溃。短时结果不替代持续 fuzz runner。
 - **crash artifact smoke**：手动 Fuzz workflow 新增默认关闭的 `verify_crash_artifact` 选项和独立 sentinel target。显式开启时，它触发一次受控 libFuzzer crash，要求生成非空 `crash-*` 并通过 14 天 artifact upload；正常定时任务不运行此 target。本机 nightly ASan 与 GitHub run [41046064115](https://github.com/yuhuotech/rustzip/actions/runs/41046064115) 均验证了该路径；run 的六个 job 全部成功，下载得到 492-byte `fuzz-crash-artifact-smoke-41046064115`，其中 crash 文件内容与 31-byte sentinel 相同。
+- **构建期统计地址验证**：Release 每个平台先构建 `rz-services` 测试子进程，并移除运行时 `RZ_STATS_URL`，确认 `stats_url()` 实际返回构建期地址。Release dry-run [41064921267](https://github.com/yuhuotech/rustzip/actions/runs/41064921267) 的 macOS arm64 / x86_64、Windows、Linux 四个 job 均通过该检查；发布清单汇总验签通过，公开发布按 dry-run 跳过。
 - **持续 fuzz runner**：`.github/workflows/fuzz.yml` 设为每日运行五个 nightly ASan target，最多同时跑两个；手动运行时每 target 60 秒，定时运行每 target 180 秒；保留 14 天崩溃 artifact，并按 target 缓存 corpus。`fuzz/seeds/` 保存 ZIP、bzip2、CHM 和 RAR seeds；NSIS seed 由仓库脚本生成。首三轮 run [40907566477](https://github.com/yuhuotech/rustzip/actions/runs/40907566477)、[40908353403](https://github.com/yuhuotech/rustzip/actions/runs/40908353403)、[40909630152](https://github.com/yuhuotech/rustzip/actions/runs/40909630152) 逐步发现并修复 nightly rustc、原生库和 Linux RAR 路径问题。提交 `171174b` 的 run [41010338879](https://github.com/yuhuotech/rustzip/actions/runs/41010338879) 五目标均通过；`8acf65e` 的 run [41023957604](https://github.com/yuhuotech/rustzip/actions/runs/41023957604) 五目标也通过：ZIP recovery / CHM / NSIS / RAR / bzip2 分别 287,292 / 66,874 / 1,674,414 / 118,009 / 5,041 次；提交 `fabff8b` 的 run [41026029882](https://github.com/yuhuotech/rustzip/actions/runs/41026029882) 五目标再通过，分别运行 265,079 / 54,151 / 2,639,918 / 137,390 / 5,460 次。三轮均保存 corpus cache、无 crash artifact。03:23、05:53、07:37、09:37、11:37 UTC schedule 均未生成 run；当前每日 13:37 UTC，等待推送后的真实 schedule 证据。
 
 ## 本机验证
@@ -37,12 +38,13 @@
 - `cargo test -p rz-app --lib zip_copy_edit_preserves_archive_and_entry_comments_and_extra_fields` 通过；验证删除和重命名后的归档注释、文件注释及自定义 extra field。
 - `RZ_BENCH_MB=8 cargo bench -p rz-engine --bench throughput` 全矩阵完成并校验输出；ZIP 单条目基准以 BLAKE3 校验 40 / 64 / 128 MiB 样本，每尺寸每设置 3 轮。详细环境和中位数见[基准记录](benchmarks/2026-10-29-zip-large-deflate.md)。
 - 2026-10-30 本轮在锁定 Rust 1.96.0 下完成验证：`cargo fmt --all -- --check`、`cargo clippy --workspace --all-targets --all-features -- -D warnings`、`cargo test --workspace --all-features` 均通过。GUI 编码设置持久化回归、RAR FFI 回调 4 项、RAR 引擎 8 项及全工作区测试通过；4 项真实钥匙串或非 root Unix 用例按环境条件忽略。Clippy 仍提示第三方 `block v0.1.6` future-incompatibility。
+- 2026-10-30 密码本自动尝试接入任务密码失败路径后，再次使用锁定 Rust 1.96.0 执行 `cargo fmt --all -- --check`、`cargo clippy --workspace --all-targets --all-features -- -D warnings` 和 `cargo test --workspace --all-features`，均通过。GUI 全部 65 项 UI 集成用例通过，覆盖加密 ZIP 候选重试和候选不匹配后的手动重试；RAR FFI 4 项及引擎 8 项通过。两项非 root Unix 用例和真实钥匙串用例按环境条件忽略。Clippy 仍提示第三方 `block v0.1.6` future-incompatibility。
 
 ## 后续仍需完成
 
 - ZIP 9.1.3 的 8 MiB 编辑对照基准已运行；仍需多尺寸、多次采样。最新三平台 CI [40926953354](https://github.com/yuhuotech/rustzip/actions/runs/40926953354) 六个 job 全部通过；真实签名 Release 和系统交互验收仍待完成。
 - ZIP 大条目分块 Deflate 已接入；本机 40 / 64 / 128 MiB × 3 轮基准通过内容校验，仍需 Windows / macOS 外部工具矩阵和其他文件类型性能样本。合格 ZIP 编辑快路径的注释和扩展字段保真见 D42；真正原地增量编辑仍需先处理 D11 的崩溃保全边界。
-- 持续 fuzz 已在 GitHub Actions 手动运行五个 target 并保存五份 corpus cache；最新常规运行见 [41026029882](https://github.com/yuhuotech/rustzip/actions/runs/41026029882)。crash artifact smoke 已在 [41046064115](https://github.com/yuhuotech/rustzip/actions/runs/41046064115) 远端验证并下载检查 artifact。03:23、05:53、07:37、09:37、11:37 UTC schedule 均无 run；当前定时 13:37 UTC，仍待验证 schedule 事件。
+- 持续 fuzz 最新手动 run [41064921389](https://github.com/yuhuotech/rustzip/actions/runs/41064921389) 的五个 target 均通过并保存 corpus cache；crash artifact smoke 也上传成功。前次 [41046064115](https://github.com/yuhuotech/rustzip/actions/runs/41046064115) 的 492-byte artifact 已下载并确认内容。13:37 UTC 的自动 schedule 尚未观测到 run，手动 dispatch 不作为 schedule 验收。
 - WIM / DMG 仍只有签名识别；NSIS 仅有受限 FirstHeader 识别。三种格式的浏览 / 测试 / 提取 reader 仍需通过 D37。
 - PDF / 音频 / 视频应用内预览，关机等高影响完成后动作。
 - 压缩包对比、虚拟挂载、云端按需解压、WASM 插件和 SFX 仍为远期需求。
