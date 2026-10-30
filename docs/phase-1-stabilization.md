@@ -61,4 +61,4 @@ ZIP 删除编辑的中位数（压缩数据复用 / 完整重打包）：保留 
 
 ## 进一步发现
 
-- 2026-10-30 后续改造已将 UnRAR 数据回调封装进 `rz-ffi`：解码前检查压缩比，所选内容逐块写入限额临时文件，未选内容不落盘；声明大小 / 剩余 `max_total` 超限和取消会在原生回调内中止。RAR 详情预览改为限额内存读取。Release dry-run [41005419057](https://github.com/yuhuotech/rustzip/actions/runs/41005419057) 已验证四平台 RAR 测试包、许可证与 Windows 安装 / 卸载关联；正式签名发布仍待验收。
+- 2026-10-30 后续改造已将 UnRAR 数据回调封装进 `rz-ffi`：解码前检查压缩比，所选内容逐块写入限额临时文件，未选内容不落盘；声明大小 / 剩余 `max_total` 超限和取消会在原生回调内中止。RAR 详情预览改为限额内存读取。当前 HEAD 的 Release dry-run [41012225195](https://github.com/yuhuotech/rustzip/actions/runs/41012225195) 已验证四平台 RAR 测试包、许可证与 Windows 安装 / 卸载关联；正式签名发布仍待验收。

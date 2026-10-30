@@ -6,7 +6,7 @@
 
 ## 1. 结论
 
-RustZIP 的主要归档与桌面主流程已实现。2026-10-30 增加 macOS Finder Sync 压缩 / 解压菜单并在 macOS 27.0.1 ad-hoc 包实机点击验收；ZIP Quick Look 视图扩展已实现，ZIP/ZIP64 安全 smoke 和系统 WebKit 加载通过。Finder 空格键实测只显示系统通用 ZIP 图标，PlugInKit 注册列表中没有 RustZIP provider，因此可见内容未通过。最新跨平台 CI [41003132351](https://github.com/yuhuotech/rustzip/actions/runs/41003132351) 与当前 HEAD 的 Release dry-run [41005419057](https://github.com/yuhuotech/rustzip/actions/runs/41005419057) 均通过；后者还验证了四个平台 RAR 包和 Windows 安装 / 卸载。其余主要缺口为 PDF / 音视频应用内预览、与 D11 崩溃保全约束冲突的 ZIP 真正原地增量编辑，以及安全 / 许可门槛尚未满足的 WIM / DMG / NSIS。Windows 原生交互、Dolphin / Nemo 实机菜单和正式签名发布仍待验收。虚拟挂载、云端按需解压、WASM 插件和 SFX 仍列为远期需求。
+RustZIP 的主要归档与桌面主流程已实现。2026-10-30 增加 macOS Finder Sync 压缩 / 解压菜单并在 macOS 27.0.1 ad-hoc 包实机点击验收；ZIP Quick Look 视图扩展已实现，ZIP/ZIP64 安全 smoke 和系统 WebKit 加载通过。Finder 空格键实测只显示系统通用 ZIP 图标，PlugInKit 注册列表中没有 RustZIP provider，因此可见内容未通过。最新 CI [41010338749](https://github.com/yuhuotech/rustzip/actions/runs/41010338749) 的七个 job 全部通过；当前 HEAD `67b4c2e` 的 Release dry-run [41012225195](https://github.com/yuhuotech/rustzip/actions/runs/41012225195) 也全部通过。其余主要缺口为 PDF / 音视频应用内预览、与 D11 崩溃保全约束冲突的 ZIP 真正原地增量编辑，以及安全 / 许可门槛尚未满足的 WIM / DMG / NSIS reader。Windows 原生交互、Dolphin / Nemo 实机菜单和正式签名发布仍待验收。虚拟挂载、云端按需解压、WASM 插件和 SFX 仍列为远期需求。
 
 四个曾经占位的侧栏功能——常用位置、密码本、格式转换、压缩包修复——在当前代码中已经实现，不能继续列为“未开发”。转换与修复的符号链接和损坏数据边界见 [侧栏实现记录](sidebar-implementation.md) 与 [决策 D9](decisions.md#d9-左栏工具的数据安全与恢复边界)。
 
@@ -30,9 +30,9 @@ RustZIP 的主要归档与桌面主流程已实现。2026-10-30 增加 macOS Fin
 | P1 | 重复文件检测 | GUI 压缩前按内容 BLAKE3 检查同大小普通文件，任务可取消并报告进度；发现重复后可继续压缩或取消，不自动删除；超过 100,000 个文件时可明确选择继续 | 扩充大目录压力样本；自动去重另行评估 |
 | P1 | 多语言和无障碍 | 十种语言的 378 个界面资源键已实现；八种新增语言各有完整词条包，覆盖及占位符测试通过。十种菜单选项逐项切换测试通过；设置和窗口顶栏共用语言下拉菜单，系统首选语言读取可用，侧栏使用简短本地化标签并保留省略保护 | Windows 原生语言设置、真实屏幕阅读器、阿拉伯语 RTL 整页布局仍待平台验收 |
 | P1 | 文件关联与系统菜单 | macOS Finder Sync 右键扩展已打入 `.app` 并在 macOS 27.0.1 实际点击验收；用户需启用扩展，Developer ID / 公证包待验收。ZIP Quick Look 扩展已打包，`qlmanage` 加载 WebKit 页面通过；Finder 空格键当前只显示系统通用 ZIP 图标，PlugInKit 中未登记 RustZIP provider，实际内容尚未验收。Nautilus 50.2.2 Scripts 菜单在 Ubuntu 26.04 / Xvfb 已点击验收；Dolphin / Nemo 和 Windows 注册表菜单的原生点击仍待验收 | 安装并注册 Quick Look provider 后复测；验收 Plasma Dolphin、Nemo 和 Windows 菜单 |
-| P1 | 持续 fuzz | nightly ASan 工作流覆盖 ZIP recovery、CHM、bzip2、RAR、NSIS。手动 run [41010338879](https://github.com/yuhuotech/rustzip/actions/runs/41010338879) 已在当前提交 `171174b` 启动；上一轮 [41005418831](https://github.com/yuhuotech/rustzip/actions/runs/41005418831) 四个旧 target 全通过并保存 corpus。GitHub 没有触发 03:23 UTC schedule，cron 已重新注册为每日 05:53 UTC，等待本次 schedule 事件验证 |
+| P1 | 持续 fuzz | nightly ASan 工作流覆盖 ZIP recovery、CHM、bzip2、RAR、NSIS。当前代码提交 `171174b` 的 run [41010338879](https://github.com/yuhuotech/rustzip/actions/runs/41010338879) 五个 target 全部通过并保存 corpus cache：ZIP recovery 315,249 次、CHM 60,435 次、bzip2 8,012 次、RAR 187,640 次、NSIS 3,287,482 次，无 crash | 03:23 UTC schedule 未触发；cron 已重新注册为每日 05:53 UTC，截至 06:29 仍未出现 schedule run，继续排查并观察后续自动运行 |
 | P1 | 跨平台桌面与打包 | macOS `.app` / DMG arm64 签名与启动通过，尚未公证。Ubuntu 26.04.1 x86_64 的全工作区 all-features 测试与 Clippy 通过（3 项环境条件测试忽略）；Linux tarball 构建、隔离安装 / 卸载、Nautilus 菜单点击通过。真实 Wayland GUI 启动、GNOME Secret Service 唯一标签往返、通知启用投递 / 关闭静默通过。CI [40958398639](https://github.com/yuhuotech/rustzip/actions/runs/40958398639) 的七个 job 全部通过，包括新增对比功能的 GUI、三平台 core 和基准；Windows core 17 分 37 秒、Windows GUI / 安装器 18 分 44 秒。Windows GUI 缓存保存有非致命告警。详细证据见 [第二阶段验收](phase-2-platform-acceptance.md) | Windows 原生输入法 / 渲染 / 钥匙串 / 通知、macOS 公证 / Finder / 通知、Dolphin / Nemo 点击、屏幕阅读器、正式三平台发布流程仍需验收 |
-| P1 | 自动更新与 Release | 有安装包签名校验、更新发现和下载后交给系统安装器的流程；自动化用例覆盖验签后才启动、篡改内容拒绝启动及启动失败提示。当前 HEAD `db0d14e` 的 dry-run [41005419057](https://github.com/yuhuotech/rustzip/actions/runs/41005419057) 四平台常规包、四平台 RAR 包、Windows RAR 安装卸载、manifest 汇总验签和 bundle 上传全部通过，公开发布按 dry-run 规则跳过 | 正式签名 Release 尚未执行；正式签名 / 公证、三平台更新器交接和真实安装流程仍需验收 |
+| P1 | 自动更新与 Release | 有安装包签名校验、更新发现和下载后交给系统安装器的流程；自动化用例覆盖验签后才启动、篡改内容拒绝启动及启动失败提示。当前 HEAD `67b4c2e` 的 dry-run [41012225195](https://github.com/yuhuotech/rustzip/actions/runs/41012225195) 四平台常规包、四平台 RAR 包、Windows RAR 安装卸载、manifest 汇总验签和 bundle 上传全部通过，公开发布按 dry-run 规则跳过 | 正式签名 Release 尚未执行；正式签名 / 公证、三平台更新器交接和真实安装流程仍需验收 |
 | P2 | 压缩包对比 | 已接入 GUI 已打开标签对比和 CLI `rz diff`；按路径 / 类型识别新增、删除和类型变化，同路径同大小普通文件流式计算 BLAKE3；遵守取消、进度、总输出和压缩比限制。已验证 ZIP、固实 7z 与 tar.gz 对比及目录隐式项处理；单包最多 1,000,000 条目，符号链接目标标记未比较 | 扩展外部格式样本和大归档性能采样；验证加密 7z、RAR 和长尾格式输入 |
 | P2 | 虚拟磁盘挂载、云端按需解压、WASM 插件、自解压包 | 尚未实现，仍属远期需求 | 分别评估平台成本、威胁模型与许可后再立项 |
 
@@ -99,7 +99,7 @@ RustZIP 的主要归档与桌面主流程已实现。2026-10-30 增加 macOS Fin
 
 - 7z 多块并行按固实块调度，每个工作线程使用独立输入流；对于 COPY、LZMA2 和 AES 组合，按最大字典加固定开销估算线程数。默认预算为 256 MiB，该估算不包含整个进程内存和全部归档元数据，不是硬资源限制。
 - WIM / DMG / NSIS 的候选版本、许可证、API 和资源边界见[第三阶段评估](phase-3-format-assessment.md)；未通过安全门槛的候选不进入依赖或格式注册表。CHM 的上游 MIT reader 经本地范围读取 / 取消补丁后接入，硬资源上限及 fixture 也记录在该阶段文档。
-- RAR 使用 `rz-ffi` 的 UnRAR 数据回调：所选输出按声明大小和剩余 `max_total` 限量写入单条目临时文件；未选条目不写盘，测试流支持取消。`ArchiveReader::open` 整条目兼容读取限制为 64 MiB；RAR 图片 / 文本预览使用限额内存读取。四平台 RAR 测试包和 Windows 安装冒烟已由 Release dry-run [41005419057](https://github.com/yuhuotech/rustzip/actions/runs/41005419057) 验证；回归与边界见 D38，正式签名发布仍待验收。
+- RAR 使用 `rz-ffi` 的 UnRAR 数据回调：所选输出按声明大小和剩余 `max_total` 限量写入单条目临时文件；未选条目不写盘，测试流支持取消。`ArchiveReader::open` 整条目兼容读取限制为 64 MiB；RAR 图片 / 文本预览使用限额内存读取。四平台 RAR 测试包和 Windows 安装冒烟已由 Release dry-run [41012225195](https://github.com/yuhuotech/rustzip/actions/runs/41012225195) 验证；回归与边界见 D38，正式签名发布仍待验收。
 - 2026-10-27 本机 `cargo check -p rz-app -p rustzip-gui` 通过；2026-10-28 增加预览与更新交接定向测试，正式安装器实机验收仍未完成。
 - 7z 顺序遍历改为逐块检查解码器的停止信号，避免预览结束后继续处理后续块；`cargo check -p rz-app -p rustzip-gui` 通过。`RZ_BENCH_MB=8 cargo bench -p rz-engine --bench throughput` 跑完整套矩阵并通过基准自身的输出检查；单次 8 MiB 样本不能证明无性能回归，同机基线和多次采样仍待补齐。
 - 7z 多块路径的本机 `parallel` 与 `selective` 两组测试共 14 项通过；新增 8 MiB 多块基准中单线程约 228 MiB/s、多线程约 846 MiB/s。该数字仅为单次小样本，不能代替性能回归结论。

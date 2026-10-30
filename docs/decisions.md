@@ -252,9 +252,9 @@
 
 ## D36 安装包的 RAR 能力与关联一致性
 
-- D1 规划正式发行版附带 RAR，但默认构建仍关闭该 feature。D38 已为 RAR 解码增加逐块输出上限和取消；Release dry-run [41005419057](https://github.com/yuhuotech/rustzip/actions/runs/41005419057) 已构建并检查四平台 opt-in RAR 测试包、随包 unRAR 许可及 Windows 安装 / 关联 / 卸载。正式签名发布仍待验收。
+- D1 规划正式发行版附带 RAR，但默认构建仍关闭该 feature。D38 已为 RAR 解码增加逐块输出上限和取消；当前 HEAD 的 Release dry-run [41012225195](https://github.com/yuhuotech/rustzip/actions/runs/41012225195) 已构建并检查四平台 opt-in RAR 测试包、随包 unRAR 许可及 Windows 安装 / 关联 / 卸载。正式签名发布仍待验收。
 - 桌面应用暴露默认关闭的 `rar` feature；本地打包默认不启用 RAR，也不注册 RAR 专属文件关联。显式启用 RAR 的本地测试包可同时注册相应关联，并继续遵守 unRAR 许可证。三平台的设置方式在发布文档中说明。
-- CI [40939090908](https://github.com/yuhuotech/rustzip/actions/runs/40939090908) 在 Windows、macOS、Ubuntu/Xvfb 运行 all-features GUI Clippy / 测试并通过；Release dry-run [41005419057](https://github.com/yuhuotech/rustzip/actions/runs/41005419057) 随后验证了四平台 RAR 包许可证与 Windows 实际安装 / 卸载关联。默认发行构建仍关闭 RAR。
+- CI [40939090908](https://github.com/yuhuotech/rustzip/actions/runs/40939090908) 在 Windows、macOS、Ubuntu/Xvfb 运行 all-features GUI Clippy / 测试并通过；当前 HEAD 的 Release dry-run [41012225195](https://github.com/yuhuotech/rustzip/actions/runs/41012225195) 随后验证了四平台 RAR 包许可证与 Windows 实际安装 / 卸载关联。默认发行构建仍关闭 RAR。
 
 ## D37 长尾格式后端准入
 
@@ -270,7 +270,7 @@
 - 选中条目逐块写入私有临时文件，单个文件不超过其声明大小和剩余 `max_total` 的较小值；每项消费后删除。未选条目通过 UnRAR 测试流继续固实解码，不写临时盘，并在数据回调中检查取消。
 - `ArchiveReader::for_each_selected` 让引擎将选择索引交给顺序格式；RAR 可以跳过未选条目的临时输出，同时保留固实流状态。兼容性 `open` 的整条目内存读取限制为 64 MiB。`open` 对选中条目直接使用有界内存缓冲，不落临时盘；通用选择性提取仍逐块写入私有临时文件，避免大条目整体驻留内存。
 - 图片预览使用 8 MiB 上限、文本预览使用 64 KiB 上限；RAR 只在启用 `rar` feature 的构建中可预览。该决策取代 D35 的 RAR 预览禁用状态及 D36 中“临时输出没有硬上限”的旧实现状态，不改变 D36 的默认关闭、许可证和文件关联要求。
-- 回归覆盖原生回调超限中止、取消、RAR 测试、选择性输出及应用层图片 / 文本读取限额。Release dry-run [41005419057](https://github.com/yuhuotech/rustzip/actions/runs/41005419057) 已验证四平台 opt-in 测试包和许可证；正式签名 Release 仍待验收。
+- 回归覆盖原生回调超限中止、取消、RAR 测试、选择性输出及应用层图片 / 文本读取限额。Release dry-run [41012225195](https://github.com/yuhuotech/rustzip/actions/runs/41012225195) 已验证四平台 opt-in 测试包和许可证；正式签名 Release 仍待验收。
 - 当前 HEAD `db0d14e` 的 GitHub Fuzz run [41005418831](https://github.com/yuhuotech/rustzip/actions/runs/41005418831) 对 RAR target 执行 233,347 次变异并保存 corpus cache，未发现崩溃。
 
 ## D39 bzip2 并行解压与 gzip 分块 Deflate
@@ -338,5 +338,5 @@
 - 探测只进行范围读取，section 数最多检查 96 个，FirstHeader 固定 28 字节；文件声明长度不会驱动分配或长距离读取。普通 PE 和不完整 / 不一致的 FirstHeader 返回未知格式。
 - 此决策只增加内容识别和明确“不支持读取”的分流，不注册浏览、测试或提取 reader。reader 仍须满足 D37 的许可、流式输入、取消和硬资源上限要求后才能接入。
 - GUI 对识别出的 NSIS 返回专用本地化提示；`.nsis` 之类扩展名本身不会触发该提示。
-- `sniff_nsis` 由 synthetic PE overlay 单元用例和 nightly `nsis` fuzz target 覆盖；种子只包含虚构头部与零填充，不包含可执行代码。
+- `sniff_nsis` 由 synthetic PE overlay 单元用例和 nightly `nsis` fuzz target 覆盖；种子只包含虚构头部与零填充，不包含可执行代码。本机 nightly ASan 运行 119,304 次、GitHub fuzz run [41010338879](https://github.com/yuhuotech/rustzip/actions/runs/41010338879) 运行 3,287,482 次，均无崩溃并保存了 corpus cache。
 - FirstHeader 的签名字段依据 [NSIS 官方 `fileform.h`](https://github.com/NSIS-Dev/NSIS/blob/master/Source/exehead/fileform.h)；识别代码不依赖第三方解析器或新增依赖。

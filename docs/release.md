@@ -12,7 +12,7 @@
 
 ## 发一个版本
 
-> 主 CI 和 Release workflow 由 Actions 页面手动触发。Release dry-run 可从任意分支运行；正式发布只接受 `v*` tag。独立 Fuzz 工作流每天定时运行 ZIP recovery、CHM、bzip2 和 RAR target，不构建或发布安装包。
+> 主 CI 和 Release workflow 由 Actions 页面手动触发。Release dry-run 可从任意分支运行；正式发布只接受 `v*` tag。独立 Fuzz 工作流每日定时运行 ZIP recovery、CHM、bzip2、RAR 和 NSIS identification targets，不构建或发布安装包。
 
 1. 改根 `Cargo.toml` 里 `[workspace.package] version`,提交。
 2. 先在 `main` 上手动触发 Release workflow，保留默认 `dry_run=true`；它会生成一次性测试密钥、构建四个平台产物、签名并校验平台集合和实际文件，保存名为 `release-dry-run-bundle` 的 14 天 artifact。测试签名不匹配应用公钥，dry-run 包不能用于更新安装。
@@ -56,7 +56,7 @@ Vercel build 会在部署期间自动应用 Neon Postgres migrations;检查部�
 
 图标由 `cargo run --release -p rustzip-gui --example make_icons -- packaging/icons` 生成(`.icns`、`.ico`、各尺寸 PNG)。
 
-默认包不启用 RAR，也不注册 RAR 专属关联。macOS / Linux 可设置 `RZ_WITH_RAR=1` 打包测试版；Windows 需用 `cargo build --release -p rustzip-gui --features rar` 构建，并给 Inno Setup 增加 `/DRarEnabled`。启用时安装包附带 unRAR 许可证。RAR 解码现由 `rz-ffi` 逐块执行并受选中输出总量、条目声明大小和取消控制；四平台 opt-in 包、许可证和 Windows 安装 / 卸载关联已在 Release dry-run [41005419057](https://github.com/yuhuotech/rustzip/actions/runs/41005419057) 验证，正式签名 Release 仍待验收，见 D36 / D38。
+默认包不启用 RAR，也不注册 RAR 专属关联。macOS / Linux 可设置 `RZ_WITH_RAR=1` 打包测试版；Windows 需用 `cargo build --release -p rustzip-gui --features rar` 构建，并给 Inno Setup 增加 `/DRarEnabled`。启用时安装包附带 unRAR 许可证。RAR 解码现由 `rz-ffi` 逐块执行并受选中输出总量、条目声明大小和取消控制；四平台 opt-in 包、许可证和 Windows 安装 / 卸载关联已在 Release dry-run [41012225195](https://github.com/yuhuotech/rustzip/actions/runs/41012225195) 验证，正式签名 Release 仍待验收，见 D36 / D38。
 
 在手动触发 Release dry-run 时，可将 `validate_rar_packages=true`，额外构建 macOS arm64 / x86_64、Linux x86_64 和 Windows x86_64 的 RAR 测试安装包。此验证会检查 unRAR 许可证、macOS 类型声明、Linux MIME 声明以及 Windows 安装 / 卸载后的 RAR 关联；生成的 `rar-package-validation-bundle` 单独保存 14 天，不进入更新清单或公开 Release。该选项默认关闭。
 
@@ -84,8 +84,8 @@ macOS 的“打开方式”声明包含已接入的常见只读格式及 LZ4，R
 - 同一 Release run 的 macOS x86_64 常规打包在 plist 校验后退出，旧脚本未打印失败命令，汇总 job 因缺少该平台资产而失败。本机 arm64 使用旧版和当前 Finder Sync 代码交叉构建 x86_64 包均通过；修复后的 runner 验收见后续记录。
 - 修复版 Release dry-run [40982574540](https://github.com/yuhuotech/rustzip/actions/runs/40982574540) 全部通过：四个平台常规包构建、签名和汇总验签成功；macOS arm64 / x86_64、Linux x86_64、Windows x86_64 的 RAR 包均构建并检查通过，Windows RAR 安装 / 卸载与关联冒烟通过。`release-dry-run-bundle` 和 `rar-package-validation-bundle` 成功上传；`publish` 按 dry-run 规则跳过，未创建公开 Release。
 - 最终 Quick Look 安全边界提交 `0d58852` 的 Release dry-run [40994239520](https://github.com/yuhuotech/rustzip/actions/runs/40994239520) 全部通过：双架构 macOS、Windows、Linux 常规包及四目标 RAR 验证包构建成功，RAR 安装 / 卸载、manifest 验签和 bundles 上传通过；公开发布 job 按 dry-run 规则跳过。
-- 当前 HEAD `db0d14e` 的 Release dry-run [41005419057](https://github.com/yuhuotech/rustzip/actions/runs/41005419057) 全部通过：四个平台常规包构建 / 签名、四目标 RAR 包构建检查、Windows RAR 安装 / 关联 / 卸载冒烟、manifest 汇总验签及两个 bundles 上传成功；公开 `publish` job 按 dry-run 条件跳过，未创建正式 Release。
+- 当前 HEAD `67b4c2e` 的 Release dry-run [41012225195](https://github.com/yuhuotech/rustzip/actions/runs/41012225195) 全部通过：四个平台常规包构建 / 签名、四目标 RAR 包构建检查、Windows RAR 安装 / 关联 / 卸载冒烟、manifest 汇总验签及两个 bundles 上传成功；公开 `publish` job 按 dry-run 条件跳过，未创建正式 Release。
 - 本机 Finder Sync ad-hoc 验收包不等同正式签名 Release；签名密钥和公证配置仍未用于公开发布。
 - 2026-10-29 最新 Fuzz 手动 run [40961694769](https://github.com/yuhuotech/rustzip/actions/runs/40961694769) 在提交 `70addea` 上四个 target 均通过并保存 corpus cache：ZIP recovery 743,952 次、CHM 34,172 次、bzip2 8,454 次、RAR 187,945 次，无 crash。每日 schedule 在 03:23 UTC；该次 run 在下次触发时间前结束。
 
-2026-10-28 的手动 CI、macOS 钥匙串 / Launch Services 检查与 Windows 修复见[第二阶段验收](phase-2-platform-acceptance.md)：提交 `30c4201` 的六个 CI 任务全部通过。之后 CI [41003132351](https://github.com/yuhuotech/rustzip/actions/runs/41003132351) 的七个 job 在 Windows / macOS / Ubuntu 全部通过；当前 HEAD `db0d14e` 的 Release dry-run [41005419057](https://github.com/yuhuotech/rustzip/actions/runs/41005419057) 完成四平台常规 / RAR 包及 Windows RAR 安装器验收。正式签名 Release 和部分原生系统交互仍待完成。
+2026-10-28 的手动 CI、macOS 钥匙串 / Launch Services 检查与 Windows 修复见[第二阶段验收](phase-2-platform-acceptance.md)：提交 `30c4201` 的六个 CI 任务全部通过。之后 CI [41010338749](https://github.com/yuhuotech/rustzip/actions/runs/41010338749) 的七个 job 在 Windows / macOS / Ubuntu 全部通过；当前 HEAD `67b4c2e` 的 Release dry-run [41012225195](https://github.com/yuhuotech/rustzip/actions/runs/41012225195) 完成四平台常规 / RAR 包及 Windows RAR 安装器验收。正式签名 Release 和部分原生系统交互仍待完成。
