@@ -14,6 +14,10 @@ RustZIP 的主要归档与桌面主流程已实现。2026-10-30 增加 macOS Fin
 
 提交 `b5c2bd4` 的三平台 CI [41086116233](https://github.com/yuhuotech/rustzip/actions/runs/41086116233) 七个 job 全部通过：三平台 core、三平台 GUI 与 benchmark 均成功，覆盖本轮新增的加密 7z、RAR、CHM、ISO 9660、LHA/LZH、RPM 和 XAR 对比回归。
 
+2026-10-31 D30 PDF 预览实现与本机验证：`cargo test -p rz-app -p rustzip-gui -p rz-pdf-renderer --all-features` 和对应 Clippy 通过；覆盖正常首屏、超大页面、300 MiB Flate 炸弹和 helper 自身 10 秒 watchdog。macOS `.app` / DMG 打包、helper 签名及 Quick Look provider 注册通过；Linux 安装 / 卸载 smoke 通过；renderer 对 Windows MSVC 与 Linux GNU 的交叉编译检查通过。Windows 安装器冒烟和 CI runner 仍待验收。
+
+2026-10-31 音视频预览候选复核：官方 Symphonia 可做音频 demux / 解码，许可证为 MPL-2.0；Rodio 通过 CPAL 播放，Linux 构建需要 ALSA 开发库；MIT 的 `mp4` crate 可读取 MP4 容器与音轨信息，但本身不是视频解码器。尚未选定同时满足视频解码、跨平台分发和不可信输入资源上限的后端，应用内音视频预览继续作为待开发项；双击交给系统程序的路径保留。依据：[Symphonia](https://github.com/pdeljanov/Symphonia)、[Rodio](https://github.com/RustAudio/rodio)、[MP4 reader](https://github.com/alfg/mp4-rust)。
+
 提交 `9deb72c` 的 Release dry-run [41090713832](https://github.com/yuhuotech/rustzip/actions/runs/41090713832) 完成四平台常规与 RAR 包验证、Windows 安装 / 卸载关联 smoke、macOS Quick Look 注册、manifest 验签和 bundles 上传；公开 `publish` 跳过。Fuzz cron 在 `16:53 UTC` 探测及 workflow 于 `17:11 UTC` 重新注册后的 `17:35 UTC` 探测均未产生 schedule run；workflow 状态 active，已恢复 `13:37 UTC` cron。
 
 四个曾经占位的侧栏功能——常用位置、密码本、格式转换、压缩包修复——在当前代码中已经实现，不能继续列为“未开发”。转换与修复的符号链接和损坏数据边界见 [侧栏实现记录](sidebar-implementation.md) 与 [决策 D9](decisions.md#d9-左栏工具的数据安全与恢复边界)。
@@ -31,7 +35,7 @@ RustZIP 的主要归档与桌面主流程已实现。2026-10-30 增加 macOS Fin
 | P0 | bzip2 多线程 | 单文件和 tar.bz2 按块并行压缩；读取通过 `pbz2` 并行解码单流和串接 member，按线程 / 内存预算估算限 worker；压缩与解压均有顺序回退，系统 bzip2 互通用例通过 | 扩大外部样本、损坏 / 取消边界和三平台验收 |
 | P0 | 大文件 Deflate | `.gz` / `.tar.gz` 在多线程模式下以最多 900,000 字节块压成有序标准 gzip members；未加密 ZIP 大条目已分块并行 Deflate，通过 Info-ZIP `unzip -t`、引擎往返、取消清理和 BLAKE3 校验。40 / 64 / 128 MiB 每种三轮的中位数见[基准记录](benchmarks/2026-10-29-zip-large-deflate.md) | Windows / macOS 7-Zip、WinZip 外部互通与其他数据类型性能样本；ZIP 加密继续顺序编码 |
 | P0 | 校验和 | `rz-app` 流式 SHA-256 / BLAKE3、CLI `rz h` 和最近文件 / 常用位置的 GUI 入口已接入；标准向量、分块进度、取消、非普通文件拒绝及 workspace 回归通过 | 无；保留与归档 CRC 校验的语义区分 |
-| P1 | 预览 | 详情栏支持受限图片 / UTF-8 文本；启用 RAR 时单条目预览走有界内存读取，不写临时文件。macOS Quick Look 视图扩展列出 ZIP 目录（中央目录最多 16 MiB / 50,000 项，显示 200 项），不解压内容；安全 smoke 与 `qlmanage` provider 加载通过。临时包经 Launch Services / PlugInKit 注册后 provider 可发现并启动；Finder 可见页面、正式签名包注册仍待验收。PDF / 音视频仍由系统程序打开 | 验收 Finder 空格键可见 UI 和 Developer ID / 公证包注册；仅在资源硬上限与许可证符合 D30 后评估 PDF；再评估音视频预览 |
+| P1 | 预览 | 图片 / UTF-8 文本保持原有限制；macOS Quick Look 列出有限 ZIP 目录。PDF 由隔离 helper 渲染首屏，限制 16 MiB 输入、256 MiB 同时存活 heap 分配、512 MiB 累计分配、10 秒、8 MiB PNG 和 16,777,216 像素；Mac app/DMG、helper 签名、Linux 安装器及恶意输入回归已通过 | 补 Windows 安装器冒烟和三平台 CI 验收；Finder 空格键可见页面及正式签名 / 公证包仍待人工验收；音视频继续评估 |
 | P1 | 压缩包内编辑 | 添加、删除、重命名已实现；可用系统程序编辑条目并自动写回。符合条件的单卷、无密码 ZIP 删除 / 重命名 / 条目写回复制原压缩数据，保留归档 / 条目注释、自定义扩展字段和 ZIP64 扩展数据；替换条目时仍保留原注释；自解压前缀、非 UTF-8 名称、加密、分卷及其他操作回退完整重打包；仍非原地增量写入 | 扩大厂商扩展字段和跨平台替换验证；原地增量写入仍需先解决与 D11 崩溃保全的决策冲突 |
 | P1 | 完成后动作与通知 | 设置可控解压完成后显示目录；历史记录为本次运行内成功任务提供本次运行结果定位，不持久化结果路径；可选系统通知只发通用成功 / 失败信息，默认关闭。Ubuntu GNOME 开启时实际投递、关闭时静默均已通过 | 验收 macOS / Windows 通知实际投递与设置切换；关机等高影响动作暂不纳入 |
 | P1 | 压缩预设 | 极速 / 均衡 / 最小体积、邮件分享（20 MiB 默认分卷）和跨平台兼容预设已接入；自定义分卷、权限规范化用例与 8 MiB 基准通过 | 无；用户指定的分卷大小会直接覆盖预设值 |
@@ -71,7 +75,7 @@ RustZIP 的主要归档与桌面主流程已实现。2026-10-30 增加 macOS Fin
 
 ### 阶段 C：完成高频 P1 体验
 
-1. ~~实现受限大小的纯文本应用内预览。~~ 64 KiB 白名单 UTF-8 内容在详情栏等宽显示；继续评估 PDF 原生预览，再决定音视频接入方式。
+1. ~~实现受限大小的纯文本应用内预览。~~ 64 KiB 白名单 UTF-8 内容在详情栏等宽显示；PDF 首屏预览已按 D50 接入隔离 helper，待三平台验收；音视频仍交给系统程序，之后评估是否需要应用内播放。
 2. ~~将“邮件分享”预设建立在分卷能力之上；实现跨平台兼容预设。~~ 邮件分享对 ZIP / 7z 采用 20 MiB 默认分卷，用户可覆盖；跨平台预设规范化源权限并省略 7z Windows 文件属性。
 3. ~~为重复文件检测明确判定规则并先提示用户。~~ 已按同大小 + 内容 BLAKE3 找出重复组，确认前不压缩；目录上限与越界后的继续提示已覆盖；自动去重仍需单独评估其安全边界。
 4. ~~接入可选系统通知、解压完成后定位和任务记录中的本次运行结果定位。~~ Ubuntu GNOME 通知启用 / 关闭实测通过；继续验收 macOS / Windows 的实际投递和设置切换。
@@ -100,7 +104,7 @@ RustZIP 的主要归档与桌面主流程已实现。2026-10-30 增加 macOS Fin
 1. 优先完成 Windows 原生 GUI、安装器、文件关联及注册表菜单验收，并补上 Windows CI / 发布证据。
 2. 完成 macOS 系统钥匙串与通知验收；验证 Dolphin / Nemo 菜单点击和 Linux GUI CI。
 3. ~~评估 WIM、DMG、CHM、NSIS 等只读格式候选并按安全门槛接入。~~ CHM 已接入只读 reader；WIM / DMG 魔数分流到明确不支持；NSIS 已加 PE overlay FirstHeader 识别，但读取仍待符合 D37 的后端。其余格式只有后端满足流式、取消、资源上限和独立样本要求后再接入，证据见[第三阶段记录](phase-3-format-assessment.md)。
-4. 评估 PDF 原生预览的硬资源上限；音视频继续调用系统程序，直到资源和平台成本明确。
+4. ~~评估 PDF 原生预览的硬资源上限。~~ D50 以隔离子进程的分配预算、双层时限和输出像素限制接入首屏 PDF；macOS 包装、Linux 安装脚本、renderer 跨目标检查和恶意输入回归通过，Windows 安装器与三平台 CI 仍待验收。音视频继续调用系统程序，直到资源和平台成本明确。
 5. 完成 Windows 安装器和三平台 release 工作流演练，验证更新的验签、下载与安装器交接后再发布首个正式版本。
 
 没有为各阶段给出日历工期：长尾格式范围、Windows / Linux 设备与打包环境仍需先确认，当前估时会产生较大偏差。

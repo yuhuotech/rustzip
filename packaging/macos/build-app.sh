@@ -23,19 +23,21 @@ esac
 set --
 rar_document_type=""
 if [ "${RZ_WITH_RAR:-0}" = "1" ]; then
-    set -- --features rar
+    set -- --features rustzip-gui/rar
     rar_document_type="<string>rar</string>"
 fi
 version="$(awk -F'"' '/^version *=/ {print $2; exit}' "$root/Cargo.toml")"
 
 cd "$root"
 if [ -n "$target" ]; then
-    cargo build --release -p rustzip-gui --target "$target" "$@"
+    cargo build --release -p rustzip-gui -p rz-pdf-renderer --target "$target" "$@"
     bin="target/$target/release/rustzip"
+    pdf_renderer="target/$target/release/rz-pdf-renderer"
     arch="${target%%-*}"
 else
-    cargo build --release -p rustzip-gui "$@"
+    cargo build --release -p rustzip-gui -p rz-pdf-renderer "$@"
     bin="target/release/rustzip"
+    pdf_renderer="target/release/rz-pdf-renderer"
     arch="$(uname -m)"
 fi
 [ "$arch" = "arm64" ] && arch="aarch64"
@@ -48,10 +50,12 @@ mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources" \
     "$finder_extension/Contents/MacOS" "$finder_extension/Contents/Resources" \
     "$quicklook_extension/Contents/MacOS" "$quicklook_extension/Contents/Resources"
 cp "$bin" "$app/Contents/MacOS/rustzip"
+cp "$pdf_renderer" "$app/Contents/MacOS/rz-pdf-renderer"
 cp packaging/icons/RustZIP.icns "$app/Contents/Resources/RustZIP.icns"
 cp packaging/licenses/libchm.txt "$app/Contents/Resources/libchm-license.txt"
 cp packaging/licenses/pbz2.txt "$app/Contents/Resources/pbz2-license.txt"
 cp packaging/licenses/pbz2-notice.txt "$app/Contents/Resources/pbz2-notice.txt"
+cp packaging/licenses/pdf-renderer.txt "$app/Contents/Resources/pdf-renderer-licenses.txt"
 if [ "${RZ_WITH_RAR:-0}" = "1" ]; then
     cp packaging/licenses/unrar.txt "$app/Contents/Resources/unrar-license.txt"
 fi
@@ -90,12 +94,15 @@ xcrun swiftc -application-extension -parse-as-library -O \
 
 identity="${MACOS_SIGN_IDENTITY:--}"
 if [ "$identity" = "-" ]; then
+    codesign --force --sign - "$app/Contents/MacOS/rz-pdf-renderer"
     codesign --force --entitlements packaging/macos/finder-sync.entitlements \
         --sign - "$finder_extension"
     codesign --force --entitlements packaging/macos/finder-sync.entitlements \
         --sign - "$quicklook_extension"
     codesign --force --sign - "$app"
 else
+    codesign --force --options runtime --timestamp \
+        --sign "$identity" "$app/Contents/MacOS/rz-pdf-renderer"
     codesign --force --options runtime --timestamp \
         --entitlements packaging/macos/finder-sync.entitlements \
         --sign "$identity" "$finder_extension"

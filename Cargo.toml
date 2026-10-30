@@ -12,6 +12,7 @@ members = [
     "apps/release",
     "apps/gpui-probe",
     "apps/gui",
+    "apps/pdf-renderer",
 ]
 exclude = ["vendor/libchm", "vendor/pbz2"]
 

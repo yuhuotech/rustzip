@@ -159,8 +159,15 @@ fn windows_installer_uses_the_bundled_simplified_chinese_language_file() {
 }
 
 #[test]
-fn windows_installer_includes_the_chm_reader_license() {
+fn windows_installer_includes_the_pdf_renderer_and_all_reader_licenses() {
+    assert!(WINDOWS_INSTALLER.contains("rz-pdf-renderer.exe"));
+    assert!(WINDOWS_INSTALLER.contains(r#"DestName: "pdf-renderer.txt""#));
     assert!(WINDOWS_INSTALLER.contains(r#"DestName: "libchm.txt""#));
+    assert!(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../packaging/licenses/pdf-renderer.txt")
+            .is_file()
+    );
     assert!(
         std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../packaging/licenses/libchm.txt")
@@ -215,6 +222,7 @@ fn linux_packaging_keeps_rar_features_and_descriptors_in_sync() {
     fs::write(root.join("Cargo.toml"), "version = \"0.1.0\"\n").unwrap();
     fs::create_dir_all(root.join("target/release")).unwrap();
     fs::write(root.join("target/release/rustzip"), "fixture").unwrap();
+    fs::write(root.join("target/release/rz-pdf-renderer"), "fixture").unwrap();
     fs::create_dir_all(root.join("fake-bin")).unwrap();
     let cargo = root.join("fake-bin/cargo");
     fs::write(
@@ -255,7 +263,11 @@ fn linux_packaging_keeps_rar_features_and_descriptors_in_sync() {
             String::from_utf8_lossy(&result.stderr)
         );
         let arguments = fs::read_to_string(args).unwrap();
-        assert_eq!(arguments.lines().any(|arg| arg == "rar"), enabled);
+        assert_eq!(
+            arguments.lines().any(|arg| arg == "rustzip-gui/rar"),
+            enabled
+        );
+        assert!(arguments.lines().any(|arg| arg == "rz-pdf-renderer"));
         let archive = fs::read_dir(&output)
             .unwrap()
             .next()
@@ -285,6 +297,8 @@ fn linux_packaging_keeps_rar_features_and_descriptors_in_sync() {
             .unwrap()
             .path();
         assert!(package.join("install.sh").is_file());
+        assert!(package.join("rz-pdf-renderer").is_file());
+        assert!(package.join("pdf-renderer-licenses.txt").is_file());
         for name in ["rustzip.desktop", "rustzip-extract.nemo_action"] {
             let descriptor = fs::read_to_string(package.join(name)).unwrap();
             assert_eq!(
@@ -327,6 +341,12 @@ fn linux_packaging_keeps_rar_features_and_descriptors_in_sync() {
             for path in &installed {
                 assert!(path.is_file(), "{} was not installed", path.display());
             }
+            assert!(prefix.join("bin/rz-pdf-renderer").is_file());
+            assert!(
+                prefix
+                    .join("share/doc/rustzip/pdf-renderer-licenses.txt")
+                    .is_file()
+            );
 
             let uninstall = Command::new("sh")
                 .arg(package.join("install.sh"))
@@ -347,6 +367,7 @@ fn linux_packaging_keeps_rar_features_and_descriptors_in_sync() {
                     path.display()
                 );
             }
+            assert!(!prefix.join("bin/rz-pdf-renderer").exists());
         }
     }
 }

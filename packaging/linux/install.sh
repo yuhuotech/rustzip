@@ -11,7 +11,7 @@ kde6_service_menus="$data_home/kio/servicemenus"
 kde5_service_menus="$data_home/kservices5/ServiceMenus"
 nemo_actions="$data_home/nemo/actions"
 if [ "${1:-}" = "--uninstall" ]; then
-    rm -f "$prefix/bin/rustzip" "$apps/rustzip.desktop" \
+    rm -f "$prefix/bin/rustzip" "$prefix/bin/rz-pdf-renderer" "$apps/rustzip.desktop" \
           "$kde6_service_menus/rustzip-servicemenu.desktop" \
           "$kde5_service_menus/rustzip-servicemenu.desktop" \
           "$prefix/share/kservices5/ServiceMenus/rustzip-servicemenu.desktop" \
@@ -24,6 +24,7 @@ if [ "${1:-}" = "--uninstall" ]; then
     rm -f "$prefix/share/doc/rustzip/unrar-license.txt"
     rm -f "$prefix/share/doc/rustzip/libchm-license.txt"
     rm -f "$prefix/share/doc/rustzip/pbz2-license.txt" "$prefix/share/doc/rustzip/pbz2-notice.txt"
+    rm -f "$prefix/share/doc/rustzip/pdf-renderer-licenses.txt"
     rm -f "$nautilus_binary"
     rmdir "$nautilus_scripts/.rustzip" 2>/dev/null || true
     for s in 16 32 48 64 128 256 512; do
@@ -33,9 +34,11 @@ if [ "${1:-}" = "--uninstall" ]; then
     exit 0
 fi
 install -Dm755 "$here/rustzip" "$prefix/bin/rustzip"
+install -Dm755 "$here/rz-pdf-renderer" "$prefix/bin/rz-pdf-renderer"
 install -Dm644 "$here/libchm-license.txt" "$prefix/share/doc/rustzip/libchm-license.txt"
 install -Dm644 "$here/pbz2-license.txt" "$prefix/share/doc/rustzip/pbz2-license.txt"
 install -Dm644 "$here/pbz2-notice.txt" "$prefix/share/doc/rustzip/pbz2-notice.txt"
+install -Dm644 "$here/pdf-renderer-licenses.txt" "$prefix/share/doc/rustzip/pdf-renderer-licenses.txt"
 if [ -f "$here/unrar-license.txt" ]; then
     install -Dm644 "$here/unrar-license.txt" "$prefix/share/doc/rustzip/unrar-license.txt"
 fi

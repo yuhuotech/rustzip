@@ -11,6 +11,12 @@ if [ ! -d "$app" ]; then
     exit 1
 fi
 app="$(cd "$app" && pwd -P)"
+pdf_renderer="$app/Contents/MacOS/rz-pdf-renderer"
+if [ ! -x "$pdf_renderer" ]; then
+    echo "RustZIP PDF renderer helper is missing or not executable" >&2
+    exit 1
+fi
+codesign --verify --strict "$pdf_renderer"
 appex="$app/Contents/PlugIns/RustZIPQuickLook.appex"
 if [ ! -d "$appex" ]; then
     echo "RustZIP Quick Look extension is missing" >&2

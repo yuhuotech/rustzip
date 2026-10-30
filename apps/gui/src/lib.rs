@@ -12,6 +12,7 @@ pub mod launch;
 pub mod location_state;
 pub mod locations;
 pub mod open_requests;
+mod pdf_preview;
 pub mod recent;
 pub mod rows;
 pub mod services;

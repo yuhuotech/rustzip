@@ -357,3 +357,13 @@
 - 2026-10-30 在 macOS 27.0.1 子进程中实际调用 `setrlimit`，`RLIMIT_AS`、`RLIMIT_RSS` 和 `RLIMIT_DATA` 均返回 `EINVAL`；本机 `man 2 setrlimit` 未列出可用的地址空间上限。XNU 当前头文件把 `RLIMIT_RSS` 定义为 `RLIMIT_AS` 别名，但这没有改变本机 syscall 的拒绝结果。依据：[Apple setrlimit 手册](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/setrlimit.2.html)、[XNU resource.h](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/sys/resource.h)。
 - Windows Job Object 和 Linux `RLIMIT_AS` 可提供进程内存限制，但仅有两个平台可用不满足 RustZIP 的跨平台预览承诺。父进程轮询 RSS 也不能替代硬上限；在 macOS 有可验证的硬限制或 renderer 自身具有累计解码预算前，PDF 继续由系统程序打开。
 - 本次评估未把 `hayro` 或进程限制依赖加入产品，也未注册 PDF renderer。加密 PDF、坏 xref、嵌套炸弹和像素上限仍需同时满足 D30 后再实现。
+
+本门槛的后续实现方案见 [D50](#d50-pdf-预览的分配预算与隔离-helper)。
+
+## D50 PDF 预览的分配预算与隔离 helper
+
+- 2026-10-31 接入 `hayro 0.7.1`（Apache-2.0 OR MIT，MSRV 1.92），但不在 GUI 进程内解析 PDF。GUI 将最多 16 MiB 的 PDF 内容通过标准输入传给单次启动的 `rz-pdf-renderer` 子进程；无文件路径参数，不写临时文件。
+- 子进程的全局分配器限制同时存活的 Rust heap 请求总量为 256 MiB，累计分配总量为 512 MiB。分配失败只会终止隔离 helper；helper 自身和 GUI 父进程均设 10 秒时限，并支持由选择切换等界面操作取消。
+- 每页最多输出 16,777,216 像素，单边不超过 8,192 像素，PNG 输出最多 8 MiB。GUI 再次校验 PNG 头、字节数与尺寸后才解码显示。超限、崩溃、超时、取消或不支持的 PDF 显示提示并保留系统阅读器打开路径。
+- 该方案以 renderer 的全局 heap 分配预算满足 D30 的解码资源限制，绕开 macOS 不支持的 `RLIMIT_AS`。它不是 OS 级 RSS 上限；进程栈和系统分配器的管理开销不计入 heap 配额。
+- PDF helper 随 macOS `.app`、Windows 安装器和 Linux tarball 一起分发，并签署 macOS helper；安装包同时附带 Hayro、PDFium 替代字体和嵌入色彩配置文件的许可说明。格式兼容、真实恶意样本及三平台打包 / 运行仍按开发计划验收。

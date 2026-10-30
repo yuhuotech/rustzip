@@ -36,8 +36,8 @@ $exe = Join-Path $PWD "target\release\rustzip.exe"
 $zipKey = "$classes\.zip"
 $zipBefore = if (Test-Path -LiteralPath $zipKey) { (Get-Item -LiteralPath $zipKey).GetValue("") } else { $null }
 
-$buildArgs = @("build", "--release", "-p", "rustzip-gui")
-if ($RarEnabled) { $buildArgs += @("--features", "rar") }
+$buildArgs = @("build", "--release", "-p", "rustzip-gui", "-p", "rz-pdf-renderer")
+if ($RarEnabled) { $buildArgs += @("--features", "rustzip-gui/rar") }
 & cargo @buildArgs
 if ($LASTEXITCODE -ne 0) { throw "Windows GUI build failed: $LASTEXITCODE" }
 $compilerArgs = @("/DAppVersion=0.1.0", "/DSourceExe=$exe", "/DOutDir=$dist")
@@ -57,7 +57,7 @@ try {
         if (Test-Path $installLog) { Get-Content $installLog | ForEach-Object { Write-Host $_ } }
         throw "Installer failed: $($process.ExitCode)"
     }
-    $installedFiles = @("rustzip.exe", "licenses\zlib.txt", "licenses\libchm.txt", "licenses\pbz2.txt", "licenses\pbz2-notice.txt", "licenses\inno-chinese-translation.txt")
+    $installedFiles = @("rustzip.exe", "rz-pdf-renderer.exe", "licenses\zlib.txt", "licenses\libchm.txt", "licenses\pbz2.txt", "licenses\pbz2-notice.txt", "licenses\pdf-renderer.txt", "licenses\inno-chinese-translation.txt")
     if ($RarEnabled) { $installedFiles += "unrar-license.txt" }
     foreach ($file in $installedFiles) {
         if (-not (Test-Path -LiteralPath (Join-Path $install $file))) {
@@ -113,6 +113,9 @@ if ($application -and ($application.GetValueNames().Count -gt 0 -or $application
 }
 if (Test-Path -LiteralPath (Join-Path $install "rustzip.exe")) {
     throw "Executable survived uninstall"
+}
+if (Test-Path -LiteralPath (Join-Path $install "rz-pdf-renderer.exe")) {
+    throw "PDF renderer survived uninstall"
 }
 $zipOpen = Get-Item -LiteralPath "$classes\.zip\OpenWithProgids" -ErrorAction SilentlyContinue
 if ($null -ne $zipOpen -and $zipOpen.GetValueNames() -contains "RustZIP.Archive") {

@@ -42,6 +42,8 @@ notice_prepare_preview	正在准备 {name}…	Preparing {name}…
 notice_external_edit_writeback	已用系统程序打开；保存后会自动写回压缩包。	Opened in the system app. Saved changes will be written back to the archive.
 notice_external_read_only	已用系统程序打开；这种压缩包只读，改动不会写回。	Opened in the system app. This archive is read-only, so changes will not be written back.
 notice_preview_too_large	文件太大，不适合预览；请用“解压到…”取出来。	This file is too large to preview. Extract it to view.
+detail_pdf_rendering	正在渲染 PDF 预览…	Rendering PDF preview…
+detail_pdf_unavailable	PDF 预览不可用；双击文件可用系统阅读器打开。	PDF preview is unavailable; double-click the file to open it in your system viewer.
 task_test_passed	{task}通过：{count} 个条目没有发现问题	{task} passed: no issues found in {count} entries
 task_edit_complete	{task}完成：压缩包现在有 {count} 项	{task} complete: the archive now has {count} items
 task_complete_count	{task}完成：{count} 个文件，{size}	{task} complete: {count} files, {size}

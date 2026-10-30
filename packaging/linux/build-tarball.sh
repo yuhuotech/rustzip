@@ -19,18 +19,20 @@ case "${RZ_WITH_RAR:-0}" in
 esac
 set --
 if [ "${RZ_WITH_RAR:-0}" = "1" ]; then
-    set -- --features rar
+    set -- --features rustzip-gui/rar
 fi
-cargo build --release -p rustzip-gui "$@"
+cargo build --release -p rustzip-gui -p rz-pdf-renderer "$@"
 
 stage="$(mktemp -d)/$name"
 mkdir -p "$stage/icons"
 cp target/release/rustzip "$stage/"
+cp target/release/rz-pdf-renderer "$stage/"
 cp packaging/linux/*.desktop packaging/linux/*.nemo_action packaging/linux/rustzip-nautilus-* "$stage/"
 cp packaging/linux/install.sh "$stage/install.sh"
 cp packaging/licenses/libchm.txt "$stage/libchm-license.txt"
 cp packaging/licenses/pbz2.txt "$stage/pbz2-license.txt"
 cp packaging/licenses/pbz2-notice.txt "$stage/pbz2-notice.txt"
+cp packaging/licenses/pdf-renderer.txt "$stage/pdf-renderer-licenses.txt"
 if [ "${RZ_WITH_RAR:-0}" = "1" ]; then
     sed 's|MimeType=|MimeType=application/vnd.rar;application/x-rar;|' \
         "$stage/rustzip.desktop" > "$stage/rustzip.desktop.tmp"
@@ -41,7 +43,7 @@ if [ "${RZ_WITH_RAR:-0}" = "1" ]; then
     cp packaging/licenses/unrar.txt "$stage/unrar-license.txt"
 fi
 cp packaging/icons/hicolor/*.png "$stage/icons/"
-chmod +x "$stage/install.sh" "$stage/rustzip"
+chmod +x "$stage/install.sh" "$stage/rustzip" "$stage/rz-pdf-renderer"
 
 mkdir -p "$out"
 tar -C "$(dirname "$stage")" -czf "$out/$name.tar.gz" "$name"

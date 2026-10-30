@@ -1,0 +1,18 @@
+[package]
+name = "rz-pdf-renderer"
+description = "Resource-bounded PDF preview helper for RustZIP"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+hayro = "0.7.1"
+
+[dev-dependencies]
+flate2 = "1.1"
+
+[lints.rust]
+unsafe_code = "deny"
+unsafe_op_in_unsafe_fn = "deny"

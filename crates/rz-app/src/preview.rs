@@ -10,6 +10,12 @@ use std::path::Path;
 pub const MAX_IMAGE_BYTES: u64 = 8 * 1024 * 1024;
 /// Text is rendered in the detail panel, so keep both decoding and layout work small.
 pub const MAX_TEXT_BYTES: u64 = 64 * 1024;
+/// PDF input is passed to a memory-limited renderer process, not decoded in the GUI.
+pub const MAX_PDF_BYTES: u64 = 16 * 1024 * 1024;
+
+pub fn is_pdf_format(name: &str) -> bool {
+    extension(name).as_str() == "pdf"
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImageFormat {
@@ -134,6 +140,26 @@ pub fn read_entry(
     encoding: Option<&str>,
     limit: u64,
 ) -> Result<Vec<u8>, Error> {
+    read_entry_with_cancel(
+        archive,
+        entry,
+        password,
+        encoding,
+        limit,
+        &CancelToken::new(),
+    )
+}
+
+/// Reads a preview entry with caller-owned cancellation for long sequential readers.
+pub fn read_entry_with_cancel(
+    archive: &Path,
+    entry: &Entry,
+    password: Option<&str>,
+    encoding: Option<&str>,
+    limit: u64,
+    cancel: &CancelToken,
+) -> Result<Vec<u8>, Error> {
+    cancel.check()?;
     if entry.size > limit {
         return Err(Error::LimitExceeded(format!(
             "{} bytes is above the preview limit",
@@ -147,7 +173,7 @@ pub fn read_entry(
     if let Some(enc) = encoding {
         reader.set_encoding(enc)?;
     }
-    reader.set_read_control(CancelToken::new(), limit);
+    reader.set_read_control(cancel.clone(), limit);
     let mut data = Vec::new();
     let format = reader.format_name();
     if format == "7z" || format.starts_with("tar") {
@@ -155,9 +181,11 @@ pub fn read_entry(
         let result = reader.for_each(&mut |candidate, stream| {
             if candidate.index == entry.index {
                 found = true;
-                stream
-                    .take(limit.saturating_add(1))
-                    .read_to_end(&mut data)?;
+                let read_result = stream.take(limit.saturating_add(1)).read_to_end(&mut data);
+                if cancel.is_cancelled() {
+                    return Err(Error::Cancelled);
+                }
+                read_result?;
                 // Stop sequential decoding as soon as the requested entry is read.
                 return Err(Error::Cancelled);
             }
@@ -171,10 +199,14 @@ pub fn read_entry(
     } else {
         // Some readers need their entries initialized before opening one.
         reader.entries()?;
-        reader
+        let read_result = reader
             .open(entry)?
             .take(limit.saturating_add(1))
-            .read_to_end(&mut data)?;
+            .read_to_end(&mut data);
+        if cancel.is_cancelled() {
+            return Err(Error::Cancelled);
+        }
+        read_result?;
     }
     if data.len() as u64 > limit {
         return Err(Error::LimitExceeded("entry is larger than declared".into()));
@@ -195,6 +227,8 @@ mod tests {
         assert_eq!(image_format("logo.svg"), None);
         assert_eq!(image_format("noext"), None);
         assert!(is_text_format("README.MD"));
+        assert!(is_pdf_format("REPORT.PDF"));
+        assert!(!is_pdf_format("report.pdf.exe"));
         assert!(!is_text_format("page.html"));
         assert!(!is_text_format("program.exe"));
         assert_eq!(
@@ -222,6 +256,27 @@ mod tests {
         assert!(matches!(
             read_entry(&path, &entry, None, None, 50),
             Err(Error::LimitExceeded(_))
+        ));
+    }
+
+    #[test]
+    fn preview_entry_reader_observes_caller_cancellation() {
+        use std::io::Write;
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("cancel.zip");
+        let mut zip = zip::ZipWriter::new(std::fs::File::create(&path).unwrap());
+        zip.start_file("report.pdf", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        zip.write_all(b"%PDF-1.4\n").unwrap();
+        zip.finish().unwrap();
+
+        let mut reader = rz_formats::open(&path).unwrap();
+        let entry = reader.entries().unwrap().remove(0);
+        let cancel = CancelToken::new();
+        cancel.cancel();
+        assert!(matches!(
+            read_entry_with_cancel(&path, &entry, None, None, MAX_PDF_BYTES, &cancel),
+            Err(Error::Cancelled)
         ));
     }
 

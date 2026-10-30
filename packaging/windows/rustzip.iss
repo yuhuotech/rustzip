@@ -10,6 +10,9 @@
 #ifndef SourceExe
   #define SourceExe "..\..\target\release\rustzip.exe"
 #endif
+#ifndef PdfRendererExe
+  #define PdfRendererExe "..\..\target\release\rz-pdf-renderer.exe"
+#endif
 #ifndef OutDir
   #define OutDir "..\..\dist"
 #endif
@@ -54,6 +57,7 @@ Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: 
 
 [Files]
 Source: "{#SourceExe}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#PdfRendererExe}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\licenses\pbz2.txt"; DestDir: "{app}\licenses"; DestName: "pbz2.txt"; Flags: ignoreversion
 Source: "..\licenses\pbz2-notice.txt"; DestDir: "{app}\licenses"; DestName: "pbz2-notice.txt"; Flags: ignoreversion
 Source: "{#VcpkgShare}\zlib\copyright"; DestDir: "{app}\licenses"; DestName: "zlib.txt"; Flags: ignoreversion
@@ -63,6 +67,7 @@ Source: "{#VcpkgShare}\zstd\copyright"; DestDir: "{app}\licenses"; DestName: "zs
 Source: "{#VcpkgShare}\lz4\copyright"; DestDir: "{app}\licenses"; DestName: "lz4.txt"; Flags: ignoreversion
 Source: "{#VcpkgShare}\openssl\copyright"; DestDir: "{app}\licenses"; DestName: "openssl.txt"; Flags: ignoreversion
 Source: "..\licenses\libchm.txt"; DestDir: "{app}\licenses"; DestName: "libchm.txt"; Flags: ignoreversion
+Source: "..\licenses\pdf-renderer.txt"; DestDir: "{app}\licenses"; DestName: "pdf-renderer.txt"; Flags: ignoreversion
 Source: "..\licenses\inno-chinese-translation.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
 #ifdef RarEnabled
 Source: "..\licenses\unrar.txt"; DestDir: "{app}"; DestName: "unrar-license.txt"; Flags: ignoreversion

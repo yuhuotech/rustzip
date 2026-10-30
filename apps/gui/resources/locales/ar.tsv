@@ -43,6 +43,8 @@ notice_prepare_preview	جارٍ تحضير {name}…
 notice_external_edit_writeback	فُتح في تطبيق النظام. ستُكتب التغييرات المحفوظة إلى الأرشيف.
 notice_external_read_only	فُتح في تطبيق النظام. هذا الأرشيف للقراءة فقط، لذا لن تُكتب التغييرات.
 notice_preview_too_large	هذا الملف كبير جدًا للمعاينة. استخرجه لعرضه.
+detail_pdf_rendering	جارٍ عرض معاينة PDF…
+detail_pdf_unavailable	معاينة PDF غير متاحة؛ انقر مرتين لفتح الملف في عارض النظام.
 task_test_passed	اكتمل {task}: لم تُكتشف مشكلات في {count} عناصر
 task_edit_complete	اكتمل {task}: يحتوي الأرشيف الآن على {count} عناصر
 task_complete_count	اكتمل {task}: {count} ملفات، {size}

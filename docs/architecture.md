@@ -37,6 +37,7 @@ rustzip/
 ├─ apps/
 │  ├─ cli            # rz 命令
 │  ├─ gui            # 桌面应用
+│  ├─ pdf-renderer   # 隔离的 PDF 首屏渲染子进程
 │  └─ shell-ext/     # windows(COM) / macos(Finder Sync + Quick Look) / linux(Nautilus、Dolphin)
 ├─ docs/             # 产品、架构、技术规范、UI 规范、决策记录
 ├─ benches/          # 性能基准
@@ -91,6 +92,7 @@ trait ArchiveWriter { /* add / finish / 增量更新 */ }
 - **模糊测试**:所有解析器对不可信输入做 `cargo-fuzz`。
 - **平台属性**:权限位、symlink、xattr、NTFS ADS、macOS quarantine 标记按策略保留(解压出的可执行文件应继承 quarantine)。
 - **密码**:内存中短暂保留并用 `zeroize` 清除;持久化走系统钥匙串。
+- **PDF 预览**:归档条目最多读取 16 MiB；PDF 解析不进入 GUI 进程，而由一次性 helper 渲染。helper 限制同时存活 heap 请求 256 MiB、累计分配 512 MiB、10 秒时限、16,777,216 像素及 8 MiB PNG 输出；GUI 支持取消并再次验证输出。详见 D30 / D50。
 
 ## 6. GUI 技术
 

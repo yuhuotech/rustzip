@@ -51,12 +51,12 @@ Vercel build 会在部署期间自动应用 Neon Postgres migrations;检查部�
 | 系统 | 命令 | 产物 |
 |---|---|---|
 | macOS | `packaging/macos/build-app.sh dist` | `RustZIP.app` 和 `RustZIP-<版本>-macos-<架构>.dmg` |
-| Windows | `iscc /DAppVersion=0.1.0 packaging\windows\rustzip.iss`(需先安装 x64-windows vcpkg 依赖并运行 `cargo build --release -p rustzip-gui`) | `RustZIP-<版本>-windows-x86_64.exe` |
+| Windows | `iscc /DAppVersion=0.1.0 packaging\windows\rustzip.iss`(需先安装 x64-windows vcpkg 依赖并运行 `cargo build --release -p rustzip-gui -p rz-pdf-renderer`) | `RustZIP-<版本>-windows-x86_64.exe` |
 | Linux | `packaging/linux/build-tarball.sh dist` | `RustZIP-<版本>-linux-<架构>.tar.gz`,解开后 `./install.sh` |
 
 图标由 `cargo run --release -p rustzip-gui --example make_icons -- packaging/icons` 生成(`.icns`、`.ico`、各尺寸 PNG)。
 
-默认包不启用 RAR，也不注册 RAR 专属关联。macOS / Linux 可设置 `RZ_WITH_RAR=1` 打包测试版；Windows 需用 `cargo build --release -p rustzip-gui --features rar` 构建，并给 Inno Setup 增加 `/DRarEnabled`。启用时安装包附带 unRAR 许可证。RAR 解码现由 `rz-ffi` 逐块执行并受选中输出总量、条目声明大小和取消控制；四平台 opt-in 包、许可证和 Windows 安装 / 卸载关联已在 Release dry-run [41012225195](https://github.com/yuhuotech/rustzip/actions/runs/41012225195) 验证，正式签名 Release 仍待验收，见 D36 / D38。
+默认包不启用 RAR，也不注册 RAR 专属关联。macOS / Linux 可设置 `RZ_WITH_RAR=1` 打包测试版；Windows 需用 `cargo build --release -p rustzip-gui -p rz-pdf-renderer --features rustzip-gui/rar` 构建，并给 Inno Setup 增加 `/DRarEnabled`。启用时安装包附带 unRAR 许可证。RAR 解码现由 `rz-ffi` 逐块执行并受选中输出总量、条目声明大小和取消控制；四平台 opt-in 包、许可证和 Windows 安装 / 卸载关联已在 Release dry-run [41012225195](https://github.com/yuhuotech/rustzip/actions/runs/41012225195) 验证，正式签名 Release 仍待验收，见 D36 / D38。
 
 在手动触发 Release dry-run 时，可将 `validate_rar_packages=true`，额外构建 macOS arm64 / x86_64、Linux x86_64 和 Windows x86_64 的 RAR 测试安装包。此验证会检查 unRAR 许可证、macOS 类型声明、Linux MIME 声明以及 Windows 安装 / 卸载后的 RAR 关联；生成的 `rar-package-validation-bundle` 单独保存 14 天，不进入更新清单或公开 Release。该选项默认关闭。
 

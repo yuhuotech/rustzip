@@ -28,7 +28,7 @@ use rz_app::browse::{ArchiveTree, Row, RowKind, compression_ratio, format_size};
 use rz_app::passwords::{MemoryStore, SecretStore};
 use rz_app::settings::{OnConflict, Settings, Theme};
 use rz_app::tasks::{ErrorCode, JobKind, JobSpec, TaskId, TaskInfo, TaskManager, TaskState};
-use rz_core::{CreateOptions, Error};
+use rz_core::{CancelToken, CreateOptions, Error};
 use rz_formats::OutputFormat;
 use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
@@ -105,6 +105,12 @@ pub struct Preview {
     pub path: String,
     pub image: Option<Arc<Image>>,
     pub text: Option<String>,
+}
+
+#[derive(Clone, Copy)]
+enum PdfPreviewStatus {
+    Loading,
+    Unavailable,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -264,6 +270,9 @@ pub struct MainView {
     pub(crate) password_task_sources: HashMap<TaskId, PathBuf>,
     pub(crate) password_task_searches: HashMap<TaskId, rz_core::CancelToken>,
     pub preview: Option<Preview>,
+    preview_request: u64,
+    preview_cancel: Option<(u64, CancelToken)>,
+    pdf_preview_status: Option<(PathBuf, String, PdfPreviewStatus)>,
     /// The statistics notice was opened from the settings, so it goes back there.
     pub privacy_from_settings: bool,
     pub page: Page,
@@ -443,6 +452,9 @@ impl MainView {
             password_task_sources: HashMap::new(),
             password_task_searches: HashMap::new(),
             preview: None,
+            preview_request: 0,
+            preview_cancel: None,
+            pdf_preview_status: None,
             privacy_from_settings: false,
             page: Page::Archive,
             files_bounds: Rc::default(),
@@ -587,12 +599,19 @@ impl MainView {
         cx: &mut Context<Self>,
     ) {
         if let Some(ix) = self.archives.iter().position(|a| a.path == path) {
+            let switched = ix != self.active;
             self.supersede_active_open();
             self.settings.remember(&path);
             self.save_settings(cx);
+            if switched {
+                self.cancel_preview_request();
+            }
             self.active = ix;
             self.page = Page::Archive;
             self.apply_view(cx);
+            if switched {
+                self.load_preview(cx);
+            }
             return;
         }
         let (request_id, should_start) = self.begin_open_request(&path);
@@ -665,6 +684,7 @@ impl MainView {
                 if is_active {
                     self.open_requests.finish_active(request_id);
                     self.loading = None;
+                    self.cancel_preview_request();
                     self.active = index;
                     self.page = Page::Archive;
                     self.overlay = None;
@@ -739,6 +759,11 @@ impl MainView {
 
     pub fn close_tab(&mut self, ix: usize, cx: &mut Context<Self>) {
         if ix < self.archives.len() {
+            let active_removed = ix == self.active;
+            if active_removed {
+                self.cancel_preview_request();
+                self.preview = None;
+            }
             self.archives.remove(ix);
             self.active = self.active.min(self.archives.len().saturating_sub(1));
             if self.archives.is_empty() {
@@ -746,16 +771,26 @@ impl MainView {
             }
             self.leave_notice();
             self.apply_view(cx);
+            if active_removed {
+                self.load_preview(cx);
+            }
         }
     }
 
     pub fn activate_tab(&mut self, ix: usize, cx: &mut Context<Self>) {
         if ix < self.archives.len() {
+            let switched = ix != self.active;
             self.supersede_active_open();
+            if switched {
+                self.cancel_preview_request();
+            }
             self.active = ix;
             self.page = Page::Archive;
             self.leave_notice();
             self.apply_view(cx);
+            if switched {
+                self.load_preview(cx);
+            }
         }
     }
 
@@ -848,6 +883,7 @@ impl MainView {
             a.selected = None;
         }
         self.leave_notice();
+        self.cancel_preview_request();
         self.preview = None;
         self.apply_view(cx);
     }
@@ -877,6 +913,7 @@ impl MainView {
         if let Some(a) = self.current_mut() {
             a.selected = None;
         }
+        self.cancel_preview_request();
         self.preview = None;
         self.table.update(cx, |t, _| t.delegate_mut().clear_marks());
         self.leave_notice();
@@ -890,6 +927,8 @@ impl MainView {
     pub fn show_folder(&mut self, dir: PathBuf, cx: &mut Context<Self>) {
         self.supersede_active_open();
         self.leave_notice();
+        self.cancel_preview_request();
+        self.preview = None;
         self.page = Page::Folder;
         self.reset_directory_scroll();
         self.folder = Some(dir.clone());
@@ -1258,6 +1297,7 @@ impl MainView {
         if let Some(a) = self.current_mut() {
             a.selected = None;
         }
+        self.cancel_preview_request();
         self.preview = None;
         self.leave_notice();
         self.table.update(cx, |t, cx| {
@@ -1827,6 +1867,9 @@ impl MainView {
 
     /// Reads the archive again after it was changed, keeping the folder being shown.
     fn reload_archive(&mut self, path: PathBuf, cx: &mut Context<Self>) {
+        if self.current().is_some_and(|archive| archive.path == path) {
+            self.cancel_preview_request();
+        }
         let password = self
             .archives
             .iter()
@@ -1857,10 +1900,20 @@ impl MainView {
                             }
                             a.verified = None;
                         }
-                        this.preview = None;
-                        this.apply_view(cx);
+                        if this.current().is_some_and(|archive| archive.path == path) {
+                            this.preview = None;
+                            this.apply_view(cx);
+                            this.load_preview(cx);
+                        } else {
+                            cx.notify();
+                        }
                     }
-                    Err(e) => this.say(Notice::Error(explain(&this.settings.language, &e)), cx),
+                    Err(e) => {
+                        if this.current().is_some_and(|archive| archive.path == path) {
+                            this.load_preview(cx);
+                        }
+                        this.say(Notice::Error(explain(&this.settings.language, &e)), cx);
+                    }
                 };
             });
         })
@@ -1964,27 +2017,24 @@ impl MainView {
         id
     }
 
-    /// Starts reading a bounded picture or text file for the details panel.
-    ///
-    /// Only small pictures and bounded UTF-8 text are read; other files keep the type tile.
+    fn cancel_preview_request(&mut self) -> u64 {
+        if let Some((_, cancel)) = self.preview_cancel.take() {
+            cancel.cancel();
+        }
+        self.preview_request = self.preview_request.wrapping_add(1);
+        self.pdf_preview_status = None;
+        self.preview_request
+    }
+
+    /// Reads bounded image/text previews and renders PDFs in a resource-limited helper.
     pub fn load_preview(&mut self, cx: &mut Context<Self>) {
         let Some(row) = self.selected_row() else {
+            self.cancel_preview_request();
             self.preview = None;
             return;
         };
-        let Some(a) = self.current() else { return };
-        let image_format = rz_app::preview::image_format(&row.name);
-        let text_format = rz_app::preview::is_text_format(&row.name);
-        let entry = row.entry.and_then(|ix| a.tree.entries().get(ix).cloned());
-        let (Some(entry), RowKind::File) = (entry, row.kind) else {
-            self.preview = None;
-            return;
-        };
-        let limit = if image_format.is_some() {
-            rz_app::preview::MAX_IMAGE_BYTES
-        } else if text_format {
-            rz_app::preview::MAX_TEXT_BYTES
-        } else {
+        let Some(a) = self.current() else {
+            self.cancel_preview_request();
             self.preview = None;
             return;
         };
@@ -1996,65 +2046,129 @@ impl MainView {
         {
             return;
         }
+
+        let image_format = rz_app::preview::image_format(&row.name);
+        let text_format = rz_app::preview::is_text_format(&row.name);
+        let pdf_preview = rz_app::preview::is_pdf_format(&row.name);
+        let entry = row.entry.and_then(|ix| a.tree.entries().get(ix).cloned());
+        let (Some(entry), RowKind::File) = (entry, row.kind) else {
+            self.cancel_preview_request();
+            self.preview = None;
+            return;
+        };
+        let limit = if image_format.is_some() {
+            rz_app::preview::MAX_IMAGE_BYTES
+        } else if text_format {
+            rz_app::preview::MAX_TEXT_BYTES
+        } else if pdf_preview {
+            rz_app::preview::MAX_PDF_BYTES
+        } else {
+            self.cancel_preview_request();
+            self.preview = None;
+            return;
+        };
+        let request_id = self.cancel_preview_request();
         self.preview = None;
         if row.size > limit {
+            if pdf_preview {
+                self.pdf_preview_status = Some((archive, row.path, PdfPreviewStatus::Unavailable));
+                cx.notify();
+            }
             return;
         }
-        let encoding = self.settings.forced_encoding().map(str::to_string);
+
         let path = row.path;
+        let encoding = self.settings.forced_encoding().map(str::to_string);
+        let cancel = CancelToken::new();
+        self.preview_cancel = Some((request_id, cancel.clone()));
+        if pdf_preview {
+            self.pdf_preview_status =
+                Some((archive.clone(), path.clone(), PdfPreviewStatus::Loading));
+            cx.notify();
+        }
+
         cx.spawn(async move |this, cx| {
-            let (archive_bg, encoding_bg) = (archive.clone(), encoding);
+            let (archive_bg, encoding_bg, cancel_bg) = (archive.clone(), encoding, cancel.clone());
             let data = cx
                 .background_executor()
                 .spawn(async move {
-                    let data = rz_app::preview::read_entry(
+                    let data = rz_app::preview::read_entry_with_cancel(
                         &archive_bg,
                         &entry,
                         password.as_deref(),
                         encoding_bg.as_deref(),
                         limit,
+                        &cancel_bg,
                     )?;
-                    if image_format.is_some()
-                        && !crate::image_preview::dimensions_within_limit(&data)
-                    {
-                        return Err(Error::LimitExceeded(
-                            "image dimensions exceed the preview limit".into(),
-                        ));
+                    if pdf_preview {
+                        if !data.starts_with(b"%PDF-") {
+                            return Err(Error::UnknownFormat);
+                        }
+                        crate::pdf_preview::render_first_page(&data, &cancel_bg)
+                    } else {
+                        if image_format.is_some()
+                            && !crate::image_preview::dimensions_within_limit(&data)
+                        {
+                            return Err(Error::LimitExceeded(
+                                "image dimensions exceed the preview limit".into(),
+                            ));
+                        }
+                        Ok(data)
                     }
-                    Ok(data)
                 })
                 .await;
-            // A picture that cannot be read just keeps the type tile.
-            let Ok(data) = data else { return };
-            let (image, text) = if let Some(format) = image_format {
-                let format = match format {
-                    rz_app::preview::ImageFormat::Png => ImageFormat::Png,
-                    rz_app::preview::ImageFormat::Jpeg => ImageFormat::Jpeg,
-                    rz_app::preview::ImageFormat::Gif => ImageFormat::Gif,
-                    rz_app::preview::ImageFormat::Webp => ImageFormat::Webp,
-                    rz_app::preview::ImageFormat::Bmp => ImageFormat::Bmp,
-                };
-                (Some(Arc::new(Image::from_bytes(format, data))), None)
-            } else {
-                let Some(text) = rz_app::preview::decode_text(data) else {
-                    return;
-                };
-                (None, Some(text))
-            };
             let _ = this.update(cx, |this, cx| {
-                // The selection may have moved on while the file was being read.
-                let still_here = this.current().is_some_and(|a| {
-                    a.path == archive && a.selected.as_deref() == Some(path.as_str())
-                });
-                if still_here {
-                    this.preview = Some(Preview {
-                        archive,
-                        path,
-                        image,
-                        text,
+                let still_here = this.preview_request == request_id
+                    && this.current().is_some_and(|a| {
+                        a.path == archive && a.selected.as_deref() == Some(path.as_str())
                     });
-                    cx.notify();
+                if !still_here {
+                    return;
                 }
+                this.preview_cancel = None;
+                match &data {
+                    Err(Error::Cancelled) => {
+                        this.pdf_preview_status = None;
+                        return;
+                    }
+                    Err(_) if pdf_preview => {
+                        this.pdf_preview_status =
+                            Some((archive.clone(), path.clone(), PdfPreviewStatus::Unavailable));
+                        cx.notify();
+                        return;
+                    }
+                    Err(_) => return,
+                    Ok(_) => {}
+                }
+                let Ok(data) = data else { return };
+                let display_image_format = if pdf_preview {
+                    Some(rz_app::preview::ImageFormat::Png)
+                } else {
+                    image_format
+                };
+                let (image, text) = if let Some(format) = display_image_format {
+                    let format = match format {
+                        rz_app::preview::ImageFormat::Png => ImageFormat::Png,
+                        rz_app::preview::ImageFormat::Jpeg => ImageFormat::Jpeg,
+                        rz_app::preview::ImageFormat::Gif => ImageFormat::Gif,
+                        rz_app::preview::ImageFormat::Webp => ImageFormat::Webp,
+                        rz_app::preview::ImageFormat::Bmp => ImageFormat::Bmp,
+                    };
+                    (Some(Arc::new(Image::from_bytes(format, data))), None)
+                } else {
+                    let Some(text) = rz_app::preview::decode_text(data) else {
+                        return;
+                    };
+                    (None, Some(text))
+                };
+                this.pdf_preview_status = None;
+                this.preview = Some(Preview {
+                    archive,
+                    path,
+                    image,
+                    text,
+                });
+                cx.notify();
             });
         })
         .detach();
@@ -4307,6 +4421,11 @@ impl MainView {
                     .as_ref()
                     .filter(|pv| pv.archive == a.path && pv.path == row.path)
                     .and_then(|pv| pv.text.clone());
+                let pdf_status = self
+                    .pdf_preview_status
+                    .as_ref()
+                    .filter(|(archive, path, _)| archive == &a.path && path == &row.path)
+                    .map(|(_, _, status)| *status);
                 let (tile_bg, tile_fg) = crate::rows::badge_colors(&row, cx);
                 v_flex()
                     .gap_4()
@@ -4341,7 +4460,21 @@ impl MainView {
                                         .child(text),
                                 )
                             })
-                            .when(self.preview_is_missing(&row), |d| {
+                            .when_some(pdf_status, |d, status| {
+                                let label = match status {
+                                    PdfPreviewStatus::Loading => "detail_pdf_rendering",
+                                    PdfPreviewStatus::Unavailable => "detail_pdf_unavailable",
+                                };
+                                d.child(
+                                    div()
+                                        .px_3()
+                                        .text_size(px(11.))
+                                        .text_color(p.fg3)
+                                        .text_center()
+                                        .child(self.tool_text(label)),
+                                )
+                            })
+                            .when(self.preview_is_missing(&row) && pdf_status.is_none(), |d| {
                                 d.child(
                                     div()
                                         .size(px(56.))
@@ -4495,6 +4628,18 @@ impl MainView {
 
     /// Whether the selected file still needs its type tile, i.e. no picture is ready for it.
     fn preview_is_missing(&self, row: &Row) -> bool {
+        if self
+            .pdf_preview_status
+            .as_ref()
+            .is_some_and(|(archive, path, _)| {
+                path == &row.path
+                    && self
+                        .current()
+                        .is_some_and(|current| current.path == *archive)
+            })
+        {
+            return false;
+        }
         !self.preview.as_ref().is_some_and(|pv| {
             pv.path == row.path && self.current().is_some_and(|a| a.path == pv.archive)
         })
