@@ -43,7 +43,7 @@
 - 本机全工作区默认 / all-features 测试通过自动更新交接用例；系统程序由后台任务启动，签名验证失败时不会调用启动器。当前没有正式签名 Release 可供端到端安装验收，真实安装流程仍待三平台 Release 演练。
 - 最终工作区默认及 all-features 的格式检查、Clippy、全工作区测试均通过；每套测试有三项按环境条件忽略。Windows 和 macOS 的原生编译及桌面测试也在最终 CI 通过。
 - 2026-10-30：macOS Finder Sync 扩展已加入 app bundle。macOS 27.0.1 ad-hoc 测试包在 Finder 的 ZIP 右键菜单显示 RustZIP 压缩 / 解压选项；压缩入口打开 GUI 创建窗口，解压结果 BLAKE3 与 ZIP 内条目一致。扩展使用本机 PlugInKit 临时注册后已撤销；正式 Developer ID / 公证包及首次启用流程仍待验收。
-- 2026-10-30：RAR Release dry-run [40969974227](https://github.com/yuhuotech/rustzip/actions/runs/40969974227) 的 macOS arm64 / x86_64、Linux x86_64 RAR 包构建与包检查通过；Windows RAR 包编译成功但安装冒烟因未创建日志父目录失败。`ci-smoke.ps1` 已补建独立工作目录，尚未在 Windows runner 复测。macOS Intel 常规包本轮在 plist 后退出，旧日志不足以定位；本机 arm64 到 x86_64 的当前默认 / RAR 完整打包复现及 DMG 校验通过。
+- 2026-10-30：Release dry-run [40982574540](https://github.com/yuhuotech/rustzip/actions/runs/40982574540) 四个平台常规包构建、签名与汇总验签全部成功；RAR 包三平台构建 / 检查以及 Windows RAR 安装、关联、卸载冒烟通过。macOS Intel 常规打包在新 runner 成功。公开发布步骤按 dry-run 规则跳过。
 
 ## 未完成的验收
 

@@ -39,4 +39,4 @@
 - WIM、DMG、NSIS 的安全只读能力；当前只有 WIM / DMG 识别，NSIS 不推测识别。
 - PDF / 音频 / 视频应用内预览，关机等高影响完成后动作。
 - 压缩包对比、虚拟挂载、云端按需解压、WASM 插件和 SFX 仍为远期需求。
-- macOS Finder Sync 右键菜单已在本机 ad-hoc 包实测通过；RAR 三平台测试包中 macOS arm64 / x86_64 和 Linux x86_64 已在 Release dry-run 验收。Windows 安装冒烟和 macOS Intel 常规包的 runner 失败已记录，详见[发布验收](release.md)。
+- macOS Finder Sync 右键菜单已在本机 ad-hoc 包实测通过；RAR 三平台测试包和 Windows RAR 安装冒烟、macOS Intel 常规包在 Release dry-run [40982574540](https://github.com/yuhuotech/rustzip/actions/runs/40982574540) 均已通过。正式签名 Release 和真实用户交互仍待完成，详见[发布验收](release.md)。

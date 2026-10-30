@@ -6,7 +6,7 @@
 
 ## 1. 结论
 
-RustZIP 的主要归档与桌面主流程已实现。2026-10-30 增加 macOS Finder Sync 压缩 / 解压菜单并在 macOS 27.0.1 ad-hoc 包实机点击验收；Windows RAR 安装冒烟的日志目录错误已修复，待 runner 复测。其余主要缺口为 Quick Look、PDF / 音视频应用内预览、与 D11 崩溃保全约束冲突的 ZIP 真正原地增量编辑，以及安全 / 许可门槛尚未满足的 WIM / DMG / NSIS。Windows 原生交互、Dolphin / Nemo 实机菜单、正式签名发布与 macOS Intel 常规包的 runner 失败仍待验收。虚拟挂载、云端按需解压、WASM 插件和 SFX 仍列为远期需求。
+RustZIP 的主要归档与桌面主流程已实现。2026-10-30 增加 macOS Finder Sync 压缩 / 解压菜单并在 macOS 27.0.1 ad-hoc 包实机点击验收；Release dry-run [40982574540](https://github.com/yuhuotech/rustzip/actions/runs/40982574540) 已通过四平台常规包、RAR 测试包和 Windows RAR 安装验收。其余主要缺口为 Quick Look、PDF / 音视频应用内预览、与 D11 崩溃保全约束冲突的 ZIP 真正原地增量编辑，以及安全 / 许可门槛尚未满足的 WIM / DMG / NSIS。Windows 原生交互、Dolphin / Nemo 实机菜单和正式签名发布仍待验收。虚拟挂载、云端按需解压、WASM 插件和 SFX 仍列为远期需求。
 
 四个曾经占位的侧栏功能——常用位置、密码本、格式转换、压缩包修复——在当前代码中已经实现，不能继续列为“未开发”。转换与修复的符号链接和损坏数据边界见 [侧栏实现记录](sidebar-implementation.md) 与 [决策 D9](decisions.md#d9-左栏工具的数据安全与恢复边界)。
 

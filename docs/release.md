@@ -80,8 +80,9 @@ macOS 的“打开方式”声明包含已接入的常见只读格式及 LZ4，R
 
 - 2026-10-29 Release dry-run [40950855468](https://github.com/yuhuotech/rustzip/actions/runs/40950855468)：Linux、macOS arm64、macOS x86_64 与 Windows x86_64 产物均构建并签名成功；汇总验签 job 在构建 `rz-release` 时因 runner 未安装 `libacl` 开发库而失败，因此未生成验证 bundle，正式发布步骤跳过。已在汇总 job 加入 `native-archive-deps`；修复后的 dry-run 待重新运行。
 - 2026-10-30 修复后的 Release dry-run [40958424663](https://github.com/yuhuotech/rustzip/actions/runs/40958424663) 全部通过：四个平台包均构建并签名，汇总验签成功，上传了 48,267,020 字节的 `release-dry-run-bundle` artifact；下载检查确认 `update.json` 含四个平台及对应包名。公开 Release 的 `publish` job 按 dry-run 条件跳过。该 bundle 可供 14 天检查，不是可安装更新的正式签名包。
-- 2026-10-30 Release dry-run [40969974227](https://github.com/yuhuotech/rustzip/actions/runs/40969974227) 对 `b262828`：macOS arm64 / Linux x86_64 常规包构建成功；macOS arm64、x86_64 和 Linux 的 RAR 测试包均完成验证。Windows 常规包构建成功；RAR 测试包的 GUI 和 Inno Setup 均构建成功，但安装冒烟以退出码 1 失败。根因为脚本指定外部 `dist` 时只创建输出目录，却把 Inno `/LOG` 指向尚不存在的 `$work/install.log`；现已确保先创建 `$work`。
-- 同一 Release run 的 macOS x86_64 常规打包在 plist 校验后退出，旧脚本未打印失败命令，汇总 job 因缺少该平台资产而失败。macOS 27.0.1 本地 arm64 主机使用当前 Finder Sync 代码交叉构建 x86_64 默认与 RAR `.app` / DMG 均通过；RAR 包含 unRAR 许可证，两个 DMG 校验成功。CI 根因仍待用带失败定位的脚本复跑。
+- 2026-10-30 Release dry-run [40969974227](https://github.com/yuhuotech/rustzip/actions/runs/40969974227) 对 `b262828`：macOS arm64 / Linux x86_64 常规包构建成功；macOS arm64、x86_64 和 Linux 的 RAR 测试包均完成验证。Windows 常规包构建成功；RAR 测试包的 GUI 和 Inno Setup 均构建成功，但安装冒烟以退出码 1 失败。根因为脚本指定外部 `dist` 时只创建输出目录，却把 Inno `/LOG` 指向尚不存在的 `$work/install.log`；修复后见下一次 dry-run。
+- 同一 Release run 的 macOS x86_64 常规打包在 plist 校验后退出，旧脚本未打印失败命令，汇总 job 因缺少该平台资产而失败。本机 arm64 使用旧版和当前 Finder Sync 代码交叉构建 x86_64 包均通过；修复后的 runner 验收见后续记录。
+- 修复版 Release dry-run [40982574540](https://github.com/yuhuotech/rustzip/actions/runs/40982574540) 全部通过：四个平台常规包构建、签名和汇总验签成功；macOS arm64 / x86_64、Linux x86_64、Windows x86_64 的 RAR 包均构建并检查通过，Windows RAR 安装 / 卸载与关联冒烟通过。`release-dry-run-bundle` 和 `rar-package-validation-bundle` 成功上传；`publish` 按 dry-run 规则跳过，未创建公开 Release。
 - 本机 Finder Sync ad-hoc 验收包不等同正式签名 Release；签名密钥和公证配置仍未用于公开发布。
 - 2026-10-29 最新 Fuzz 手动 run [40961694769](https://github.com/yuhuotech/rustzip/actions/runs/40961694769) 在提交 `70addea` 上四个 target 均通过并保存 corpus cache：ZIP recovery 743,952 次、CHM 34,172 次、bzip2 8,454 次、RAR 187,945 次，无 crash。每日 schedule 在 03:23 UTC；该次 run 在下次触发时间前结束。
 

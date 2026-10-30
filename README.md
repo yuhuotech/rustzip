@@ -211,7 +211,7 @@ RZ_SHOT_DIR=/某个文件夹 cargo run --release -p rustzip-gui --example screen
 | 发布工具（生成签名密钥、给安装包签名、生成 `update.json`） | 已完成（`rz-release`） |
 | 桌面应用 `rustzip`（GPUI Kit） | macOS Metal 渲染与 Ubuntu 26.04 GNOME Wayland / Xvfb 启动通过；Ubuntu 和 macOS 的工作区测试通过；Windows 原生 GUI 尚未验收。侧栏工具范围见 `docs/sidebar-implementation.md` |
 | 多语言界面 | 十种语言、378 个资源键已完成；系统语言识别、菜单切换和侧栏布局在 macOS / Ubuntu 26.04 通过；Windows 语言 API、屏幕阅读器和阿拉伯语 RTL 整页布局待设备验收 |
-| 应用图标与打包 | macOS `.app` / DMG 已签名并启动，尚未公证；Ubuntu x86_64 Linux tarball 构建、隔离安装和卸载通过；Windows 常规包 runner 安装 / 卸载冒烟通过。RAR 包的 Windows 安装日志路径已修复，等待 runner 复测；正式 Release 尚未运行 |
+| 应用图标与打包 | macOS arm64 / x86_64、Windows x86_64 和 Linux x86_64 常规包 dry-run 构建及验签通过；RAR 四目标测试包验证通过，含 Windows 安装 / 卸载冒烟。macOS 尚未公证；公开 Release 尚未运行 |
 | 文件关联与右键菜单 | macOS Finder Sync 右键菜单已接入并在 macOS 27.0.1 实际点击：压缩打开创建窗口，解压后文件哈希一致；安装后需在系统设置启用 Finder 扩展，正式签名 / 公证包仍待验收，Quick Look 未做。Nautilus 50.2.2 的 Scripts 菜单、压缩入口和逐字节解压在 Ubuntu 26.04 / Xvfb 验收；Dolphin / Nemo 真实桌面点击仍待验收；Windows 注册表入口未实机验收 |
 | 7z 分块并行解压 | 已接入独立固实块调度，支持选择性解压和加密；线程数受解码器字典估算及内存预算限制，其他编码方法回退顺序解压；更大样本和跨平台验收待完成 |
 | bzip2 多线程压缩 / 解压 | 单文件及 tar.bz2 按数据块并行压缩；bzip2 单流和串接 member 并行解压；线程数按内存预算估算，预算不足时顺序回退 |
