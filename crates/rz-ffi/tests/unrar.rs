@@ -28,6 +28,32 @@ fn callback_refuses_a_chunk_that_would_cross_the_output_limit() {
 }
 
 #[test]
+fn callback_accepts_output_at_the_exact_limit() {
+    let dir = archive();
+    let mut reader = Reader::open_for_processing(&dir.path().join("sample.rar"), None).unwrap();
+    let entry = reader.next_entry().unwrap().unwrap();
+    let mut output = Vec::new();
+
+    let decoded = reader
+        .extract_current_to(&mut output, entry.size, &|| false)
+        .unwrap();
+
+    assert_eq!(decoded, entry.size);
+    assert_eq!(output.len() as u64, entry.size);
+}
+
+#[test]
+fn test_callback_enforces_the_limit_without_a_writer() {
+    let dir = archive();
+    let mut reader = Reader::open_for_processing(&dir.path().join("sample.rar"), None).unwrap();
+    assert!(reader.next_entry().unwrap().is_some());
+
+    let result = reader.test_current(1, &|| false);
+
+    assert!(matches!(result, Err(Error::OutputLimit)));
+}
+
+#[test]
 fn callback_can_cancel_native_decompression() {
     let dir = archive();
     let mut reader = Reader::open_for_processing(&dir.path().join("sample.rar"), None).unwrap();

@@ -328,6 +328,9 @@ theme_light	밝게
 theme_dark	어둡게
 settings_accent	강조 색상
 settings_conflict	같은 파일이 있을 때
+settings_filename_encoding	ZIP 파일 이름 인코딩
+settings_filename_encoding_hint	기본값은 자동 감지입니다. 이름이 깨져 보이면 인코딩을 선택한 뒤 압축 파일을 닫고 다시 여세요.
+encoding_auto	자동 감지
 settings_keep_both	둘 다 유지
 settings_skip	건너뛰기
 settings_replace	바꾸기

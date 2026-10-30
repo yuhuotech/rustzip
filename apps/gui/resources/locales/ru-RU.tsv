@@ -328,6 +328,9 @@ theme_light	Светлая
 theme_dark	Тёмная
 settings_accent	Цвет акцента
 settings_conflict	Если файл уже существует
+settings_filename_encoding	Кодировка имён ZIP
+settings_filename_encoding_hint	Автоопределение включено; если имена отображаются неверно, выберите кодировку и закройте и снова откройте архив.
+encoding_auto	Автоопределение
 settings_keep_both	Сохранить оба
 settings_skip	Пропустить
 settings_replace	Заменить

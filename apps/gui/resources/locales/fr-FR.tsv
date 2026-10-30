@@ -328,6 +328,9 @@ theme_light	Clair
 theme_dark	Sombre
 settings_accent	Couleur d’accentuation
 settings_conflict	Lorsqu’un fichier existe déjà
+settings_filename_encoding	Encodage des noms ZIP
+settings_filename_encoding_hint	Détection automatique ; choisissez un encodage si les noms s’affichent mal, puis fermez et rouvrez l’archive.
+encoding_auto	Automatique
 settings_keep_both	Conserver les deux
 settings_skip	Ignorer
 settings_replace	Remplacer

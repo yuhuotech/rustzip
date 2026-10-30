@@ -327,6 +327,9 @@ theme_light	浅色	Light
 theme_dark	深色	Dark
 settings_accent	主色	Accent colour
 settings_conflict	文件已存在时	When a file already exists
+settings_filename_encoding	ZIP 文件名编码	ZIP filename encoding
+settings_filename_encoding_hint	默认自动识别；文件名显示异常时可手动选择，关闭并重新打开压缩包后生效。	Guess automatically; choose an encoding for garbled names, then close and reopen the archive.
+encoding_auto	自动识别	Automatic
 settings_keep_both	保留两者	Keep both
 settings_skip	跳过	Skip
 settings_replace	覆盖	Replace

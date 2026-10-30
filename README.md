@@ -60,7 +60,7 @@ RustZIP 是一个用 Rust 开发的压缩管理软件，支持 Windows、macOS �
 - **同名从不失败**：解压遇到同名文件或文件夹，已有的不动，新的自动叫 `名称 (1)`、`名称 (2)`；压缩、转换的输出名被占用时同样处理。
 - **智能解压**：压缩包有多个顶层项时自动建同名文件夹，不把文件散落到当前目录。
 - **完成后定位结果**：解压完成后在文件管理器中打开并选中刚解出的内容。
-- **中日韩文件名**：ZIP 自动识别 GBK / Shift-JIS / EUC-KR 等编码，也可手动指定。
+- **中日韩文件名**：ZIP 自动识别 GBK / Shift-JIS / EUC-KR 等编码；设置中也可选择自动、UTF-8、GBK、Shift-JIS、EUC-KR、Big5 或 Windows-1252。更改编码后关闭并重新打开压缩包生效。
 - **压缩包内操作**：添加、删除、重命名、选择性解压、预览；改动先在旁边重新打包并校验，通过后才替换，失败原包不动。
 - **格式转换与修复**：流式转换为 ZIP / 7z / tar 系八种格式；ZIP / 7z 尽力抢救可读条目并报告跳过项。
 - **任务队列与任务记录**：并发、暂停 / 继续 / 取消、速度与剩余时间；结束的任务进入「任务记录」并保存在本地，菜单上有进行中、失败、完成的角标。
@@ -211,7 +211,7 @@ RZ_SHOT_DIR=/某个文件夹 cargo run --release -p rustzip-gui --example screen
 | 匿名安装统计（激活 + 每日心跳，可关闭） | 客户端已完成；接收服务见 [`web/`](web/) 和 [`web/README.md`](web/README.md)，发布前设置 `RZ_STATS_URL` |
 | 发布工具（生成签名密钥、给安装包签名、生成 `update.json`） | 已完成（`rz-release`） |
 | 桌面应用 `rustzip`（GPUI Kit） | macOS Metal 渲染与 Ubuntu 26.04 GNOME Wayland / Xvfb 启动通过；Ubuntu 和 macOS 的工作区测试通过；Windows 原生 GUI 尚未验收。侧栏工具范围见 `docs/sidebar-implementation.md` |
-| 多语言界面 | 十种语言、378 个资源键已完成；系统语言识别、菜单切换和侧栏布局在 macOS / Ubuntu 26.04 通过；Windows 语言 API、屏幕阅读器和阿拉伯语 RTL 整页布局待设备验收 |
+| 多语言界面 | 十种语言、381 个资源键已完成；系统语言识别、菜单切换和侧栏布局在 macOS / Ubuntu 26.04 通过；Windows 语言 API、屏幕阅读器和阿拉伯语 RTL 整页布局待设备验收 |
 | 应用图标与打包 | macOS arm64 / x86_64、Windows x86_64 和 Linux x86_64 常规包 dry-run 构建及验签通过；RAR 四目标测试包验证通过，含 Windows 安装 / 卸载冒烟。macOS 尚未公证；公开 Release 尚未运行 |
 | 文件关联与右键菜单 | macOS Finder Sync 右键菜单已接入并在 macOS 27.0.1 实际点击：压缩打开创建窗口，解压后文件哈希一致；ZIP Quick Look 视图扩展的 provider 与 WebKit 页面加载已由 `qlmanage` 调用确认，空格键可见内容仍待 UI 验收。安装后需在系统设置启用 Finder Sync 扩展，正式签名 / 公证包仍待验收。Nautilus 50.2.2 菜单在 Ubuntu 26.04 / Xvfb 验收；Dolphin / Nemo 实际点击待验收；Windows 注册表入口未实机验收 |
 | 7z 分块并行解压 | 已接入独立固实块调度，支持选择性解压和加密；线程数受解码器字典估算及内存预算限制，其他编码方法回退顺序解压；更大样本和跨平台验收待完成 |

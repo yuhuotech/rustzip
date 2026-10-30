@@ -14,7 +14,7 @@
 - **图片预览解码边界**：在受支持图像解码前于后台读取文件头，限制 16,777,216 像素，并保留 8 MiB 压缩字节上限；损坏、未知和过大图像继续显示类型卡片。本机完整 GUI 测试、Clippy 通过；GitHub CI [40935152907](https://github.com/yuhuotech/rustzip/actions/runs/40935152907) 七个 job 全部通过。
 - **RAR all-features GUI 矩阵**：GUI CI 对 Windows、macOS、Ubuntu/Xvfb 运行 all-features Clippy / 测试；[40939090908](https://github.com/yuhuotech/rustzip/actions/runs/40939090908) 七个 job 全绿，包含 RAR 安全预览和图片尺寸检查。
 - **fuzz**：新增 bzip2、RAR fuzz target 和 bzip2 seed。nightly ASan 对 bzip2、CHM、RAR、ZIP recovery 分别运行约 15 秒，约 11,000、21,000、67,000、91,000 次变异，未发现崩溃。短时结果不替代持续 fuzz runner。
-- **持续 fuzz runner**：`.github/workflows/fuzz.yml` 设为每日运行五个 nightly ASan target，最多同时跑两个；手动运行时每 target 60 秒，定时运行每 target 180 秒；保留 14 天崩溃 artifact，并按 target 缓存 corpus。`fuzz/seeds/` 保存 ZIP、bzip2、CHM 和 RAR seeds；NSIS seed 由仓库脚本生成。首三轮 run [40907566477](https://github.com/yuhuotech/rustzip/actions/runs/40907566477)、[40908353403](https://github.com/yuhuotech/rustzip/actions/runs/40908353403)、[40909630152](https://github.com/yuhuotech/rustzip/actions/runs/40909630152) 逐步发现并修复 nightly rustc、原生库和 Linux RAR 路径问题。当前代码提交 `171174b` 的手动 run [41010338879](https://github.com/yuhuotech/rustzip/actions/runs/41010338879) 五个 target 全部成功并保存 corpus cache：ZIP recovery / CHM / bzip2 / RAR / NSIS 分别运行 315,249 / 60,435 / 8,012 / 187,640 / 3,287,482 次，无 crash artifact。03:23 与 05:53 UTC schedule 均未触发；07:37 UTC schedule 也未生成 run。该次 cron 更新推送后四分钟即到触发时间，现调整为每日 09:37 UTC，并在更新推送后检查实际 schedule 运行。
+- **持续 fuzz runner**：`.github/workflows/fuzz.yml` 设为每日运行五个 nightly ASan target，最多同时跑两个；手动运行时每 target 60 秒，定时运行每 target 180 秒；保留 14 天崩溃 artifact，并按 target 缓存 corpus。`fuzz/seeds/` 保存 ZIP、bzip2、CHM 和 RAR seeds；NSIS seed 由仓库脚本生成。首三轮 run [40907566477](https://github.com/yuhuotech/rustzip/actions/runs/40907566477)、[40908353403](https://github.com/yuhuotech/rustzip/actions/runs/40908353403)、[40909630152](https://github.com/yuhuotech/rustzip/actions/runs/40909630152) 逐步发现并修复 nightly rustc、原生库和 Linux RAR 路径问题。提交 `171174b` 的 run [41010338879](https://github.com/yuhuotech/rustzip/actions/runs/41010338879) 五目标均通过；之后 `8acf65e` 的 run [41023957604](https://github.com/yuhuotech/rustzip/actions/runs/41023957604) 又完成 ZIP recovery / CHM / NSIS / RAR / bzip2 五目标，分别运行 287,292 / 66,874 / 1,674,414 / 118,009 / 5,041 次并保存 corpus cache，无 crash artifact。03:23、05:53 与 07:37 UTC schedule 均未生成 run；当前每日 09:37 UTC，等待推送后的真实 schedule 证据。
 
 ## 本机验证
 
@@ -28,16 +28,17 @@
 - 上述依赖审计记录来自本阶段较早的检查。最终改动只将已有传递依赖 `crc32fast` 加为直接依赖；本次环境没有安装 `cargo-deny` 可执行文件，未能重跑依赖审计。该版本的 Cargo.toml 声明 `MIT OR Apache-2.0`，符合项目许可白名单。
 - 本机 nightly ASan 下四个 fuzz target 均构建成功；reviewed seed 各运行 5 秒，ZIP recovery / CHM / bzip2 / RAR 分别约 29,605 / 7,995 / 4,462 / 20,552 次变异，未发现崩溃。`actionlint` 检查 `.github/workflows/fuzz.yml` 通过；GitHub run [40912070562](https://github.com/yuhuotech/rustzip/actions/runs/40912070562) 四个 target 均通过并保存 corpus cache。
 - GitHub 手动 fuzz run [41010338879](https://github.com/yuhuotech/rustzip/actions/runs/41010338879) 对 `171174b` 的五个 target 均成功并保存 corpus cache：ZIP recovery 315,249 次、CHM 60,435 次、bzip2 8,012 次、RAR 187,640 次、NSIS 3,287,482 次；无 crash artifact。其后 05:53、07:37 UTC schedule 均无 run；当前定时为 09:37 UTC，等待这次重新注册后的 schedule 证据。
+- GitHub 手动 fuzz run [41023957604](https://github.com/yuhuotech/rustzip/actions/runs/41023957604) 在 `8acf65e` 上五个 target 全部成功并保存 corpus cache：ZIP recovery 287,292 次、CHM 66,874 次、NSIS 1,674,414 次、RAR 118,009 次、bzip2 5,041 次；各 job 成功且没有 crash artifact。
 - `cargo test -p rz-formats --test zip_parallel --all-features` 通过 6 项；36 MiB CJK 名称、重复块伪随机内容分块往返通过本机 `unzip -t`。引擎 40 MiB 文件流式解压和取消清理用例通过；源在第二块后失败时 worker 正常退出。
 - `cargo test -p rz-app --lib zip_copy_edit_preserves_archive_and_entry_comments_and_extra_fields` 通过；验证删除和重命名后的归档注释、文件注释及自定义 extra field。
 - `RZ_BENCH_MB=8 cargo bench -p rz-engine --bench throughput` 全矩阵完成并校验输出；ZIP 单条目基准以 BLAKE3 校验 40 / 64 / 128 MiB 样本，每尺寸每设置 3 轮。详细环境和中位数见[基准记录](benchmarks/2026-10-29-zip-large-deflate.md)。
-- 2026-10-30 RAR 详情预览改为单条目有界内存读取，继续遵守 `ArchiveReader::open` 64 MiB 兼容上限、`max_total`、声明大小、压缩比和取消检查；通用选择性提取仍使用临时文件以保持大条目流式。新增回归验证输出上限和取消。`cargo fmt --all --check`、全工作区 all-features Clippy、全工作区 all-features 测试通过；三项依赖真实钥匙串或非 root Unix 用户的用例按环境条件忽略。最新三平台 CI 见[第二阶段验收](phase-2-platform-acceptance.md)。
+- 2026-10-30 本轮在锁定 Rust 1.96.0 下完成验证：`cargo fmt --all -- --check`、`cargo clippy --workspace --all-targets --all-features -- -D warnings`、`cargo test --workspace --all-features` 均通过。GUI 编码设置持久化回归、RAR FFI 回调 4 项、RAR 引擎 8 项及全工作区测试通过；4 项真实钥匙串或非 root Unix 用例按环境条件忽略。Clippy 仍提示第三方 `block v0.1.6` future-incompatibility。
 
 ## 后续仍需完成
 
 - ZIP 9.1.3 的 8 MiB 编辑对照基准已运行；仍需多尺寸、多次采样。最新三平台 CI [40926953354](https://github.com/yuhuotech/rustzip/actions/runs/40926953354) 六个 job 全部通过；真实签名 Release 和系统交互验收仍待完成。
 - ZIP 大条目分块 Deflate 已接入；本机 40 / 64 / 128 MiB × 3 轮基准通过内容校验，仍需 Windows / macOS 外部工具矩阵和其他文件类型性能样本。合格 ZIP 编辑快路径的注释和扩展字段保真见 D42；真正原地增量编辑仍需先处理 D11 的崩溃保全边界。
-- 持续 fuzz 已在 GitHub Actions 手动运行五个 target 并保存五份 corpus cache；03:23、05:53、07:37 UTC schedule 均无 run，现调整为 09:37 UTC 并等待验证；未来 crash artifact 流程尚未由真实 crash 验收。
+- 持续 fuzz 已在 GitHub Actions 手动运行五个 target 并保存五份 corpus cache；最新五 target 运行见 [41023957604](https://github.com/yuhuotech/rustzip/actions/runs/41023957604)。03:23、05:53、07:37 UTC schedule 均无 run；当前定时 09:37 UTC，推送后仍待验证实际 schedule 事件。未来 crash artifact 流程尚未由真实 crash 验收。
 - WIM / DMG 仍只有签名识别；NSIS 仅有受限 FirstHeader 识别。三种格式的浏览 / 测试 / 提取 reader 仍需通过 D37。
 - PDF / 音频 / 视频应用内预览，关机等高影响完成后动作。
 - 压缩包对比、虚拟挂载、云端按需解压、WASM 插件和 SFX 仍为远期需求。

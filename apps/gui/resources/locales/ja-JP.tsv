@@ -328,6 +328,9 @@ theme_light	ライト
 theme_dark	ダーク
 settings_accent	アクセントカラー
 settings_conflict	ファイルがすでにある場合
+settings_filename_encoding	ZIP 内ファイル名の文字コード
+settings_filename_encoding_hint	自動判定します。文字化けする場合は文字コードを選び、圧縮ファイルを閉じて開き直してください。
+encoding_auto	自動判定
 settings_keep_both	両方を保持
 settings_skip	スキップ
 settings_replace	置き換え

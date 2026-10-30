@@ -328,6 +328,9 @@ theme_light	Claro
 theme_dark	Escuro
 settings_accent	Cor de destaque
 settings_conflict	Quando um arquivo já existe
+settings_filename_encoding	Codificação dos nomes ZIP
+settings_filename_encoding_hint	Detectar automaticamente; se os nomes aparecerem incorretos, escolha uma codificação e feche e reabra o arquivo.
+encoding_auto	Automática
 settings_keep_both	Manter ambos
 settings_skip	Ignorar
 settings_replace	Substituir

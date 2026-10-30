@@ -2361,6 +2361,32 @@ fn settings_switch_responds_to_pointer_and_keyboard(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn filename_encoding_can_be_changed_and_is_saved(cx: &mut TestAppContext) {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("cfg/settings.json");
+    let (handle, view) = open_window(cx, Some(path.clone()));
+    with_view(cx, handle, &view, |v, _, cx| v.open_settings(cx));
+
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.click("filename-encoding-picker", cx);
+        window.within("popup-menu").click(2usize, cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update(|cx| assert_eq!(view.read(cx).settings.name_encoding, "GBK"));
+    assert_eq!(Settings::load(&path).name_encoding, "GBK");
+
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.click("filename-encoding-picker", cx);
+        window.within("popup-menu").click(0usize, cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update(|cx| assert_eq!(view.read(cx).settings.name_encoding, "auto"));
+    assert_eq!(Settings::load(&path).name_encoding, "auto");
+}
+
+#[gpui_kit::test]
 fn interface_language_can_be_changed_and_is_saved(cx: &mut TestAppContext) {
     let tmp = tempfile::tempdir().unwrap();
     let path = tmp.path().join("cfg/settings.json");

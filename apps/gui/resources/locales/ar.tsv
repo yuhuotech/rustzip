@@ -328,6 +328,9 @@ theme_light	فاتح
 theme_dark	داكن
 settings_accent	لون التمييز
 settings_conflict	عند وجود ملف مسبقًا
+settings_filename_encoding	ترميز أسماء ZIP
+settings_filename_encoding_hint	يتم الاكتشاف تلقائيًا؛ اختر ترميزًا إذا ظهرت الأسماء بشكل غير صحيح، ثم أغلق الأرشيف وأعد فتحه.
+encoding_auto	اكتشاف تلقائي
 settings_keep_both	الاحتفاظ بكليهما
 settings_skip	تخطي
 settings_replace	استبدال

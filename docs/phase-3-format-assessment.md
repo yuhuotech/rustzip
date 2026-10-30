@@ -33,6 +33,13 @@
 - `dpp` 0.6.1 的 MIT pipeline 已默认将分区数据流入匿名临时文件，并提供文件到 writer 的流式 API；但底层 `udif` 打开时仍按 trailer 声明长度把 plist 和整个 data fork 读入 `Vec`，分区 block 解码也按 block map 声明大小分配缓冲区。`DmgReaderOptions` 只有校验和选项，没有元数据 / block / partition 限额或取消 token；匿名临时分区没有磁盘配额，HFS+ / APFS 遍历会收集 `Vec` 且无调用方取消。故新版改善了通常路径的峰值内存，但仍不满足 D37，DMG 暂不接入。依据：[固定上游提交](https://github.com/Dil4rd/dpp/tree/3a73ee28fdab192fcdfbe8edcad7b520867f2417)、[UDIF reader](https://github.com/Dil4rd/dpp/blob/3a73ee28fdab192fcdfbe8edcad7b520867f2417/udif/src/reader.rs)、[pipeline](https://github.com/Dil4rd/dpp/blob/3a73ee28fdab192fcdfbe8edcad7b520867f2417/dpp/src/pipeline.rs)、[APFS reader](https://github.com/Dil4rd/dpp/blob/3a73ee28fdab192fcdfbe8edcad7b520867f2417/apfs/src/lib.rs)。
 - D47 增加 NSIS 的受限内容识别：PE section table 和 FirstHeader 都需结构有效，扫描 overlay 最多 8 MiB，不使用文件声明长度分配；普通 PE 仍为未知格式。全工作区 all-features 测试和 Clippy 通过；本机 nightly ASan 对合成 PE 种子运行 119,304 次无崩溃，GitHub run [41010338879](https://github.com/yuhuotech/rustzip/actions/runs/41010338879) 又运行 3,287,482 次并保存 corpus cache。另用上游实际 NSIS fixture `deflate_nonsolid.exe` 验证 `rz l` 给出专属“不支持读取”错误。该识别器不是 NSIS reader。
 
+### 2026-10-30 补充候选复查
+
+- [`dmg-core` 0.1.5](https://docs.rs/dmg-core/0.1.5/dmg/) 是纯 Rust、提供 `Read + Seek` 的 UDIF 虚拟磁盘 reader；但 `DmgReader::open` 将 trailer 中的 `xml_length` 直接用于分配 plist 缓冲，虽检查区域未越过文件末尾，却没有元数据硬上限或取消接口。压缩块输出有 64 MiB 上限，但仍会按 run 输入长度分配压缩缓冲；它本身也不遍历 HFS+ / APFS 文件系统。故此候选仍不满足 D37。[源码](https://docs.rs/dmg-core/0.1.5/src/dmg/lib.rs.html)
+- [`nsis-rs`](https://github.com/ATRAPSLLC/nsis-rs) 现有 Apache-2.0 许可并覆盖 NSIS 1.x / 2.x / 3.x；其公开入口仍从整份 `&[u8]` 构造 installer，提取文件通过内存数据和解压 `Vec` 暴露，未提供 RustZIP 可驱动的分块取消与流式条目 reader，故不能注册为后端。[上游 API 与文件提取示例](https://github.com/ATRAPSLLC/nsis-rs#quick-start)
+- [`newtua-formats`](https://github.com/new-the-unarchiver/newtua-formats) 新增了纯 Rust NSIS decoder，但整个项目声明 LGPL-3.0-or-later；同时其通用示例先把输入 `read` 成完整 `Vec`，NSIS 2.0+ / 3.x 范围也不覆盖全部既有版本。许可和读取边界均不满足本项目条件。
+- WIM 复查未发现同时具备宽松许可、完整镜像文件遍历、硬资源上限和调用方取消的 reader。既有 `wim-format` / `caddy-archive-core` 依赖关系仍受 LGPL / GPL 许可限制，继续只识别并明确提示不支持。
+
 候选源码核对点：[`dmg-core` trailer 与 XML plist 缓冲](https://docs.rs/crate/dmg-core/0.1.5/source/src/lib.rs)、[`isomage` WIM 元数据范围](https://github.com/JackDanger/isomage/tree/v2.1.0/src/formats)、[`libchm` 上游源码](https://github.com/trypsynth/libchm/tree/927cec11c4cf8165d28731fe1b3e07b40f8ddf5e)、[RustZIP 的局部补丁和上游来源](../vendor/libchm/PATCHES.md)。NSIS [`from_bytes 与解压上限`](https://github.com/ATRAPSLLC/nsis-rs/blob/f20d03c407674dd670787ebcb2fa9e5f0d65a0ad/src/installer/nsisinstaller.rs#L305-L345)、[`固实流预解压`](https://github.com/ATRAPSLLC/nsis-rs/blob/f20d03c407674dd670787ebcb2fa9e5f0d65a0ad/src/installer/nsisinstaller.rs#L607-L660)。
 
 ## 实现与验证

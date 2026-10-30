@@ -3053,6 +3053,59 @@ impl MainView {
             })
     }
 
+    fn filename_encoding_picker(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let configured = self.settings.name_encoding.clone();
+        let choices = [
+            ("auto", Some("encoding_auto")),
+            ("UTF-8", None),
+            ("GBK", None),
+            ("Shift_JIS", None),
+            ("EUC-KR", None),
+            ("Big5", None),
+            ("windows-1252", None),
+        ]
+        .into_iter()
+        .map(|(value, key)| {
+            let label = key
+                .map(|key| self.tool_text(key).to_string())
+                .unwrap_or_else(|| value.to_string());
+            (
+                value.to_string(),
+                label,
+                configured.eq_ignore_ascii_case(value),
+            )
+        })
+        .collect::<Vec<_>>();
+        let current = choices
+            .iter()
+            .find(|(value, _, _)| configured.eq_ignore_ascii_case(value))
+            .map(|(_, label, _)| label.clone())
+            .unwrap_or_else(|| configured.clone());
+        let label = self.tool_text("settings_filename_encoding");
+        let view = cx.entity().downgrade();
+
+        Button::new("filename-encoding-picker")
+            .outline()
+            .small()
+            .label(current)
+            .tooltip(label)
+            .accessibility_label(label)
+            .dropdown_menu(move |mut menu, _, _| {
+                for (value, choice_label, selected) in choices.iter().cloned() {
+                    let item_view = view.clone();
+                    menu = menu.item(PopupMenuItem::new(choice_label).checked(selected).on_click(
+                        move |_, _, app| {
+                            let value = value.clone();
+                            let _ = item_view.update(app, |this, cx| {
+                                this.change_settings(|settings| settings.name_encoding = value, cx);
+                            });
+                        },
+                    ));
+                }
+                menu
+            })
+    }
+
     fn render_empty(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let p = palette(cx);
         v_flex()
@@ -5004,6 +5057,21 @@ impl MainView {
                                 )
                             }),
                         )
+                        .into_any_element(),
+                ))
+                .child(group(
+                    self.tool_text("settings_filename_encoding"),
+                    h_flex()
+                        .gap_3()
+                        .items_center()
+                        .child(
+                            div()
+                                .flex_1()
+                                .text_size(px(12.))
+                                .text_color(p.fg3)
+                                .child(self.tool_text("settings_filename_encoding_hint")),
+                        )
+                        .child(self.filename_encoding_picker(cx))
                         .into_any_element(),
                 ))
                 .child(

@@ -328,6 +328,9 @@ theme_light	Hell
 theme_dark	Dunkel
 settings_accent	Akzentfarbe
 settings_conflict	Wenn eine Datei bereits existiert
+settings_filename_encoding	Zeichencodierung der ZIP-Dateinamen
+settings_filename_encoding_hint	Automatisch erkennen; bei falsch angezeigten Namen eine Codierung auswählen und das Archiv schließen und erneut öffnen.
+encoding_auto	Automatisch
 settings_keep_both	Beide behalten
 settings_skip	Überspringen
 settings_replace	Ersetzen
