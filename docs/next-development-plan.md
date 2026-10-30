@@ -10,6 +10,8 @@ RustZIP 的主要归档与桌面主流程已实现。2026-10-30 增加 macOS Fin
 
 2026-10-30 后续远端验收：Release dry-run [41064921267](https://github.com/yuhuotech/rustzip/actions/runs/41064921267) 的 macOS arm64 / x86_64、Windows、Linux 构建及四平台 RAR 验证均通过；四个平台的构建期 `RZ_STATS_URL` 子进程检查通过，manifest 汇总验签成功，正式发布按 dry-run 规则跳过。Fuzz run [41064921389](https://github.com/yuhuotech/rustzip/actions/runs/41064921389) 的五个格式 target 和受控 crash artifact 上传 smoke 全部通过；本次为手动 run，尚不能证明每日 schedule 已触发。
 
+当前 HEAD `6fd8e65` 的 Release dry-run [41079816983](https://github.com/yuhuotech/rustzip/actions/runs/41079816983) 四平台常规 / RAR 包、Windows RAR 安装冒烟、汇总验签及 artifacts 上传全部通过；Fuzz run [41079856580](https://github.com/yuhuotech/rustzip/actions/runs/41079856580) 的五个 target 与受控 crash artifact smoke 全部通过。GitHub Actions run list 中 2026-10-30 13:37 UTC 没有 `schedule` 事件，定时触发仍待验收。
+
 四个曾经占位的侧栏功能——常用位置、密码本、格式转换、压缩包修复——在当前代码中已经实现，不能继续列为“未开发”。转换与修复的符号链接和损坏数据边界见 [侧栏实现记录](sidebar-implementation.md) 与 [决策 D9](decisions.md#d9-左栏工具的数据安全与恢复边界)。
 
 ## 2. 功能现状
@@ -37,7 +39,7 @@ RustZIP 的主要归档与桌面主流程已实现。2026-10-30 增加 macOS Fin
 | P1 | 持续 fuzz | nightly ASan 工作流覆盖 ZIP recovery、CHM、bzip2、RAR、NSIS。手动 run [41064921389](https://github.com/yuhuotech/rustzip/actions/runs/41064921389) 的五个 target 与受控 crash artifact 上传 smoke 全部通过；受控 sentinel 不是格式崩溃 | 每日 13:37 UTC schedule 尚未观测到自动 run，需等待下一次定时事件 |
 | P1 | 跨平台桌面与打包 | macOS `.app` / DMG arm64 签名与启动通过，尚未公证。Ubuntu 26.04.1 x86_64 的全工作区 all-features 测试与 Clippy 通过（3 项环境条件测试忽略）；Linux tarball 构建、隔离安装 / 卸载、Nautilus 菜单点击通过。真实 Wayland GUI 启动、GNOME Secret Service 唯一标签往返、通知启用投递 / 关闭静默通过。CI [40958398639](https://github.com/yuhuotech/rustzip/actions/runs/40958398639) 的七个 job 全部通过，包括新增对比功能的 GUI、三平台 core 和基准；Windows core 17 分 37 秒、Windows GUI / 安装器 18 分 44 秒。Windows GUI 缓存保存有非致命告警。详细证据见 [第二阶段验收](phase-2-platform-acceptance.md) | Windows 原生输入法 / 渲染 / 钥匙串 / 通知、macOS 公证 / Finder / 通知、Dolphin / Nemo 点击、屏幕阅读器、正式三平台发布流程仍需验收 |
 | P1 | 自动更新与 Release | 有安装包签名校验、更新发现和下载后交给系统安装器的流程；自动化用例覆盖验签后才启动、篡改内容拒绝启动及启动失败提示。提交 `51fffdb` 的 dry-run [41064921267](https://github.com/yuhuotech/rustzip/actions/runs/41064921267) 四平台常规包与 RAR 包构建、各平台构建期统计 URL 检查、manifest 汇总验签全部通过，公开发布按 dry-run 规则跳过 | 正式签名 Release 尚未执行；正式签名 / 公证、三平台更新器交接和真实安装流程仍需验收 |
-| P2 | 压缩包对比 | 已接入 GUI 已打开标签对比和 CLI `rz diff`；按路径 / 类型识别新增、删除和类型变化，同路径同大小普通文件流式计算 BLAKE3；遵守取消、进度、总输出和压缩比限制。已验证 ZIP、固实 7z 与 tar.gz 对比及目录隐式项处理；单包最多 1,000,000 条目，符号链接目标标记未比较 | 扩展外部格式样本和大归档性能采样；验证加密 7z、RAR 和长尾格式输入 |
+| P2 | 压缩包对比 | 已接入 GUI 已打开标签对比和 CLI `rz diff`；按路径 / 类型识别新增、删除和类型变化，同路径同大小普通文件流式计算 BLAKE3；遵守取消、进度、总输出和压缩比限制。ZIP、加密 7z（可分别输入密码）、RAR、CHM、RPM、XAR 与 tar.gz 对比回归通过；单包最多 1,000,000 条目，符号链接目标标记未比较 | 扩展真实外部工具样本、大归档性能采样和跨平台验收 |
 | P2 | 虚拟磁盘挂载、云端按需解压、WASM 插件、自解压包 | 尚未实现，仍属远期需求 | 分别评估平台成本、威胁模型与许可后再立项 |
 
 格式范围的依据：产品规格承诺 LZ4 读写及一组只读长尾格式；当前识别枚举已包含 ZIP、tar、gzip、7z、RAR、xz、zstd、bzip2、LZ4、ISO 9660、CAB、CPIO、AR、LHA/LZH、XAR、CHM、WIM、DMG 和 NSIS。CHM 可读；WIM / DMG 仅识别并明确不支持；NSIS 只识别有效 PE overlay FirstHeader，仍不读取。RAR 仍只通过可选 `unrar` 后端只读。

@@ -314,6 +314,7 @@
 - 遵守调用方压缩比与总解压大小设置、任务取消和进度回调；每个归档最多接受 1,000,000 个枚举条目。比较不写临时文件或提取数据。
 - `ArchiveReader` 不暴露符号链接目标，因此匹配的符号链接结果必须标记为“未比较”，不能报告为内容相同。
 - GUI 仅从已打开的压缩包标签中选取另一包；CLI `rz diff` 接受共用密码 `-p` 或独立的 `--left-password` / `--right-password`。任务历史只保存比较类型、文件名和汇总，不持久化差异清单或完整路径。
+- 2026-10-30 回归覆盖加密 7z 的左右独立密码、RAR、CHM、RPM、XAR，以及相同内容的跨格式比较；定向 app 和 CLI 测试通过。该 fixture 覆盖不替代大型真实归档性能采样或跨平台验收。
 
 ## D45 macOS Finder 右键菜单
 
@@ -349,3 +350,10 @@
 - 候选密码只从用户主动保存的系统钥匙串 / 密码本读取；每个候选仅验证一个最小的加密普通文件，最大读取 64 MiB。7z reader 不提供逐条目加密标记，因此只对一个 64 MiB 内的普通文件做有界试读；没有可验证的文件时不声称找到密码。所有失败后仍要求用户手动输入。
 - 搜索在后台执行：未完成的归档打开搜索会随导航取消；任务搜索可从任务行停止，关闭“记住密码”或清空密码本也会取消。候选内容使用 `Zeroizing`，不写日志。密码本读取失败需提示钥匙串错误，同时保留手动输入路径。
 - 此实现补齐 `product.md` 中“常用密码自动尝试”要求，不改变 D8 的归档文件名标签保存规则、默认关闭和系统钥匙串存储。
+
+## D49 PDF 预览的 macOS 资源上限验收门槛
+
+- 评估候选 `hayro` 0.7.1（Apache-2.0 OR MIT，MSRV 1.92）能够渲染第一页 PNG，但上游仍标记为实验性、持续开发中。依据：[上游项目与许可](https://github.com/LaurenzV/hayro)、[0.7.1 crate manifest](https://docs.rs/crate/hayro/0.7.1/source/Cargo.toml)。
+- 2026-10-30 在 macOS 27.0.1 子进程中实际调用 `setrlimit`，`RLIMIT_AS`、`RLIMIT_RSS` 和 `RLIMIT_DATA` 均返回 `EINVAL`；本机 `man 2 setrlimit` 未列出可用的地址空间上限。XNU 当前头文件把 `RLIMIT_RSS` 定义为 `RLIMIT_AS` 别名，但这没有改变本机 syscall 的拒绝结果。依据：[Apple setrlimit 手册](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/setrlimit.2.html)、[XNU resource.h](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/sys/resource.h)。
+- Windows Job Object 和 Linux `RLIMIT_AS` 可提供进程内存限制，但仅有两个平台可用不满足 RustZIP 的跨平台预览承诺。父进程轮询 RSS 也不能替代硬上限；在 macOS 有可验证的硬限制或 renderer 自身具有累计解码预算前，PDF 继续由系统程序打开。
+- 本次评估未把 `hayro` 或进程限制依赖加入产品，也未注册 PDF renderer。加密 PDF、坏 xref、嵌套炸弹和像素上限仍需同时满足 D30 后再实现。

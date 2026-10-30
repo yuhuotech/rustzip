@@ -114,6 +114,86 @@ fn diff_accepts_different_archive_passwords_without_printing_them() {
 }
 
 #[test]
+fn diff_accepts_distinct_passwords_for_encrypted_7z_archives() {
+    let tmp = tempfile::tempdir().unwrap();
+    let left_source = tmp.path().join("left/data");
+    let right_source = tmp.path().join("right/data");
+    fs::create_dir_all(&left_source).unwrap();
+    fs::create_dir_all(&right_source).unwrap();
+    fs::write(left_source.join("same.txt"), b"same").unwrap();
+    fs::write(right_source.join("same.txt"), b"same").unwrap();
+    let left_password = password_file(tmp.path(), "left-7z-password", "left-7z-secret");
+    let right_password = password_file(tmp.path(), "right-7z-password", "right-7z-secret");
+    let left = tmp.path().join("left.7z");
+    let right = tmp.path().join("right.7z");
+
+    for (archive, source, password) in [
+        (&left, &left_source, &left_password),
+        (&right, &right_source, &right_password),
+    ] {
+        let output = rz(&["a", p(archive), p(source), "-p", password]);
+        assert!(output.status.success(), "{}", s(&output).1);
+    }
+
+    let output = rz(&[
+        "diff",
+        p(&left),
+        p(&right),
+        "--left-password",
+        &left_password,
+        "--right-password",
+        &right_password,
+    ]);
+    let (stdout, stderr) = s(&output);
+    assert!(output.status.success(), "{stderr}");
+    assert!(stdout.contains("0 added, 0 removed, 0 changed"), "{stdout}");
+    assert!(!stdout.contains("left-7z-secret"));
+    assert!(!stdout.contains("right-7z-secret"));
+    assert!(!stderr.contains("left-7z-secret"));
+    assert!(!stderr.contains("right-7z-secret"));
+}
+
+#[cfg(feature = "rar")]
+#[test]
+fn diff_reads_rar_entries_through_the_cli() {
+    let tmp = tempfile::tempdir().unwrap();
+    let left = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../crates/rz-formats/tests/fixtures/container.rar");
+    let right = tmp.path().join("copy.rar");
+    fs::copy(&left, &right).unwrap();
+
+    let output = rz(&["diff", p(&left), p(&right)]);
+    let (stdout, stderr) = s(&output);
+    assert!(output.status.success(), "{stderr}");
+    assert!(stdout.contains("0 added, 0 removed, 0 changed"), "{stdout}");
+}
+
+#[test]
+fn diff_reads_long_tail_archives_through_the_cli() {
+    let tmp = tempfile::tempdir().unwrap();
+    let fixtures =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../crates/rz-formats/tests/fixtures");
+    for name in [
+        "chm_basic.chm",
+        "longtail_rpm_bzip2.rpm",
+        "longtail_rpm_gzip.rpm",
+        "longtail_xar.xar",
+    ] {
+        let left = fixtures.join(name);
+        let right = tmp.path().join(name);
+        fs::copy(&left, &right).unwrap();
+
+        let output = rz(&["diff", p(&left), p(&right)]);
+        let (stdout, stderr) = s(&output);
+        assert!(output.status.success(), "{name}: {stderr}");
+        assert!(
+            stdout.contains("0 added, 0 removed, 0 changed"),
+            "{name}: {stdout}"
+        );
+    }
+}
+
+#[test]
 fn chm_fixture_lists_tests_and_extracts_through_the_cli() {
     let tmp = tempfile::tempdir().unwrap();
     let archive = Path::new(env!("CARGO_MANIFEST_DIR"))

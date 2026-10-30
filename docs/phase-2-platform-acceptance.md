@@ -52,6 +52,11 @@
 - 2026-10-30：Release dry-run [41005419057](https://github.com/yuhuotech/rustzip/actions/runs/41005419057) 对当前 `db0d14e` 成功：macOS arm64 / x86_64、Linux x86_64、Windows x86_64 常规包构建签名通过；四个 RAR 包构建检查通过，Windows RAR 安装 / 关联 / 卸载冒烟通过；汇总 manifest 验签和两个 bundle 上传成功。`publish` 按 dry-run 条件跳过。
 - 2026-10-30：当前 HEAD `67b4c2e` 的 Release dry-run [41012225195](https://github.com/yuhuotech/rustzip/actions/runs/41012225195) 七个 job 全部成功：四平台常规包构建 / 签名、四平台 RAR 包与许可证检查、Windows RAR 安装 / 关联 / 卸载、manifest 汇总验签和两个 bundle 上传通过；`publish` 按 dry-run 条件跳过。
 
+## 最新远端验收
+
+- 2026-10-30：提交 `6fd8e65` 的 Release dry-run [41079816983](https://github.com/yuhuotech/rustzip/actions/runs/41079816983) 成功：四平台常规包与 RAR 包验证、Windows RAR 安装 / 关联 / 卸载冒烟、汇总验签和 artifacts 上传均通过；`publish` 按 dry-run 规则跳过。Fuzz run [41079856580](https://github.com/yuhuotech/rustzip/actions/runs/41079856580) 的五个目标及受控 crash artifact smoke 均通过。
+- Fuzz workflow 每日 13:37 UTC 的 schedule 尚无实际 run 证据；本次 `41079856580` 是手动触发，不能代替定时验收。
+
 ## 未完成的验收
 
 - Windows CI 与安装器自动化验收通过；原生 GUI 的输入法、渲染、钥匙串、通知和人工交互仍待验收。

@@ -462,7 +462,7 @@ mod tests {
     use super::*;
     use std::fs;
     use std::fs::File;
-    use std::io::Write;
+    use std::io::{Read, Write};
     use zip::write::SimpleFileOptions;
 
     fn make_zip(path: &Path, entries: &[(&str, &[u8])]) {
@@ -523,6 +523,69 @@ mod tests {
             .iter()
             .any(|diff| diff.path == "same.txt"));
         assert!(!report.differences.iter().any(|diff| diff.path == "folder"));
+    }
+
+    #[cfg(feature = "rar")]
+    #[test]
+    fn compares_rar_entry_contents_against_a_zip_archive() {
+        let temp = tempfile::tempdir().unwrap();
+        let rar = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../crates/rz-formats/tests/fixtures/container.rar");
+        let mut reader = rz_formats::open(&rar).unwrap();
+        let entries = reader.entries().unwrap();
+        let file = entries
+            .iter()
+            .find(|entry| entry.kind == EntryKind::File)
+            .unwrap();
+        let mut contents = Vec::new();
+        reader
+            .open(file)
+            .unwrap()
+            .read_to_end(&mut contents)
+            .unwrap();
+
+        let zip = temp.path().join("same-content.zip");
+        make_zip(&zip, &[(file.path.as_str(), &contents)]);
+        let report = compare_archives(
+            &rar,
+            &zip,
+            CompareOptions::default(),
+            &CancelToken::new(),
+            &mut rz_core::NoProgress,
+        )
+        .unwrap();
+
+        assert_eq!(report.counts, CompareCounts::default());
+        assert!(report.differences.is_empty());
+        assert!(report.bytes_hashed > 0);
+    }
+
+    #[test]
+    fn compares_long_tail_reader_copies() {
+        let temp = tempfile::tempdir().unwrap();
+        let fixtures =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../crates/rz-formats/tests/fixtures");
+        for name in [
+            "chm_basic.chm",
+            "longtail_rpm_bzip2.rpm",
+            "longtail_rpm_gzip.rpm",
+            "longtail_xar.xar",
+        ] {
+            let left = fixtures.join(name);
+            let right = temp.path().join(name);
+            fs::copy(&left, &right).unwrap();
+            let report = compare_archives(
+                &left,
+                &right,
+                CompareOptions::default(),
+                &CancelToken::new(),
+                &mut rz_core::NoProgress,
+            )
+            .unwrap();
+            assert_eq!(report.counts, CompareCounts::default(), "{name}");
+            assert!(report.differences.is_empty(), "{name}");
+            assert!(report.bytes_hashed > 0, "{name} did not stream any content");
+        }
     }
 
     #[test]
