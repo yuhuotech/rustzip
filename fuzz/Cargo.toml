@@ -17,6 +17,7 @@ members = ["."]
 libfuzzer-sys = "0.4"
 rz-core = { path = "../crates/rz-core" }
 rz-formats = { path = "../crates/rz-formats" }
+hayro = { version = "0.7.1", default-features = false }
 tempfile = "3"
 
 [[bin]]
@@ -51,6 +52,13 @@ bench = false
 [[bin]]
 name = "nsis"
 path = "fuzz_targets/nsis.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "pdf_parser"
+path = "fuzz_targets/pdf_parser.rs"
 test = false
 doc = false
 bench = false

@@ -62,3 +62,4 @@ WIM、DMG、NSIS 后续 reader 仍必须提供：流式 `Read` / 范围读取；
 - 依据 D50，接入 Apache-2.0 OR MIT 的 Hayro 0.7.1，但只放在独立 `rz-pdf-renderer` 子进程中。全局分配器限制同时存活 heap 请求与累计分配，helper 自带 10 秒 watchdog；GUI 父进程还能取消或超时终止 helper。
 - PDF 内容限制为 16 MiB，首屏栅格不超过 16,777,216 像素 / 单边 8,192 像素，PNG 不超过 8 MiB。测试覆盖正常渲染、超大页面缩放、300 MiB Flate 解压炸弹和未关闭输入管道时 helper 自行退出。
 - 安装包需要把 helper 与桌面程序放在同一目录；三平台构建脚本与相关许可证已更新。当前本机安全测试和 Linux 安装脚本冒烟通过，macOS app 包、Windows 安装器及三平台运行时验收仍待完成。
+- 已新增 nightly ASan `pdf_parser` target：仅接受不超过 16 MiB 且以 `%PDF-` 开头的输入，调用 Hayro 解析并检查首个页面的渲染尺寸，不执行页面渲染；由脚本生成最小单页 PDF seed。push 触发与本机 fuzz smoke 的 CI 记录待本次提交后补充。

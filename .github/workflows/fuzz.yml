@@ -1,6 +1,22 @@
 name: Fuzz
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/fuzz.yml"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "fuzz/**"
+      - "apps/pdf-renderer/**"
+      - "apps/gui/src/pdf_preview.rs"
+      - "crates/rz-app/src/preview.rs"
+      - "crates/rz-core/**"
+      - "crates/rz-engine/**"
+      - "crates/rz-ffi/**"
+      - "crates/rz-formats/**"
+      - "vendor/libchm/**"
+      - "vendor/pbz2/**"
   workflow_dispatch:
     inputs:
       verify_crash_artifact:
@@ -43,6 +59,9 @@ jobs:
           - target: nsis
             features: ""
             max_len: 16777216
+          - target: pdf_parser
+            features: ""
+            max_len: 16777216
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/native-archive-deps
@@ -72,6 +91,8 @@ jobs:
         run: |
           if [[ "$FUZZ_TARGET" == "nsis" ]]; then
             python3 fuzz/make_nsis_seed.py "fuzz/corpus/$FUZZ_TARGET/synthetic-pe-overlay"
+          elif [[ "$FUZZ_TARGET" == "pdf_parser" ]]; then
+            python3 fuzz/make_pdf_seed.py "fuzz/corpus/$FUZZ_TARGET/minimal.pdf"
           else
             cp -R "fuzz/seeds/$FUZZ_TARGET/." "fuzz/corpus/$FUZZ_TARGET/"
           fi
