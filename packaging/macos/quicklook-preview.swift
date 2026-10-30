@@ -1,6 +1,8 @@
+import AppKit
 import Foundation
-import QuickLookUI
 import UniformTypeIdentifiers
+import QuickLookUI
+import WebKit
 
 private let maxCentralDirectoryBytes = 16 * 1024 * 1024
 private let maxEntries = 50_000
@@ -215,26 +217,32 @@ struct ZipIndex {
     }
 }
 
-final class PreviewProvider: QLPreviewProvider, QLPreviewingController {
-    func providePreview(for request: QLFilePreviewRequest,
-                        completionHandler: @escaping (QLPreviewReply?, Error?) -> Void) {
-        let reply = QLPreviewReply(
-            dataOfContentType: .html,
-            contentSize: CGSize(width: 860, height: 640)
-        ) { reply in
-            let url = request.fileURL
+final class PreviewController: NSViewController, QLPreviewingController {
+    private var previewWebView: WKWebView!
+
+    override func loadView() {
+        let webView = WKWebView(frame: NSRect(x: 0, y: 0, width: 860, height: 640))
+        webView.autoresizingMask = [.width, .height]
+        previewWebView = webView
+        view = webView
+    }
+
+    func preparePreviewOfFile(at url: URL, completionHandler: @escaping (Error?) -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async {
             let accessed = url.startAccessingSecurityScopedResource()
             defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+            let html: String
             do {
                 let index = try ZipIndex.read(url)
-                reply.title = url.lastPathComponent
-                return Data(render(index, title: url.lastPathComponent).utf8)
+                html = render(index, title: url.lastPathComponent)
             } catch {
-                reply.title = url.lastPathComponent
-                return Data(renderFailure(error, title: url.lastPathComponent).utf8)
+                html = renderFailure(error, title: url.lastPathComponent)
+            }
+            DispatchQueue.main.async {
+                self.previewWebView.loadHTMLString(html, baseURL: nil)
+                completionHandler(nil)
             }
         }
-        completionHandler(reply, nil)
     }
 }
 

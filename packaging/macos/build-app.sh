@@ -83,7 +83,7 @@ plutil -lint "$quicklook_extension/Contents/Info.plist"
 cp -R packaging/macos/quicklook-locales/. "$quicklook_extension/Contents/Resources/"
 xcrun swiftc -application-extension -parse-as-library -O \
     -module-name RustZIPQuickLook -target "$swift_target" -sdk "$sdk" \
-    -framework AppKit -framework QuickLook -framework QuickLookUI \
+    -framework AppKit -framework QuickLook -framework QuickLookUI -framework WebKit \
     -Xlinker -e -Xlinker _NSExtensionMain \
     -o "$quicklook_extension/Contents/MacOS/RustZIPQuickLook" \
     packaging/macos/quicklook-preview.swift

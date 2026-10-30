@@ -201,7 +201,7 @@ RZ_SHOT_DIR=/某个文件夹 cargo run --release -p rustzip-gui --example screen
 | 智能解压 | 已完成（`rz-app`） |
 | 选择性解压（按文件或文件夹，各格式含固实块与并行路径） | 已完成 |
 | 压缩包内添加 / 删除 / 重命名（zip、7z、tar 系列，校验后整体替换） | 已完成（`rz-app::modify`）；符合条件的 ZIP 编辑可复用未改动压缩数据并保留注释和扩展字段，其余情况完整重打包，真正原地增量改写未做 |
-| 预览 | 详情栏可预览受限图片 / UTF-8 文本；macOS Quick Look 可显示 ZIP 目录，最多读取 16 MiB 元数据、解析 50,000 条并展示 200 条，不解压内容。PDF / 音视频仍交给系统程序打开，Finder 空格键实机验收待完成 |
+| 预览 | 详情栏可预览受限图片 / UTF-8 文本；macOS ZIP Quick Look 扩展只读目录元数据（16 MiB / 50,000 条上限，最多展示 200 项），不解压内容。Swift smoke、`qlmanage` provider 调用与 WebKit 页面加载通过，Finder 空格键可见 UI 仍待人工验收；PDF / 音视频交给系统程序 |
 | 格式转换（ZIP / 7z / tar 系八种目标，独立源 / 目标密码，校验后另存） | 已完成，符号链接暂不支持 |
 | ZIP / 7z 修复（尽力抢救可读条目并报告跳过项） | 已完成，严重损坏不保证恢复 |
 | 密码本（系统钥匙串；「记住密码」默认关闭） | 已实现；macOS 和 Ubuntu 已通过隔离测试条目的真实钥匙串读写，Windows 待验收 |
@@ -213,7 +213,7 @@ RZ_SHOT_DIR=/某个文件夹 cargo run --release -p rustzip-gui --example screen
 | 桌面应用 `rustzip`（GPUI Kit） | macOS Metal 渲染与 Ubuntu 26.04 GNOME Wayland / Xvfb 启动通过；Ubuntu 和 macOS 的工作区测试通过；Windows 原生 GUI 尚未验收。侧栏工具范围见 `docs/sidebar-implementation.md` |
 | 多语言界面 | 十种语言、378 个资源键已完成；系统语言识别、菜单切换和侧栏布局在 macOS / Ubuntu 26.04 通过；Windows 语言 API、屏幕阅读器和阿拉伯语 RTL 整页布局待设备验收 |
 | 应用图标与打包 | macOS arm64 / x86_64、Windows x86_64 和 Linux x86_64 常规包 dry-run 构建及验签通过；RAR 四目标测试包验证通过，含 Windows 安装 / 卸载冒烟。macOS 尚未公证；公开 Release 尚未运行 |
-| 文件关联与右键菜单 | macOS Finder Sync 右键菜单已接入并在 macOS 27.0.1 实际点击：压缩打开创建窗口，解压后文件哈希一致；ZIP Quick Look 扩展已构建，空格键显示待实机验收。安装后需在系统设置启用 Finder Sync 扩展，正式签名 / 公证包仍待验收。Nautilus 50.2.2 菜单在 Ubuntu 26.04 / Xvfb 验收；Dolphin / Nemo 实际点击待验收；Windows 注册表入口未实机验收 |
+| 文件关联与右键菜单 | macOS Finder Sync 右键菜单已接入并在 macOS 27.0.1 实际点击：压缩打开创建窗口，解压后文件哈希一致；ZIP Quick Look 视图扩展的 provider 与 WebKit 页面加载已由 `qlmanage` 调用确认，空格键可见内容仍待 UI 验收。安装后需在系统设置启用 Finder Sync 扩展，正式签名 / 公证包仍待验收。Nautilus 50.2.2 菜单在 Ubuntu 26.04 / Xvfb 验收；Dolphin / Nemo 实际点击待验收；Windows 注册表入口未实机验收 |
 | 7z 分块并行解压 | 已接入独立固实块调度，支持选择性解压和加密；线程数受解码器字典估算及内存预算限制，其他编码方法回退顺序解压；更大样本和跨平台验收待完成 |
 | bzip2 多线程压缩 / 解压 | 单文件及 tar.bz2 按数据块并行压缩；bzip2 单流和串接 member 并行解压；线程数按内存预算估算，预算不足时顺序回退 |
 | 大文件分块 Deflate | `.gz` / `.tar.gz` 使用标准串接 gzip member；ZIP 大条目按 900,000 字节分块并行 Deflate，按顺序合并，受内存预算限制；加密 ZIP 和低预算情况顺序回退 |

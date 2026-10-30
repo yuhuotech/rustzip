@@ -326,8 +326,8 @@
 
 ## D46 macOS Quick Look ZIP 目录预览
 
-- `.zip` Quick Look 首版只读取中央目录，并展示路径、条目类型、解压后大小和加密标记；不解压文件内容、不渲染 HTML / 脚本，也不生成缩略图。普通图片 / 文本的应用内预览仍由 RustZIP 详情栏提供。
+- `.zip` Quick Look 首版使用 `NSViewController` 视图式扩展，只读取中央目录并展示路径、条目类型、解压后大小和加密标记；不解压文件内容、不渲染归档 HTML / 脚本，也不生成缩略图。普通图片 / 文本的应用内预览仍由 RustZIP 详情栏提供。
 - ZIP 预览最多读取 16 MiB 中央目录、解析 50,000 个条目并展示前 200 项；支持 ZIP64 目录元数据。分卷 / 多磁盘 ZIP 显示明确的不支持提示。损坏目录或超过限制时显示安全提示。
 - Quick Look 扩展使用 App Sandbox 和只读用户所选文件权限，按系统请求的 URL 读取。条目名必须经 HTML 转义；不得使用网络资源、脚本或解压内容。
 - `.7z`、RAR、tar 系和其他类型暂不注册 Quick Look provider，避免在应用层之外重复引入未验证的解析后端。
-- `packaging/macos/test-quicklook.sh` 的 Swift smoke 覆盖常规 ZIP、ZIP64 EOCD、CJK / 特殊字符名称、HTML 转义、损坏中央目录、多卷输入和 16 MiB 上限。实际 Finder 空格预览与签名 / 公证安装包验收仍待完成。
+- `packaging/macos/test-quicklook.sh` 的 Swift smoke 覆盖常规 ZIP、ZIP64 EOCD、CJK / 特殊字符名称、HTML 转义、损坏中央目录、多卷输入和 16 MiB 上限。macOS 27.0.1 上 `qlmanage -p -x` 启动 Quick Look 扩展，日志确认 WebKit HTML 页面完成加载且无扩展断言；CUA 无法附着 Quick Look 面板，所以 Finder 空格键视觉内容仍待人工验收，签名 / 公证安装包也仍待验收。

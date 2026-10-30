@@ -19,7 +19,7 @@ python3 "$root/packaging/macos/tests/make-quicklook-fixtures.py" \
     "$test_dir/oversized.zip" "$test_dir/multidisk.zip"
 xcrun swiftc -parse-as-library -O -module-name RustZIPQuickLookSmoke \
     -target "${swift_arch}-apple-macosx12.0" -sdk "$sdk" \
-    -framework AppKit -framework QuickLook -framework QuickLookUI \
+    -framework AppKit -framework QuickLook -framework QuickLookUI -framework WebKit \
     -o "$test_dir/quicklook-smoke" \
     "$root/packaging/macos/quicklook-preview.swift" \
     "$root/packaging/macos/tests/quicklook-smoke.swift"

@@ -49,7 +49,7 @@
 ## 未完成的验收
 
 - Windows CI 与安装器自动化验收通过；原生 GUI 的输入法、渲染、钥匙串、通知和人工交互仍待验收。
-- macOS Finder Sync 右键菜单已实机验收；ZIP Quick Look 扩展打包 / 签名已通过，但 Finder 空格键实机验收尚未完成。正式 Developer ID / 公证包的扩展注册、公证、通知横幅投递与权限、屏幕阅读器及真实输入法仍待验收。
+- macOS Finder Sync 右键菜单已实机验收；ZIP Quick Look 视图扩展已打包 / 签名，`qlmanage` 启动 provider 并确认 WebKit 页面加载；CUA 无法附着 Quick Look 面板，Finder 空格键可见内容仍待人工验收。正式 Developer ID / 公证包的扩展注册、公证、通知横幅投递与权限、屏幕阅读器及真实输入法仍待验收。
 - Dolphin / Nemo 的真实桌面点击、Linux 低图形能力设备、三平台百万条真实归档列表仍待验收。
 - 该阶段的默认安装包不启用 RAR。之后 D38 已为 RAR 增加可取消且受 `max_total` 限制的逐块输出；正式发行仍需在三平台验证启用 RAR 的构建、许可证和发行策略，默认包继续关闭 RAR。
 - Release dry-run [40950855468](https://github.com/yuhuotech/rustzip/actions/runs/40950855468) 的汇总验签因 runner 缺少 `libacl` 开发库失败；之后在 `assemble` 加入原生依赖安装 action。修复后的 dry-run [40958424663](https://github.com/yuhuotech/rustzip/actions/runs/40958424663) 四个平台构建、签名和汇总验签通过；下载的 bundle 已确认 `update.json` 中有四个平台资产和对应文件名，正式发布仍未执行。

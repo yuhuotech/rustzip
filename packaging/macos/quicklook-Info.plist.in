@@ -12,8 +12,6 @@
     <key>CFBundleVersion</key><string>@VERSION@</string>
     <key>CFBundleSupportedPlatforms</key><array><string>MacOSX</string></array>
     <key>LSMinimumSystemVersion</key><string>12.0</string>
-    <key>LSUIElement</key><true/>
-    <key>NSPrincipalClass</key><string>NSApplication</string>
     <key>NSExtension</key>
     <dict>
         <key>NSExtensionAttributes</key>
@@ -22,7 +20,7 @@
             <key>QLSupportsSearchableItems</key><false/>
         </dict>
         <key>NSExtensionPointIdentifier</key><string>com.apple.quicklook.preview</string>
-        <key>NSExtensionPrincipalClass</key><string>RustZIPQuickLook.PreviewProvider</string>
+        <key>NSExtensionPrincipalClass</key><string>RustZIPQuickLook.PreviewController</string>
     </dict>
 </dict>
 </plist>

@@ -81,6 +81,9 @@ jobs:
       - name: Test GUI
         if: runner.os != 'Linux'
         run: cargo test -p rustzip-gui --all-features
+      - name: Quick Look ZIP safety smoke (macOS)
+        if: runner.os == 'macOS'
+        run: packaging/macos/test-quicklook.sh
       - name: Windows installer smoke test
         if: runner.os == 'Windows'
         timeout-minutes: 30
