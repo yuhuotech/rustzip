@@ -31,7 +31,7 @@
 - `cargo test -p rz-formats --test zip_parallel --all-features` 通过 6 项；36 MiB CJK 名称、重复块伪随机内容分块往返通过本机 `unzip -t`。引擎 40 MiB 文件流式解压和取消清理用例通过；源在第二块后失败时 worker 正常退出。
 - `cargo test -p rz-app --lib zip_copy_edit_preserves_archive_and_entry_comments_and_extra_fields` 通过；验证删除和重命名后的归档注释、文件注释及自定义 extra field。
 - `RZ_BENCH_MB=8 cargo bench -p rz-engine --bench throughput` 全矩阵完成并校验输出；ZIP 单条目基准以 BLAKE3 校验 40 / 64 / 128 MiB 样本，每尺寸每设置 3 轮。详细环境和中位数见[基准记录](benchmarks/2026-10-29-zip-large-deflate.md)。
-- 2026-10-30 RAR 详情预览改为单条目有界内存读取，继续遵守 `ArchiveReader::open` 64 MiB 兼容上限、`max_total`、声明大小、压缩比和取消检查；通用选择性提取仍使用临时文件以保持大条目流式。`cargo fmt --all --check` 与全工作区 all-features Clippy 通过。本次未运行测试。
+- 2026-10-30 RAR 详情预览改为单条目有界内存读取，继续遵守 `ArchiveReader::open` 64 MiB 兼容上限、`max_total`、声明大小、压缩比和取消检查；通用选择性提取仍使用临时文件以保持大条目流式。新增回归验证输出上限和取消。`cargo fmt --all --check`、全工作区 all-features Clippy、全工作区 all-features 测试通过；三项依赖真实钥匙串或非 root Unix 用户的用例按环境条件忽略。最新三平台 CI 见[第二阶段验收](phase-2-platform-acceptance.md)。
 
 ## 后续仍需完成
 

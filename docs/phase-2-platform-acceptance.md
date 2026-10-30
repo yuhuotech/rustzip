@@ -46,6 +46,7 @@
 - 2026-10-30：Release dry-run [40982574540](https://github.com/yuhuotech/rustzip/actions/runs/40982574540) 四个平台常规包构建、签名与汇总验签全部成功；RAR 包三平台构建 / 检查以及 Windows RAR 安装、关联、卸载冒烟通过。macOS Intel 常规打包在新 runner 成功。公开发布步骤按 dry-run 规则跳过。
 - 2026-10-30：跨平台 CI [40982559242](https://github.com/yuhuotech/rustzip/actions/runs/40982559242) 对 Finder Sync 与安装日志修复提交的七个 job 全部通过，包含 Windows GUI all-features、Windows 普通安装器冒烟、三平台 core default / all-features、macOS / Ubuntu GUI 和基准。
 - 2026-10-30：最新 CI [40994222397](https://github.com/yuhuotech/rustzip/actions/runs/40994222397) 对提交 `0d58852` 的七个 job 全部通过；新增 macOS Quick Look ZIP 安全 smoke 通过，Windows GUI / 安装器、三平台 core 和其余 GUI / 基准均通过。
+- 2026-10-30：CI [41003132351](https://github.com/yuhuotech/rustzip/actions/runs/41003132351) 对提交 `adfa799` 的七个 job 全部通过：Windows / macOS / Ubuntu 核心（含 all-features）、三平台 GUI、Windows 安装器冒烟、macOS Quick Look 安全 smoke 与基准均成功。
 
 ## 未完成的验收
 
