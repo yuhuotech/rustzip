@@ -54,3 +54,10 @@ path = "fuzz_targets/nsis.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "artifact_smoke"
+path = "fuzz_targets/artifact_smoke.rs"
+test = false
+doc = false
+bench = false

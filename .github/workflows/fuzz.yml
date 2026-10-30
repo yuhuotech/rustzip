@@ -2,6 +2,12 @@ name: Fuzz
 
 on:
   workflow_dispatch:
+    inputs:
+      verify_crash_artifact:
+        description: Run the isolated crash-artifact upload smoke in addition to normal fuzz targets.
+        required: true
+        type: boolean
+        default: false
   schedule:
     - cron: "37 11 * * *"
 
@@ -114,3 +120,52 @@ jobs:
       - name: Fail the job after preserving corpus and artifacts
         if: steps.run-fuzz.outcome == 'failure'
         run: exit 1
+
+  crash-artifact-smoke:
+    name: crash artifact / smoke
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.verify_crash_artifact }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/native-archive-deps
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly
+          components: llvm-tools-preview, rust-src
+      - name: Install cargo-fuzz
+        run: cargo install --locked --version "$CARGO_FUZZ_VERSION" cargo-fuzz
+      - name: Select nightly rustc for sanitizer builds
+        shell: bash
+        run: echo "RUSTC=$(rustup which rustc --toolchain nightly)" >> "$GITHUB_ENV"
+      - name: Build sentinel fuzz target
+        run: cargo fuzz build artifact_smoke
+      - name: Trigger the reviewed crash sentinel
+        id: crash
+        continue-on-error: true
+        shell: bash
+        run: |
+          mkdir -p fuzz/corpus/artifact_smoke
+          printf 'rustzip-crash-artifact-smoke-v1' > fuzz/corpus/artifact_smoke/reviewed-sentinel
+          cargo fuzz run artifact_smoke fuzz/corpus/artifact_smoke -- \
+            -runs=1 -timeout=10 -rss_limit_mb=4096
+      - name: Confirm libFuzzer produced a crash artifact
+        if: steps.crash.outcome == 'failure'
+        shell: bash
+        run: |
+          crash_file="$(find fuzz/artifacts/artifact_smoke -type f -name 'crash-*' -print -quit)"
+          test -n "$crash_file"
+          test -s "$crash_file"
+          echo "Captured $crash_file"
+      - name: Reject a missing crash artifact
+        if: steps.crash.outcome != 'failure'
+        run: exit 1
+      - uses: actions/upload-artifact@v4
+        if: steps.crash.outcome == 'failure'
+        with:
+          name: fuzz-crash-artifact-smoke-${{ github.run_id }}
+          path: |
+            fuzz/artifacts/artifact_smoke
+            fuzz/corpus/artifact_smoke
+          if-no-files-found: error
+          retention-days: 14
