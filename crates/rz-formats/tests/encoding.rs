@@ -122,6 +122,27 @@ fn unknown_encoding_labels_are_rejected() {
 }
 
 #[test]
+fn every_gui_encoding_choice_is_supported_by_the_zip_reader() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path().join("gbk.zip");
+    legacy_zip(&p, encoding_rs::GBK, &CHINESE);
+    let mut reader = rz_formats::open(&p).unwrap();
+
+    for label in [
+        "UTF-8",
+        "GBK",
+        "Shift_JIS",
+        "EUC-KR",
+        "Big5",
+        "windows-1252",
+    ] {
+        reader
+            .set_encoding(label)
+            .unwrap_or_else(|error| panic!("GUI encoding choice {label} was rejected: {error}"));
+    }
+}
+
+#[test]
 fn utf8_and_ascii_names_are_never_reinterpreted() {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("utf8.zip");
