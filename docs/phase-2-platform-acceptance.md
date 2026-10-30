@@ -68,3 +68,9 @@
 - 默认安装包仍关闭 RAR。Release dry-run [41012225195](https://github.com/yuhuotech/rustzip/actions/runs/41012225195) 已验证 macOS arm64 / x86_64、Linux、Windows 四个 RAR 测试包及随包许可证，并通过 Windows 安装 / 关联 / 卸载冒烟；正式签名发布及发行策略仍待确认。
 - Release dry-run [40950855468](https://github.com/yuhuotech/rustzip/actions/runs/40950855468) 的汇总验签因 runner 缺少 `libacl` 开发库失败；之后在 `assemble` 加入原生依赖安装 action。修复后的 dry-run [40958424663](https://github.com/yuhuotech/rustzip/actions/runs/40958424663) 四个平台构建、签名和汇总验签通过；下载的 bundle 已确认 `update.json` 中有四个平台资产和对应文件名，正式发布仍未执行。
 - CI [40958398639](https://github.com/yuhuotech/rustzip/actions/runs/40958398639) 对提交 `7ad1791` 的七个 job 全部通过：macOS / Ubuntu / Windows core、三平台 GUI、基准均成功。Windows core job（含 default 与 all-features）耗时 17 分 37 秒；Windows GUI 与安装器冒烟耗时 18 分 44 秒；macOS core 11 分 35 秒，Ubuntu core 7 分 24 秒。Windows GUI job 的缓存保存步骤有非致命失败告警，job 最终仍通过。
+
+## 2026-10-31 媒体预览跨平台回归
+
+- Release dry-run [41124950235](https://github.com/yuhuotech/rustzip/actions/runs/41124950235) 对音频预览提交 `bac5fc8` 的四平台常规包构建、签名 / manifest 验证和 Windows 安装包构建通过，公开发布按 dry-run 规则跳过。
+- CI [41124926982](https://github.com/yuhuotech/rustzip/actions/runs/41124926982) 的其他六个 job 通过；Windows core 的 `helper_scales_huge_page_boxes_before_rasterization` 使 1,000,000×1,000,000 PDF helper 达到既定 10 秒时限。测试样本已改为长边缩放用例，并增加纯函数断言覆盖极大正方形页面的像素缩放；D30 / D50 资源边界保持原值。新提交 runner 复验待完成。
+- Fuzz [41124859136](https://github.com/yuhuotech/rustzip/actions/runs/41124859136) 的其他六个 job 通过；新增 `audio_decoder` target 先后找到零采样率和带伪前缀 WAV，使 Symphonia 0.5.5 / 0.6.1 panic。音频现固定到 Symphonia 0.6.1，拒绝未在文件起始处出现的容器签名，并预检 WAV 采样率 / 声道；两个 crash seed 复放及本机 20 秒 / 287,413 次 ASan fuzz 通过。随后视频 target 找到 MP4 box-parser 无进展超时，加入 16,384 次 read / seek 上限及回归 seed，1,000 次 ASan smoke 通过。新代码远端复验待完成。

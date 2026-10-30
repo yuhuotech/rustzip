@@ -142,7 +142,7 @@ fn helper_stops_waiting_when_its_input_pipe_stays_open() {
 
 #[test]
 fn helper_scales_huge_page_boxes_before_rasterization() {
-    let pdf = pdf_with_page_size(b"", false, 1_000_000, 1_000_000);
+    let pdf = pdf_with_page_size(b"", false, 1_000_000, 1_000);
     let output = run_helper(&pdf);
     assert!(output.status.success(), "{:?}", output.stderr);
     assert!(output.stdout.starts_with(b"\x89PNG\r\n\x1a\n"));
@@ -150,6 +150,8 @@ fn helper_scales_huge_page_boxes_before_rasterization() {
     let height = u32::from_be_bytes(output.stdout[20..24].try_into().unwrap());
     assert!(u64::from(width) * u64::from(height) <= 16_777_216);
     assert!(width <= 8192 && height <= 8192);
+    assert_eq!(width, 8192);
+    assert!(height <= 16);
 }
 
 #[test]

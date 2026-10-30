@@ -10,6 +10,8 @@ use std::path::Path;
 pub const MAX_IMAGE_BYTES: u64 = 8 * 1024 * 1024;
 /// Audio is loaded off-thread only when a small clip is selected for playback.
 pub const MAX_AUDIO_BYTES: u64 = 8 * 1024 * 1024;
+/// A small MP4 clip is sent to an isolated first-frame renderer.
+pub const MAX_VIDEO_BYTES: u64 = 16 * 1024 * 1024;
 /// Text is rendered in the detail panel, so keep both decoding and layout work small.
 pub const MAX_TEXT_BYTES: u64 = 64 * 1024;
 /// PDF input is passed to a memory-limited renderer process, not decoded in the GUI.
@@ -25,6 +27,11 @@ pub fn is_audio_format(name: &str) -> bool {
         extension(name).as_str(),
         "mp3" | "flac" | "ogg" | "oga" | "wav" | "m4a"
     )
+}
+
+/// Whether a file extension belongs to the supported MP4 container preview path.
+pub fn is_video_format(name: &str) -> bool {
+    matches!(extension(name).as_str(), "mp4" | "m4v" | "mov")
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -118,7 +125,7 @@ pub fn type_name(name: &str) -> String {
         "webp" => "WebP 图片",
         "bmp" => "BMP 图片",
         "mp3" | "wav" | "flac" | "aac" | "ogg" | "oga" | "m4a" => "音频",
-        "mp4" | "mov" | "mkv" | "avi" | "webm" => "视频",
+        "mp4" | "m4v" | "mov" | "mkv" | "avi" | "webm" => "视频",
         "zip" | "7z" | "rar" | "tar" | "gz" | "xz" | "zst" | "bz2" | "tgz" => "压缩包",
         "rs" => "Rust 源码",
         "py" => "Python 脚本",
@@ -243,6 +250,10 @@ mod tests {
         assert!(is_audio_format("voice.oga"));
         assert!(!is_audio_format("movie.mp4"));
         assert!(!is_audio_format("fake.mp3.exe"));
+        assert!(is_video_format("clip.MP4"));
+        assert!(is_video_format("clip.mov"));
+        assert!(!is_video_format("clip.mkv"));
+        assert!(!is_video_format("fake.mp4.exe"));
         assert!(!is_text_format("page.html"));
         assert!(!is_text_format("program.exe"));
         assert_eq!(

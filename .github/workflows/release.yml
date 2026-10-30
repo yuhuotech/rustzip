@@ -165,7 +165,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          cargo build --release -p rustzip-gui -p rz-pdf-renderer
+          cargo build --release -p rustzip-gui -p rz-pdf-renderer -p rz-video-renderer
           choco install innosetup -y --no-progress
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=${{ steps.v.outputs.version }}" `
             "/DSourceExe=$PWD\target\release\rustzip.exe" "/DOutDir=$PWD\dist" packaging\windows\rustzip.iss

@@ -36,7 +36,7 @@ $exe = Join-Path $PWD "target\release\rustzip.exe"
 $zipKey = "$classes\.zip"
 $zipBefore = if (Test-Path -LiteralPath $zipKey) { (Get-Item -LiteralPath $zipKey).GetValue("") } else { $null }
 
-$buildArgs = @("build", "--release", "-p", "rustzip-gui", "-p", "rz-pdf-renderer")
+    $buildArgs = @("build", "--release", "-p", "rustzip-gui", "-p", "rz-pdf-renderer", "-p", "rz-video-renderer")
 if ($RarEnabled) { $buildArgs += @("--features", "rustzip-gui/rar") }
 & cargo @buildArgs
 if ($LASTEXITCODE -ne 0) { throw "Windows GUI build failed: $LASTEXITCODE" }
@@ -57,7 +57,7 @@ try {
         if (Test-Path $installLog) { Get-Content $installLog | ForEach-Object { Write-Host $_ } }
         throw "Installer failed: $($process.ExitCode)"
     }
-    $installedFiles = @("rustzip.exe", "rz-pdf-renderer.exe", "licenses\zlib.txt", "licenses\libchm.txt", "licenses\pbz2.txt", "licenses\pbz2-notice.txt", "licenses\pdf-renderer.txt", "licenses\audio-playback.txt", "licenses\rodio-mit.txt", "licenses\rodio-apache-2.0.txt", "licenses\cpal-apache-2.0.txt", "licenses\symphonia-mpl-2.0.txt", "licenses\inno-chinese-translation.txt")
+    $installedFiles = @("rustzip.exe", "rz-pdf-renderer.exe", "rz-video-renderer.exe", "licenses\zlib.txt", "licenses\libchm.txt", "licenses\pbz2.txt", "licenses\pbz2-notice.txt", "licenses\pdf-renderer.txt", "licenses\audio-playback.txt", "licenses\rodio-mit.txt", "licenses\rodio-apache-2.0.txt", "licenses\cpal-apache-2.0.txt", "licenses\symphonia-mpl-2.0.txt", "licenses\video-preview.txt", "licenses\mp4-mit.txt", "licenses\rust-h264-mit.txt", "licenses\rust-h264-apache-2.0.txt", "licenses\inno-chinese-translation.txt")
     if ($RarEnabled) { $installedFiles += "unrar-license.txt" }
     foreach ($file in $installedFiles) {
         if (-not (Test-Path -LiteralPath (Join-Path $install $file))) {
@@ -116,6 +116,9 @@ if (Test-Path -LiteralPath (Join-Path $install "rustzip.exe")) {
 }
 if (Test-Path -LiteralPath (Join-Path $install "rz-pdf-renderer.exe")) {
     throw "PDF renderer survived uninstall"
+}
+if (Test-Path -LiteralPath (Join-Path $install "rz-video-renderer.exe")) {
+    throw "Video renderer survived uninstall"
 }
 $zipOpen = Get-Item -LiteralPath "$classes\.zip\OpenWithProgids" -ErrorAction SilentlyContinue
 if ($null -ne $zipOpen -and $zipOpen.GetValueNames() -contains "RustZIP.Archive") {

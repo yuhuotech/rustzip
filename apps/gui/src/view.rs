@@ -121,6 +121,12 @@ enum AudioPreviewStatus {
     Unavailable,
 }
 
+#[derive(Clone, Copy)]
+enum VideoPreviewStatus {
+    Loading,
+    Unavailable,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Notice {
     Info(String),
@@ -285,6 +291,7 @@ pub struct MainView {
     audio_player: Option<AudioPlayer>,
     audio_playing: Option<AudioKey>,
     audio_generation: u64,
+    video_preview_status: Option<(PathBuf, String, VideoPreviewStatus)>,
     /// The statistics notice was opened from the settings, so it goes back there.
     pub privacy_from_settings: bool,
     pub page: Page,
@@ -471,6 +478,7 @@ impl MainView {
             audio_player: None,
             audio_playing: None,
             audio_generation: 0,
+            video_preview_status: None,
             privacy_from_settings: false,
             page: Page::Archive,
             files_bounds: Rc::default(),
@@ -2045,6 +2053,7 @@ impl MainView {
         self.preview_request = self.preview_request.wrapping_add(1);
         self.pdf_preview_status = None;
         self.audio_preview_status = None;
+        self.video_preview_status = None;
         self.preview_request
     }
 
@@ -2116,6 +2125,7 @@ impl MainView {
         let text_format = rz_app::preview::is_text_format(&row.name);
         let pdf_preview = rz_app::preview::is_pdf_format(&row.name);
         let audio_preview = rz_app::preview::is_audio_format(&row.name);
+        let video_preview = rz_app::preview::is_video_format(&row.name);
         let entry = row.entry.and_then(|ix| a.tree.entries().get(ix).cloned());
         let (Some(entry), RowKind::File) = (entry, row.kind) else {
             self.cancel_preview_request();
@@ -2126,6 +2136,8 @@ impl MainView {
             rz_app::preview::MAX_IMAGE_BYTES
         } else if audio_preview {
             rz_app::preview::MAX_AUDIO_BYTES
+        } else if video_preview {
+            rz_app::preview::MAX_VIDEO_BYTES
         } else if text_format {
             rz_app::preview::MAX_TEXT_BYTES
         } else if pdf_preview {
@@ -2143,6 +2155,9 @@ impl MainView {
             } else if audio_preview {
                 self.audio_preview_status =
                     Some((archive, row.path, AudioPreviewStatus::Unavailable));
+            } else if video_preview {
+                self.video_preview_status =
+                    Some((archive, row.path, VideoPreviewStatus::Unavailable));
             }
             cx.notify();
             return;
@@ -2159,6 +2174,10 @@ impl MainView {
         } else if audio_preview {
             self.audio_preview_status =
                 Some((archive.clone(), path.clone(), AudioPreviewStatus::Loading));
+            cx.notify();
+        } else if video_preview {
+            self.video_preview_status =
+                Some((archive.clone(), path.clone(), VideoPreviewStatus::Loading));
             cx.notify();
         }
 
@@ -2182,6 +2201,8 @@ impl MainView {
                         crate::pdf_preview::render_first_page(&data, &cancel_bg)
                     } else if audio_preview {
                         Ok(data)
+                    } else if video_preview {
+                        crate::video_preview::render_first_frame(&data, &cancel_bg)
                     } else {
                         if image_format.is_some()
                             && !crate::image_preview::dimensions_within_limit(&data)
@@ -2207,6 +2228,7 @@ impl MainView {
                     Err(Error::Cancelled) => {
                         this.pdf_preview_status = None;
                         this.audio_preview_status = None;
+                        this.video_preview_status = None;
                         return;
                     }
                     Err(_) if pdf_preview => {
@@ -2224,11 +2246,20 @@ impl MainView {
                         cx.notify();
                         return;
                     }
+                    Err(_) if video_preview => {
+                        this.video_preview_status = Some((
+                            archive.clone(),
+                            path.clone(),
+                            VideoPreviewStatus::Unavailable,
+                        ));
+                        cx.notify();
+                        return;
+                    }
                     Err(_) => return,
                     Ok(_) => {}
                 }
                 let Ok(data) = data else { return };
-                let display_image_format = if pdf_preview {
+                let display_image_format = if pdf_preview || video_preview {
                     Some(rz_app::preview::ImageFormat::Png)
                 } else {
                     image_format
@@ -2252,6 +2283,7 @@ impl MainView {
                 };
                 this.pdf_preview_status = None;
                 this.audio_preview_status = None;
+                this.video_preview_status = None;
                 this.preview = Some(Preview {
                     archive,
                     path,
@@ -4546,6 +4578,11 @@ impl MainView {
                     .as_ref()
                     .filter(|(archive, path, _)| archive == &a.path && path == &row.path)
                     .map(|(_, _, status)| *status);
+                let video_status = self
+                    .video_preview_status
+                    .as_ref()
+                    .filter(|(archive, path, _)| archive == &a.path && path == &row.path)
+                    .map(|(_, _, status)| *status);
                 let audio_is_playing = self
                     .audio_playing
                     .as_ref()
@@ -4619,6 +4656,20 @@ impl MainView {
                                 let label = match status {
                                     AudioPreviewStatus::Loading => "detail_audio_loading",
                                     AudioPreviewStatus::Unavailable => "detail_audio_unavailable",
+                                };
+                                d.child(
+                                    div()
+                                        .px_3()
+                                        .text_size(px(11.))
+                                        .text_color(p.fg3)
+                                        .text_center()
+                                        .child(self.tool_text(label)),
+                                )
+                            })
+                            .when_some(video_status, |d, status| {
+                                let label = match status {
+                                    VideoPreviewStatus::Loading => "detail_video_rendering",
+                                    VideoPreviewStatus::Unavailable => "detail_video_unavailable",
                                 };
                                 d.child(
                                     div()

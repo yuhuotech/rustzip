@@ -49,6 +49,8 @@ detail_audio_loading	جارٍ تحميل معاينة الصوت…
 detail_audio_unavailable	معاينة الصوت غير متاحة؛ انقر مرتين لفتح الملف في مشغل النظام.
 audio_play	تشغيل الصوت
 audio_stop	إيقاف الصوت
+detail_video_rendering	جارٍ إنشاء معاينة الإطار الأول للفيديو…
+detail_video_unavailable	معاينة الفيديو غير متاحة؛ انقر مرتين لفتح الملف في مشغل النظام.
 task_test_passed	اكتمل {task}: لم تُكتشف مشكلات في {count} عناصر
 task_edit_complete	اكتمل {task}: يحتوي الأرشيف الآن على {count} عناصر
 task_complete_count	اكتمل {task}: {count} ملفات، {size}

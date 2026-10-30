@@ -1,0 +1,14 @@
+[package]
+name = "rz-audio-preview"
+description = "Bounded audio decoding for RustZIP's desktop preview"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+symphonia = { version = "0.6.1", default-features = false, features = ["aac", "flac", "isomp4", "mp3", "ogg", "pcm", "vorbis", "wav"] }
+
+[lints]
+workspace = true

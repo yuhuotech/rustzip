@@ -49,6 +49,8 @@ detail_audio_loading	Carregando prévia de áudio…
 detail_audio_unavailable	A prévia de áudio não está disponível; clique duas vezes para abrir no reprodutor do sistema.
 audio_play	Reproduzir áudio
 audio_stop	Parar áudio
+detail_video_rendering	Renderizando o primeiro quadro do vídeo…
+detail_video_unavailable	A prévia de vídeo não está disponível; clique duas vezes para abrir no reprodutor do sistema.
 task_test_passed	{task} concluída: nenhum problema encontrado em {count} itens
 task_edit_complete	{task} concluída: o arquivo compactado agora tem {count} itens
 task_complete_count	{task} concluída: {count} arquivos, {size}

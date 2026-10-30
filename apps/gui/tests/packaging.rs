@@ -169,6 +169,26 @@ fn audio_playback_licenses_are_in_every_desktop_package() {
 }
 
 #[test]
+fn video_preview_helper_and_licenses_are_in_every_desktop_package() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    for file in [
+        "video-preview.txt",
+        "mp4-mit.txt",
+        "rust-h264-mit.txt",
+        "rust-h264-apache-2.0.txt",
+    ] {
+        assert!(root.join("../../packaging/licenses").join(file).is_file());
+        assert!(MACOS_BUILD.contains("rz-video-renderer"));
+        assert!(MACOS_BUILD.contains(&format!("packaging/licenses/{file}")));
+        assert!(LINUX_TARBALL.contains("rz-video-renderer"));
+        assert!(LINUX_TARBALL.contains(&format!("packaging/licenses/{file}")));
+        assert!(WINDOWS_INSTALLER.contains("rz-video-renderer.exe"));
+        assert!(WINDOWS_INSTALLER.contains(file));
+    }
+    assert!(LINUX_INSTALL.contains("rz-video-renderer"));
+}
+
+#[test]
 fn windows_installer_uses_the_bundled_simplified_chinese_language_file() {
     let language = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../packaging/windows/ChineseSimplified.isl");
@@ -202,6 +222,20 @@ fn windows_installer_includes_the_pdf_renderer_and_all_reader_licenses() {
         "rodio-apache-2.0.txt",
         "cpal-apache-2.0.txt",
         "symphonia-mpl-2.0.txt",
+    ] {
+        assert!(WINDOWS_INSTALLER.contains(name));
+        assert!(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../packaging/licenses")
+                .join(name)
+                .is_file()
+        );
+    }
+    for name in [
+        "video-preview.txt",
+        "mp4-mit.txt",
+        "rust-h264-mit.txt",
+        "rust-h264-apache-2.0.txt",
     ] {
         assert!(WINDOWS_INSTALLER.contains(name));
         assert!(
@@ -261,6 +295,7 @@ fn linux_packaging_keeps_rar_features_and_descriptors_in_sync() {
     fs::create_dir_all(root.join("target/release")).unwrap();
     fs::write(root.join("target/release/rustzip"), "fixture").unwrap();
     fs::write(root.join("target/release/rz-pdf-renderer"), "fixture").unwrap();
+    fs::write(root.join("target/release/rz-video-renderer"), "fixture").unwrap();
     fs::create_dir_all(root.join("fake-bin")).unwrap();
     let cargo = root.join("fake-bin/cargo");
     fs::write(
@@ -306,6 +341,7 @@ fn linux_packaging_keeps_rar_features_and_descriptors_in_sync() {
             enabled
         );
         assert!(arguments.lines().any(|arg| arg == "rz-pdf-renderer"));
+        assert!(arguments.lines().any(|arg| arg == "rz-video-renderer"));
         let archive = fs::read_dir(&output)
             .unwrap()
             .next()
@@ -336,9 +372,14 @@ fn linux_packaging_keeps_rar_features_and_descriptors_in_sync() {
             .path();
         assert!(package.join("install.sh").is_file());
         assert!(package.join("rz-pdf-renderer").is_file());
+        assert!(package.join("rz-video-renderer").is_file());
         assert!(package.join("pdf-renderer-licenses.txt").is_file());
         assert!(package.join("audio-playback-licenses.txt").is_file());
         assert!(package.join("symphonia-mpl-2.0.txt").is_file());
+        assert!(package.join("video-preview-licenses.txt").is_file());
+        assert!(package.join("mp4-mit.txt").is_file());
+        assert!(package.join("rust-h264-mit.txt").is_file());
+        assert!(package.join("rust-h264-apache-2.0.txt").is_file());
         for name in ["rustzip.desktop", "rustzip-extract.nemo_action"] {
             let descriptor = fs::read_to_string(package.join(name)).unwrap();
             assert_eq!(
@@ -382,6 +423,7 @@ fn linux_packaging_keeps_rar_features_and_descriptors_in_sync() {
                 assert!(path.is_file(), "{} was not installed", path.display());
             }
             assert!(prefix.join("bin/rz-pdf-renderer").is_file());
+            assert!(prefix.join("bin/rz-video-renderer").is_file());
             assert!(
                 prefix
                     .join("share/doc/rustzip/pdf-renderer-licenses.txt")
@@ -395,6 +437,18 @@ fn linux_packaging_keeps_rar_features_and_descriptors_in_sync() {
             assert!(
                 prefix
                     .join("share/doc/rustzip/symphonia-mpl-2.0.txt")
+                    .is_file()
+            );
+            assert!(
+                prefix
+                    .join("share/doc/rustzip/video-preview-licenses.txt")
+                    .is_file()
+            );
+            assert!(prefix.join("share/doc/rustzip/mp4-mit.txt").is_file());
+            assert!(prefix.join("share/doc/rustzip/rust-h264-mit.txt").is_file());
+            assert!(
+                prefix
+                    .join("share/doc/rustzip/rust-h264-apache-2.0.txt")
                     .is_file()
             );
 

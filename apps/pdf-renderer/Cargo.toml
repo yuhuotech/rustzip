@@ -9,6 +9,7 @@ publish = false
 
 [dependencies]
 hayro = "0.7.1"
+rz-preview-budget = { path = "../preview-budget" }
 
 [dev-dependencies]
 flate2 = "1.1"

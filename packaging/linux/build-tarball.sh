@@ -21,12 +21,13 @@ set --
 if [ "${RZ_WITH_RAR:-0}" = "1" ]; then
     set -- --features rustzip-gui/rar
 fi
-cargo build --release -p rustzip-gui -p rz-pdf-renderer "$@"
+cargo build --release -p rustzip-gui -p rz-pdf-renderer -p rz-video-renderer "$@"
 
 stage="$(mktemp -d)/$name"
 mkdir -p "$stage/icons"
 cp target/release/rustzip "$stage/"
 cp target/release/rz-pdf-renderer "$stage/"
+cp target/release/rz-video-renderer "$stage/"
 cp packaging/linux/*.desktop packaging/linux/*.nemo_action packaging/linux/rustzip-nautilus-* "$stage/"
 cp packaging/linux/install.sh "$stage/install.sh"
 cp packaging/licenses/libchm.txt "$stage/libchm-license.txt"
@@ -38,6 +39,10 @@ cp packaging/licenses/rodio-mit.txt "$stage/rodio-mit.txt"
 cp packaging/licenses/rodio-apache-2.0.txt "$stage/rodio-apache-2.0.txt"
 cp packaging/licenses/cpal-apache-2.0.txt "$stage/cpal-apache-2.0.txt"
 cp packaging/licenses/symphonia-mpl-2.0.txt "$stage/symphonia-mpl-2.0.txt"
+cp packaging/licenses/video-preview.txt "$stage/video-preview-licenses.txt"
+cp packaging/licenses/mp4-mit.txt "$stage/mp4-mit.txt"
+cp packaging/licenses/rust-h264-mit.txt "$stage/rust-h264-mit.txt"
+cp packaging/licenses/rust-h264-apache-2.0.txt "$stage/rust-h264-apache-2.0.txt"
 if [ "${RZ_WITH_RAR:-0}" = "1" ]; then
     sed 's|MimeType=|MimeType=application/vnd.rar;application/x-rar;|' \
         "$stage/rustzip.desktop" > "$stage/rustzip.desktop.tmp"
@@ -48,7 +53,7 @@ if [ "${RZ_WITH_RAR:-0}" = "1" ]; then
     cp packaging/licenses/unrar.txt "$stage/unrar-license.txt"
 fi
 cp packaging/icons/hicolor/*.png "$stage/icons/"
-chmod +x "$stage/install.sh" "$stage/rustzip" "$stage/rz-pdf-renderer"
+chmod +x "$stage/install.sh" "$stage/rustzip" "$stage/rz-pdf-renderer" "$stage/rz-video-renderer"
 
 mkdir -p "$out"
 tar -C "$(dirname "$stage")" -czf "$out/$name.tar.gz" "$name"

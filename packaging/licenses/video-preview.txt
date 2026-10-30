@@ -1,0 +1,11 @@
+RustZIP video preview dependencies
+==================================
+
+mp4 0.14.0
+Licensed under MIT. The full license text is provided in mp4-mit.txt.
+Source: https://crates.io/crates/mp4/0.14.0
+
+rust_h264 0.5.0
+Licensed under either MIT or Apache-2.0. The full license texts are provided
+in rust-h264-mit.txt and rust-h264-apache-2.0.txt.
+Source: https://crates.io/crates/rust_h264/0.5.0

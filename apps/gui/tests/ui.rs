@@ -262,6 +262,9 @@ fn pictures_text_and_small_audio_are_previewed_in_the_details_panel(cx: &mut Tes
     image::RgbaImage::from_pixel(8, 8, image::Rgba([10, 150, 130, 255]))
         .save(src.join("pic.png"))
         .unwrap();
+    let video_fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../video-renderer/tests/fixtures/small-h264.mp4");
+    fs::copy(video_fixture, src.join("video.mp4")).unwrap();
     let archive = tmp.path().join("p.zip");
     compress(
         &[src],
@@ -285,7 +288,7 @@ fn pictures_text_and_small_audio_are_previewed_in_the_details_panel(cx: &mut Tes
         draw(cx, handle);
     };
 
-    // Rows are note.txt, pic.png, track.wav.
+    // Rows are note.txt, pic.png, track.wav, video.mp4.
     select(cx, 1);
     cx.update(|cx| {
         let pv = view.read(cx).preview.as_ref().expect("a preview");
@@ -314,6 +317,22 @@ fn pictures_text_and_small_audio_are_previewed_in_the_details_panel(cx: &mut Tes
         assert_eq!(pv.path, "pics/track.wav");
         assert!(pv.audio.as_ref().is_some_and(|data| !data.is_empty()));
         assert!(pv.image.is_none());
+        assert!(pv.text.is_none());
+    });
+    select(cx, 3);
+    wait_until(cx, handle, |cx| {
+        cx.update(|cx| {
+            view.read(cx)
+                .preview
+                .as_ref()
+                .is_some_and(|pv| pv.image.is_some() && pv.path == "pics/video.mp4")
+        })
+    });
+    cx.update(|cx| {
+        let pv = view.read(cx).preview.as_ref().expect("video frame preview");
+        assert_eq!(pv.path, "pics/video.mp4");
+        assert!(pv.image.is_some());
+        assert!(pv.audio.is_none());
         assert!(pv.text.is_none());
     });
 }

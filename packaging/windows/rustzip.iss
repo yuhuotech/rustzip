@@ -13,6 +13,9 @@
 #ifndef PdfRendererExe
   #define PdfRendererExe "..\..\target\release\rz-pdf-renderer.exe"
 #endif
+#ifndef VideoRendererExe
+  #define VideoRendererExe "..\..\target\release\rz-video-renderer.exe"
+#endif
 #ifndef OutDir
   #define OutDir "..\..\dist"
 #endif
@@ -58,6 +61,7 @@ Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: 
 [Files]
 Source: "{#SourceExe}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PdfRendererExe}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#VideoRendererExe}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\licenses\pbz2.txt"; DestDir: "{app}\licenses"; DestName: "pbz2.txt"; Flags: ignoreversion
 Source: "..\licenses\pbz2-notice.txt"; DestDir: "{app}\licenses"; DestName: "pbz2-notice.txt"; Flags: ignoreversion
 Source: "{#VcpkgShare}\zlib\copyright"; DestDir: "{app}\licenses"; DestName: "zlib.txt"; Flags: ignoreversion
@@ -73,6 +77,10 @@ Source: "..\licenses\rodio-mit.txt"; DestDir: "{app}\licenses"; DestName: "rodio
 Source: "..\licenses\rodio-apache-2.0.txt"; DestDir: "{app}\licenses"; DestName: "rodio-apache-2.0.txt"; Flags: ignoreversion
 Source: "..\licenses\cpal-apache-2.0.txt"; DestDir: "{app}\licenses"; DestName: "cpal-apache-2.0.txt"; Flags: ignoreversion
 Source: "..\licenses\symphonia-mpl-2.0.txt"; DestDir: "{app}\licenses"; DestName: "symphonia-mpl-2.0.txt"; Flags: ignoreversion
+Source: "..\licenses\video-preview.txt"; DestDir: "{app}\licenses"; DestName: "video-preview.txt"; Flags: ignoreversion
+Source: "..\licenses\mp4-mit.txt"; DestDir: "{app}\licenses"; DestName: "mp4-mit.txt"; Flags: ignoreversion
+Source: "..\licenses\rust-h264-mit.txt"; DestDir: "{app}\licenses"; DestName: "rust-h264-mit.txt"; Flags: ignoreversion
+Source: "..\licenses\rust-h264-apache-2.0.txt"; DestDir: "{app}\licenses"; DestName: "rust-h264-apache-2.0.txt"; Flags: ignoreversion
 Source: "..\licenses\inno-chinese-translation.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
 #ifdef RarEnabled
 Source: "..\licenses\unrar.txt"; DestDir: "{app}"; DestName: "unrar-license.txt"; Flags: ignoreversion

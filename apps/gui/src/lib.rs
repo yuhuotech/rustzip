@@ -19,6 +19,7 @@ pub mod rows;
 pub mod services;
 pub mod text;
 pub mod tools;
+mod video_preview;
 pub mod view;
 
 use gpui_kit::component::Root;

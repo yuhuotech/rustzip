@@ -49,6 +49,8 @@ detail_audio_loading	音声プレビューを読み込み中…
 detail_audio_unavailable	音声プレビューを利用できません。ダブルクリックしてシステムプレーヤーで開いてください。
 audio_play	音声を再生
 audio_stop	音声を停止
+detail_video_rendering	動画の最初のフレームを描画しています…
+detail_video_unavailable	動画をプレビューできません。ダブルクリックしてシステムプレーヤーで開いてください。
 task_test_passed	{task}が完了しました: {count}件に問題はありません
 task_edit_complete	{task}が完了しました: 圧縮ファイルに{count}件の項目があります
 task_complete_count	{task}が完了しました: {count}ファイル、{size}

@@ -370,8 +370,16 @@
 
 ## D51 音频预览范围与资源限制
 
-- 压缩包详情栏支持 MP3、FLAC、OGG / Vorbis、WAV 和 M4A / AAC 音频；不自动播放。单条目压缩数据最多读取 8 MiB，单次播放最多 15 分钟；超限或解码 / 音频设备不可用时提示用户用系统播放器打开。
+- 压缩包详情栏支持 MP3、FLAC、OGG / Vorbis、WAV 和 M4A / AAC 音频；不自动播放。单条目压缩数据最多读取 8 MiB，解码 PCM 最多 18,000,000 个交错样本（72 MB），最长 3 分钟；只接受最多双声道、48 kHz 的流。超限或解码 / 音频设备不可用时提示用户用系统播放器打开。
 - 归档读取与解码都在后台执行。音频输出由独立 worker 持有，切换条目、点击停止或关闭窗口会停止当前播放。解码器只接收有界字节数据，UI 线程不执行文件 I/O、解码或音频设备操作。
-- 使用 Rodio 0.21.1 做播放队列、Symphonia 0.5.5 做纯 Rust 解复用 / 解码、CPAL 0.16.0 连接三平台系统音频输出；许可分别为 MIT OR Apache-2.0、MPL-2.0、Apache-2.0。MPL 依赖允许按文件级要求分发，源文件可由 Cargo.lock 中的 crates.io 版本获取。三平台发行包需附带其许可证文本；Linux 构建沿用现有 ALSA 开发库要求。
-- nightly ASan fuzz target 对输入限制为 8 MiB、单次解码最多消费 500,000 个样本，并用项目生成的静音 WAV seed 起跑。该限制用于 fuzz 单次迭代；运行时预览另外按 8 MiB 源数据和 15 分钟播放时长限制。
-- 视频仍交给系统程序打开。选择跨平台视频 renderer 前，必须确认许可、实际支持的编码格式、硬解码 / CPU 资源边界和不可信文件隔离方案；音频决策不改变视频支持范围。
+- 使用 Rodio 0.21.1 做播放队列、Symphonia 0.6.1 做纯 Rust 解复用 / 解码、CPAL 0.16.0 连接三平台系统音频输出；许可分别为 MIT OR Apache-2.0、MPL-2.0、Apache-2.0。Symphonia 0.6.1 的 fuzzing 修复、受限的容器签名识别和 WAV fmt 采样率 / 声道预检用于降低恶意输入触发解码 panic 的风险；MPL 依赖允许按文件级要求分发，源文件可由 Cargo.lock 中的 crates.io 版本获取。三平台发行包需附带其许可证文本；Linux 构建沿用现有 ALSA 开发库要求。
+- nightly ASan fuzz target 调用同一个解码器，输入限制为 8 MiB、单次最多输出 500,000 个样本，并用项目生成的静音 WAV seed 起跑；播放器最多保留 72 MB 解码 PCM 并支持条目切换时取消解码。
+- 其他视频编码和容器继续交给系统程序打开；H.264 首帧预览的准入与资源边界见 D52。
+
+## D52 MP4 / QuickTime H.264 首帧预览
+
+- 详情栏只为 MP4 / M4V / MOV 中的 H.264 `avc1` track 渲染第一张关键帧；要求 progressive、8-bit、4:2:0。仅支持非 fragmented MP4；HEVC、VP9、AV1、隔行、其他位深 / 色度格式和其他容器继续交给系统播放器。
+- 归档条目最多读取 16 MiB。MP4 容器与 H.264 decoder 运行在 `rz-video-renderer` 子进程；共享分配器最多同时持有 256 MiB heap、累计最多 512 MiB，MP4 reader 最多执行 16,384 次读取 / seek，helper 与 GUI 父进程各有 10 秒时限。编码尺寸在解码前限制为最多 8,192×8,192 和 16,777,216 像素，参考帧 / 重排帧不超过 16；关键帧最多 8 MiB，PNG 最多 8 MiB / 16,777,216 像素。超限、损坏或不支持时保留系统播放器打开路径。
+- 使用 `mp4` 0.14.0（MIT）解析 ISO-MP4 / QuickTime 容器，使用 `rust_h264` 0.5.0（MIT OR Apache-2.0）解码；二者均为 Rust reader / decoder，不依赖系统编解码器或外部进程。发行包需携带两个依赖的完整许可证文本。
+- nightly ASan `video_decoder` target 调用同一 renderer 核心，输入限制 16 MiB，CI seed 是合成的两帧 H.264 MP4 / MOV。fixture 生成来源见 `apps/video-renderer/tests/fixtures/README.md`。
+- 这项功能只生成首帧缩略预览，不提供视频播放、音频轨播放或时间轴；超出受支持范围的文件仍由系统播放器处理。

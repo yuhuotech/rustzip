@@ -49,6 +49,8 @@ detail_audio_loading	Audiovorschau wird geladen…
 detail_audio_unavailable	Audiovorschau nicht verfügbar; per Doppelklick im Systemplayer öffnen.
 audio_play	Audio abspielen
 audio_stop	Audio stoppen
+detail_video_rendering	Erstes Videobild wird gerendert…
+detail_video_unavailable	Videovorschau nicht verfügbar; per Doppelklick im Systemplayer öffnen.
 task_test_passed	{task} abgeschlossen: Keine Probleme in {count} Einträgen gefunden
 task_edit_complete	{task} abgeschlossen: Das Archiv enthält jetzt {count} Elemente
 task_complete_count	{task} abgeschlossen: {count} Dateien, {size}

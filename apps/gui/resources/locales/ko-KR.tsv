@@ -49,6 +49,8 @@ detail_audio_loading	오디오 미리 보기를 불러오는 중…
 detail_audio_unavailable	오디오 미리 보기를 사용할 수 없습니다. 두 번 클릭해 시스템 플레이어에서 여세요.
 audio_play	오디오 재생
 audio_stop	오디오 정지
+detail_video_rendering	동영상 첫 프레임을 렌더링하는 중…
+detail_video_unavailable	동영상 미리 보기를 사용할 수 없습니다. 두 번 클릭해 시스템 플레이어에서 여세요.
 task_test_passed	{task} 완료: 항목 {count}개에서 문제를 찾지 못했습니다
 task_edit_complete	{task} 완료: 압축 파일에 이제 항목 {count}개가 있습니다
 task_complete_count	{task} 완료: 파일 {count}개, {size}

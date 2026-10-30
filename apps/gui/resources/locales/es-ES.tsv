@@ -49,6 +49,8 @@ detail_audio_loading	Cargando vista previa de audio…
 detail_audio_unavailable	La vista previa de audio no está disponible; haz doble clic para abrirlo en el reproductor del sistema.
 audio_play	Reproducir audio
 audio_stop	Detener audio
+detail_video_rendering	Generando la primera imagen del vídeo…
+detail_video_unavailable	La vista previa de vídeo no está disponible; haz doble clic para abrirlo en el reproductor del sistema.
 task_test_passed	{task} completado: no se han encontrado problemas en {count} elementos
 task_edit_complete	{task} completado: el archivo comprimido ahora contiene {count} elementos
 task_complete_count	{task} completado: {count} archivos, {size}

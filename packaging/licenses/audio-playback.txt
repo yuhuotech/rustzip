@@ -6,10 +6,10 @@ Licensed under either MIT or Apache-2.0. Full license texts are provided in
 rodio-mit.txt and rodio-apache-2.0.txt.
 Source: https://crates.io/crates/rodio/0.21.1
 
-Symphonia 0.5.5 and its decoder / demuxer crates
+Symphonia 0.6.1 and its decoder / demuxer crates
 Licensed under MPL-2.0. The license text is provided in
 symphonia-mpl-2.0.txt. Source is available from the version pinned in
-RustZIP's Cargo.lock at https://crates.io/crates/symphonia/0.5.5.
+RustZIP's Cargo.lock at https://crates.io/crates/symphonia/0.6.1.
 
 CPAL 0.16.0
 Licensed under Apache-2.0. The license text is provided in

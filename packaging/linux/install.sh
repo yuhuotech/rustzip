@@ -11,7 +11,7 @@ kde6_service_menus="$data_home/kio/servicemenus"
 kde5_service_menus="$data_home/kservices5/ServiceMenus"
 nemo_actions="$data_home/nemo/actions"
 if [ "${1:-}" = "--uninstall" ]; then
-    rm -f "$prefix/bin/rustzip" "$prefix/bin/rz-pdf-renderer" "$apps/rustzip.desktop" \
+    rm -f "$prefix/bin/rustzip" "$prefix/bin/rz-pdf-renderer" "$prefix/bin/rz-video-renderer" "$apps/rustzip.desktop" \
           "$kde6_service_menus/rustzip-servicemenu.desktop" \
           "$kde5_service_menus/rustzip-servicemenu.desktop" \
           "$prefix/share/kservices5/ServiceMenus/rustzip-servicemenu.desktop" \
@@ -28,6 +28,8 @@ if [ "${1:-}" = "--uninstall" ]; then
     rm -f "$prefix/share/doc/rustzip/audio-playback-licenses.txt"
     rm -f "$prefix/share/doc/rustzip/rodio-mit.txt" "$prefix/share/doc/rustzip/rodio-apache-2.0.txt"
     rm -f "$prefix/share/doc/rustzip/cpal-apache-2.0.txt" "$prefix/share/doc/rustzip/symphonia-mpl-2.0.txt"
+    rm -f "$prefix/share/doc/rustzip/video-preview-licenses.txt" "$prefix/share/doc/rustzip/mp4-mit.txt"
+    rm -f "$prefix/share/doc/rustzip/rust-h264-mit.txt" "$prefix/share/doc/rustzip/rust-h264-apache-2.0.txt"
     rm -f "$nautilus_binary"
     rmdir "$nautilus_scripts/.rustzip" 2>/dev/null || true
     for s in 16 32 48 64 128 256 512; do
@@ -38,6 +40,7 @@ if [ "${1:-}" = "--uninstall" ]; then
 fi
 install -Dm755 "$here/rustzip" "$prefix/bin/rustzip"
 install -Dm755 "$here/rz-pdf-renderer" "$prefix/bin/rz-pdf-renderer"
+install -Dm755 "$here/rz-video-renderer" "$prefix/bin/rz-video-renderer"
 install -Dm644 "$here/libchm-license.txt" "$prefix/share/doc/rustzip/libchm-license.txt"
 install -Dm644 "$here/pbz2-license.txt" "$prefix/share/doc/rustzip/pbz2-license.txt"
 install -Dm644 "$here/pbz2-notice.txt" "$prefix/share/doc/rustzip/pbz2-notice.txt"
@@ -47,6 +50,10 @@ install -Dm644 "$here/rodio-mit.txt" "$prefix/share/doc/rustzip/rodio-mit.txt"
 install -Dm644 "$here/rodio-apache-2.0.txt" "$prefix/share/doc/rustzip/rodio-apache-2.0.txt"
 install -Dm644 "$here/cpal-apache-2.0.txt" "$prefix/share/doc/rustzip/cpal-apache-2.0.txt"
 install -Dm644 "$here/symphonia-mpl-2.0.txt" "$prefix/share/doc/rustzip/symphonia-mpl-2.0.txt"
+install -Dm644 "$here/video-preview-licenses.txt" "$prefix/share/doc/rustzip/video-preview-licenses.txt"
+install -Dm644 "$here/mp4-mit.txt" "$prefix/share/doc/rustzip/mp4-mit.txt"
+install -Dm644 "$here/rust-h264-mit.txt" "$prefix/share/doc/rustzip/rust-h264-mit.txt"
+install -Dm644 "$here/rust-h264-apache-2.0.txt" "$prefix/share/doc/rustzip/rust-h264-apache-2.0.txt"
 if [ -f "$here/unrar-license.txt" ]; then
     install -Dm644 "$here/unrar-license.txt" "$prefix/share/doc/rustzip/unrar-license.txt"
 fi

@@ -48,6 +48,8 @@ detail_audio_loading	正在加载音频预览…	Loading audio preview…
 detail_audio_unavailable	音频预览不可用；双击文件可用系统播放器打开。	Audio preview is unavailable; double-click the file to open it in your system player.
 audio_play	播放音频	Play audio
 audio_stop	停止播放	Stop audio
+detail_video_rendering	正在生成视频首帧预览…	Rendering first video frame…
+detail_video_unavailable	视频预览不可用；双击文件可用系统播放器打开。	Video preview is unavailable; double-click the file to open it in your system player.
 task_test_passed	{task}通过：{count} 个条目没有发现问题	{task} passed: no issues found in {count} entries
 task_edit_complete	{task}完成：压缩包现在有 {count} 项	{task} complete: the archive now has {count} items
 task_complete_count	{task}完成：{count} 个文件，{size}	{task} complete: {count} files, {size}

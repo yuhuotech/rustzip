@@ -1,0 +1,26 @@
+[package]
+name = "rz-video-renderer"
+description = "Resource-bounded MP4/H.264 first-frame preview helper for RustZIP"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+name = "rz_video_renderer"
+path = "src/lib.rs"
+
+[[bin]]
+name = "rz-video-renderer"
+path = "src/main.rs"
+
+[dependencies]
+image = { version = "0.25", default-features = false, features = ["png"] }
+mp4 = "0.14.0"
+rust_h264 = { version = "0.5.0", default-features = false, features = ["std"] }
+rz-preview-budget = { path = "../preview-budget" }
+
+[lints.rust]
+unsafe_code = "deny"
+unsafe_op_in_unsafe_fn = "deny"

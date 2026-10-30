@@ -49,6 +49,8 @@ detail_audio_loading	Chargement de l’aperçu audio…
 detail_audio_unavailable	Aperçu audio indisponible ; double-cliquez pour ouvrir le fichier dans le lecteur système.
 audio_play	Lire l’audio
 audio_stop	Arrêter l’audio
+detail_video_rendering	Rendu de la première image vidéo…
+detail_video_unavailable	Aperçu vidéo indisponible ; double-cliquez pour ouvrir le fichier dans le lecteur système.
 task_test_passed	{task} terminé : aucun problème détecté dans {count} éléments
 task_edit_complete	{task} terminé : l’archive contient maintenant {count} éléments
 task_complete_count	{task} terminé : {count} fichiers, {size}

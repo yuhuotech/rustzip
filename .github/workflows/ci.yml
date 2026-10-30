@@ -75,6 +75,8 @@ jobs:
           path: ${{ runner.temp }}\rustzip-vcpkg-cache
           key: rustzip-vcpkg-x64-windows-static-md-${{ steps.native-deps.outputs.vcpkg-revision }}-v2
       - run: cargo clippy -p rustzip-gui --all-targets --all-features -- -D warnings
+      - name: Build isolated preview helpers for UI tests
+        run: cargo build -p rz-pdf-renderer -p rz-video-renderer
       - name: Test GUI under Xvfb (Linux)
         if: runner.os == 'Linux'
         run: xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 cargo test -p rustzip-gui --all-features

@@ -1,17 +1,15 @@
 #![deny(unsafe_code)]
 #![deny(unsafe_op_in_unsafe_fn)]
 
-mod budget;
-
 use std::io::{Read, Write};
 use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::Duration;
 
-use budget::BudgetAllocator;
 use hayro::hayro_interpret::InterpreterSettings;
 use hayro::hayro_syntax::Pdf;
 use hayro::{render, RenderCache, RenderSettings};
+use rz_preview_budget::BudgetAllocator;
 
 const MAX_INPUT_BYTES: usize = 16 * 1024 * 1024;
 const MAX_OUTPUT_BYTES: usize = 8 * 1024 * 1024;
@@ -43,11 +41,7 @@ fn read_bounded_pdf() -> Result<Vec<u8>, &'static str> {
     Ok(input)
 }
 
-fn render_first_page(input: Vec<u8>) -> Result<Vec<u8>, &'static str> {
-    let pdf = Pdf::new(Arc::new(input)).map_err(|_| "PDF parsing failed")?;
-    let page = pdf.pages().first().ok_or("PDF has no pages")?;
-    let (width, height) = page.render_dimensions();
-    let (width, height) = (f64::from(width), f64::from(height));
+fn output_dimensions(width: f64, height: f64) -> Result<(f64, u16, u16), &'static str> {
     if !width.is_finite() || !height.is_finite() || width <= 0.0 || height <= 0.0 {
         return Err("PDF page dimensions are invalid");
     }
@@ -65,6 +59,15 @@ fn render_first_page(input: Vec<u8>) -> Result<Vec<u8>, &'static str> {
     if u64::from(output_width) * u64::from(output_height) > MAX_PIXELS {
         return Err("PDF page exceeds the preview pixel limit");
     }
+    Ok((scale, output_width, output_height))
+}
+
+fn render_first_page(input: Vec<u8>) -> Result<Vec<u8>, &'static str> {
+    let pdf = Pdf::new(Arc::new(input)).map_err(|_| "PDF parsing failed")?;
+    let page = pdf.pages().first().ok_or("PDF has no pages")?;
+    let (width, height) = page.render_dimensions();
+    let (width, height) = (f64::from(width), f64::from(height));
+    let (scale, output_width, output_height) = output_dimensions(width, height)?;
 
     let cache = RenderCache::new();
     let pixmap = render(
@@ -117,5 +120,19 @@ fn main() -> ExitCode {
             eprintln!("{reason}");
             ExitCode::FAILURE
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
+    use super::*;
+
+    #[test]
+    fn dimensions_scale_before_allocating_a_large_square_page() {
+        let (scale, width, height) = output_dimensions(1_000_000.0, 1_000_000.0).unwrap();
+        assert_eq!((width, height), (4096, 4096));
+        assert!(scale.is_finite() && scale > 0.0);
     }
 }
