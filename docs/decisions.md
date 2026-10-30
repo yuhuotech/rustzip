@@ -268,7 +268,7 @@
 
 - 保留默认关闭的 `rar` feature 和只读边界；将 UnRAR 的逐块数据回调封装在 `rz-ffi`，解码前检查压缩比，并在回调中检查取消、声明大小和本次选中输出的剩余预算，超限时立即中止原生解码。
 - 选中条目逐块写入私有临时文件，单个文件不超过其声明大小和剩余 `max_total` 的较小值；每项消费后删除。未选条目通过 UnRAR 测试流继续固实解码，不写临时盘，并在数据回调中检查取消。
-- `ArchiveReader::for_each_selected` 让引擎将选择索引交给顺序格式；RAR 可以跳过未选条目的临时输出，同时保留固实流状态。兼容性 `open` 的整条目内存读取限制为 64 MiB。
+- `ArchiveReader::for_each_selected` 让引擎将选择索引交给顺序格式；RAR 可以跳过未选条目的临时输出，同时保留固实流状态。兼容性 `open` 的整条目内存读取限制为 64 MiB。`open` 对选中条目直接使用有界内存缓冲，不落临时盘；通用选择性提取仍逐块写入私有临时文件，避免大条目整体驻留内存。
 - 图片预览使用 8 MiB 上限、文本预览使用 64 KiB 上限；RAR 只在启用 `rar` feature 的构建中可预览。该决策取代 D35 的 RAR 预览禁用状态及 D36 中“临时输出没有硬上限”的旧实现状态，不改变 D36 的默认关闭、许可证和文件关联要求。
 - 回归覆盖原生回调超限中止、取消、RAR 测试、选择性输出及应用层图片 / 文本读取限额。正式发行仍需在三平台验证启用 RAR 的构建和实际安装包许可证。
 - GitHub Fuzz run [40961694769](https://github.com/yuhuotech/rustzip/actions/runs/40961694769) 对 RAR target 执行 187,945 次变异并保存 corpus cache，未发现崩溃；RAR feature 的原生解码与安装包许可仍需要三平台发行验收。
@@ -330,4 +330,4 @@
 - ZIP 预览最多读取 16 MiB 中央目录、解析 50,000 个条目并展示前 200 项；支持 ZIP64 目录元数据。分卷 / 多磁盘 ZIP 显示明确的不支持提示。损坏目录或超过限制时显示安全提示。
 - Quick Look 扩展使用 App Sandbox 和只读用户所选文件权限，按系统请求的 URL 读取。条目名必须经 HTML 转义；不得使用网络资源、脚本或解压内容。
 - `.7z`、RAR、tar 系和其他类型暂不注册 Quick Look provider，避免在应用层之外重复引入未验证的解析后端。
-- `packaging/macos/test-quicklook.sh` 的 Swift smoke 覆盖常规 ZIP、ZIP64 EOCD / 越界长度、CJK / 特殊字符名称、HTML 转义、损坏中央目录、多卷输入和 16 MiB 上限。macOS 27.0.1 上 `qlmanage -p -x` 启动 Quick Look 扩展，日志确认 WebKit HTML 页面完成加载且无扩展断言；CUA 无法附着 Quick Look 面板，所以 Finder 空格键视觉内容仍待人工验收，签名 / 公证安装包也仍待验收。
+- `packaging/macos/test-quicklook.sh` 的 Swift smoke 覆盖常规 ZIP、ZIP64 EOCD / 越界长度、CJK / 特殊字符名称、HTML 转义、损坏中央目录、多卷输入和 16 MiB 上限。macOS 27.0.1 上 `qlmanage -p -x` 曾启动 Quick Look 扩展并确认 WebKit HTML 页面加载；2026-10-30 Finder 空格键实测只显示系统通用 ZIP 图标，PlugInKit 注册列表也没有 `com.yuhuotech.rustzip.quicklook`，因此这次未能验证 RustZIP provider 的可见内容。正式注册扩展后仍需复测 Finder 和签名 / 公证安装包。

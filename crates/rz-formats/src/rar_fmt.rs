@@ -120,6 +120,23 @@ impl RarReader {
         )
         .map_err(map_err)
     }
+
+    fn check_ratio(&self, entry: &Entry) -> Result<()> {
+        if entry.size > self.ratio_check_above {
+            let allowed = entry
+                .packed_size
+                .unwrap_or(0)
+                .max(1)
+                .saturating_mul(self.max_ratio);
+            if entry.size > allowed {
+                return Err(Error::LimitExceeded(format!(
+                    "{}: compression ratio too high",
+                    entry.path
+                )));
+            }
+        }
+        Ok(())
+    }
 }
 
 impl ArchiveReader for RarReader {
@@ -186,20 +203,58 @@ impl ArchiveReader for RarReader {
             )));
         }
         let wanted = entry.index;
-        let selected = [wanted];
-        let mut found = None;
-        self.for_each_selected(Some(&selected), &mut |e, data| {
-            if e.index == wanted {
-                let mut buf = Vec::with_capacity(e.size as usize);
-                data.read_to_end(&mut buf)?;
-                found = Some(buf);
+        let mut archive = self.processing_archive()?;
+        let mut index = 0usize;
+
+        while let Some(header) = archive.next_entry().map_err(map_err)? {
+            self.cancel.check()?;
+            let current = describe(index, header);
+            index += 1;
+            self.check_ratio(&current)?;
+
+            if current.index != wanted {
+                if current.kind == EntryKind::Dir {
+                    archive.skip_current().map_err(map_err)?;
+                } else {
+                    let cancelled = || self.cancel.check().is_err();
+                    archive
+                        .test_current(current.size, &cancelled)
+                        .map_err(map_err)?;
+                }
+                continue;
             }
-            Ok(())
-        })?;
-        match found {
-            Some(buf) => Ok(Box::new(std::io::Cursor::new(buf))),
-            None => Err(Error::Corrupt(format!("entry {wanted} not found"))),
+
+            if current.size > MAX_COMPAT_ENTRY {
+                return Err(Error::LimitExceeded(format!(
+                    "RAR entry is larger than the {MAX_COMPAT_ENTRY}-byte compatibility read limit"
+                )));
+            }
+            if current.size > self.max_total {
+                return Err(Error::LimitExceeded(format!(
+                    "RAR selected output exceeds the configured {}-byte total limit",
+                    self.max_total
+                )));
+            }
+            if current.kind == EntryKind::Dir {
+                archive.skip_current().map_err(map_err)?;
+                return Ok(Box::new(std::io::Cursor::new(Vec::new())));
+            }
+
+            let mut data = Vec::new();
+            let cancelled = || self.cancel.check().is_err();
+            let decoded = archive
+                .extract_current_to(&mut data, self.max_total.min(current.size), &cancelled)
+                .map_err(map_err)?;
+            if decoded != current.size {
+                return Err(Error::Corrupt(format!(
+                    "{}: RAR entry size does not match its header",
+                    current.path
+                )));
+            }
+            return Ok(Box::new(std::io::Cursor::new(data)));
         }
+
+        Err(Error::Corrupt(format!("entry {wanted} not found")))
     }
 
     fn for_each(
@@ -228,20 +283,7 @@ impl ArchiveReader for RarReader {
             let chosen = selected
                 .as_ref()
                 .is_none_or(|indexes| indexes.contains(&entry.index));
-
-            if entry.size > self.ratio_check_above {
-                let allowed = entry
-                    .packed_size
-                    .unwrap_or(0)
-                    .max(1)
-                    .saturating_mul(self.max_ratio);
-                if entry.size > allowed {
-                    return Err(Error::LimitExceeded(format!(
-                        "{}: compression ratio too high",
-                        entry.path
-                    )));
-                }
-            }
+            self.check_ratio(&entry)?;
 
             if entry.kind == EntryKind::Dir {
                 archive.skip_current().map_err(map_err)?;

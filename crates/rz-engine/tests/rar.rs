@@ -53,6 +53,20 @@ fn rar_entry_can_be_opened_directly() {
 }
 
 #[test]
+fn opening_a_rar_entry_honors_output_limits_and_cancellation() {
+    let mut reader = rz_formats::open(&fixture()).unwrap();
+    let entry = reader.entries().unwrap().remove(0);
+
+    reader.set_read_control(CancelToken::new(), 1);
+    assert!(matches!(reader.open(&entry), Err(Error::LimitExceeded(_))));
+
+    let cancel = CancelToken::new();
+    cancel.cancel();
+    reader.set_read_control(cancel, u64::MAX);
+    assert!(matches!(reader.open(&entry), Err(Error::Cancelled)));
+}
+
+#[test]
 fn rar_streaming_output_stops_at_the_configured_limit() {
     let mut reader = rz_formats::open(&fixture()).unwrap();
     reader.set_read_control(CancelToken::new(), 1);

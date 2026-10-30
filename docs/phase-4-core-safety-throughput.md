@@ -4,7 +4,7 @@
 
 ## 已完成
 
-- **RAR 输出限制**：UnRAR 的逐块数据回调封装在 `rz-ffi`。选中条目按声明大小、压缩比和剩余 `max_total` 限量写入单条目临时文件；未选条目测试解码但不落临时盘；解码中可取消。整条目 `ArchiveReader::open` 读取限制为 64 MiB。启用可选 `rar` feature 时恢复受限图片 / 文本预览，默认包仍关闭 RAR。见决策 D38。
+- **RAR 输出限制**：UnRAR 的逐块数据回调封装在 `rz-ffi`。通用选择性提取的选中条目按声明大小、压缩比和剩余 `max_total` 限量写入单条目临时文件；未选条目测试解码但不落临时盘；解码中可取消。整条目 `ArchiveReader::open` 读取限制为 64 MiB，单条目通过有界内存缓冲读取，不写临时盘；GUI 预览另有 8 MiB 图片 / 64 KiB 文本限制。默认包仍关闭 RAR。见决策 D38。
 - **bzip2 并行解压**：通过 MIT `pbz2` 0.2.0 解码 bzip2 单流和串接 member，按配置线程数和内存预算估算 worker，预算不足时回退 `MultiBzDecoder`。本地 vendor 补丁让 worker / scanner 启动故障返回错误；随包携带 MIT license 与 NOTICE。
 - **gzip 分块 Deflate**：`.gz` / `.tar.gz` 多线程压缩按最多 900,000 字节分块，生成按顺序连接的标准 gzip members；低预算时回退 flate2。
 - **ZIP 大条目分块 Deflate**：未加密 Deflate 条目按 900,000 字节分块并行压缩，按输入顺序写入有界匿名临时 ZIP，再由 `zip` 9.1.3 合并压缩数据。worker 数与每 worker 两个待处理块按 16 MiB / worker 估算预算；Store、加密及单 worker 情况沿用顺序 writer。见决策 D41。
@@ -14,7 +14,7 @@
 - **图片预览解码边界**：在受支持图像解码前于后台读取文件头，限制 16,777,216 像素，并保留 8 MiB 压缩字节上限；损坏、未知和过大图像继续显示类型卡片。本机完整 GUI 测试、Clippy 通过；GitHub CI [40935152907](https://github.com/yuhuotech/rustzip/actions/runs/40935152907) 七个 job 全部通过。
 - **RAR all-features GUI 矩阵**：GUI CI 对 Windows、macOS、Ubuntu/Xvfb 运行 all-features Clippy / 测试；[40939090908](https://github.com/yuhuotech/rustzip/actions/runs/40939090908) 七个 job 全绿，包含 RAR 安全预览和图片尺寸检查。
 - **fuzz**：新增 bzip2、RAR fuzz target 和 bzip2 seed。nightly ASan 对 bzip2、CHM、RAR、ZIP recovery 分别运行约 15 秒，约 11,000、21,000、67,000、91,000 次变异，未发现崩溃。短时结果不替代持续 fuzz runner。
-- **持续 fuzz runner**：新增 `.github/workflows/fuzz.yml`，每日运行四个 nightly ASan target，最多同时跑两个；手动运行时每 target 60 秒，定时运行每 target 180 秒；保留 14 天崩溃 artifact，并按 target 缓存 corpus。`fuzz/seeds/` 保存最小 ZIP、bzip2、CHM 和 RAR 输入。首三轮 run [40907566477](https://github.com/yuhuotech/rustzip/actions/runs/40907566477)、[40908353403](https://github.com/yuhuotech/rustzip/actions/runs/40908353403)、[40909630152](https://github.com/yuhuotech/rustzip/actions/runs/40909630152) 逐步发现并修复 nightly rustc、原生库和 Linux RAR 路径问题。第四轮 [40912070562](https://github.com/yuhuotech/rustzip/actions/runs/40912070562) 四个 target 全部成功，ZIP recovery / CHM / bzip2 / RAR 分别运行 467,492 / 47,736 / 7,502 / 182,570 次，四份 corpus cache 全部保存，没有崩溃 artifact。每日自动 schedule 首次触发仍待观察。
+- **持续 fuzz runner**：新增 `.github/workflows/fuzz.yml`，每日运行四个 nightly ASan target，最多同时跑两个；手动运行时每 target 60 秒，定时运行每 target 180 秒；保留 14 天崩溃 artifact，并按 target 缓存 corpus。`fuzz/seeds/` 保存最小 ZIP、bzip2、CHM 和 RAR 输入。首三轮 run [40907566477](https://github.com/yuhuotech/rustzip/actions/runs/40907566477)、[40908353403](https://github.com/yuhuotech/rustzip/actions/runs/40908353403)、[40909630152](https://github.com/yuhuotech/rustzip/actions/runs/40909630152) 逐步发现并修复 nightly rustc、原生库和 Linux RAR 路径问题。第四轮 [40912070562](https://github.com/yuhuotech/rustzip/actions/runs/40912070562) 四个 target 全部成功，ZIP recovery / CHM / bzip2 / RAR 分别运行 467,492 / 47,736 / 7,502 / 182,570 次，四份 corpus cache 全部保存。后续手动 run [40998596381](https://github.com/yuhuotech/rustzip/actions/runs/40998596381) 对 `d504891` 的四个 target 全部成功，分别运行 709,656 / 34,762 / 10,758 / 158,595 次，四份 cache 保存，无 crash artifact。2026-10-30 03:23 UTC 预期的每日 schedule 尚未出现在 Actions run 列表，首次 schedule 验收继续待观察。
 
 ## 本机验证
 
@@ -27,9 +27,11 @@
 - `cargo deny check --hide-inclusion-graph` 通过 licenses、sources、bans、advisories；仍报告多个传递依赖版本并存。advisory 忽略项都来自上游注明暂无安全升级的依赖。
 - 上述依赖审计记录来自本阶段较早的检查。最终改动只将已有传递依赖 `crc32fast` 加为直接依赖；本次环境没有安装 `cargo-deny` 可执行文件，未能重跑依赖审计。该版本的 Cargo.toml 声明 `MIT OR Apache-2.0`，符合项目许可白名单。
 - 本机 nightly ASan 下四个 fuzz target 均构建成功；reviewed seed 各运行 5 秒，ZIP recovery / CHM / bzip2 / RAR 分别约 29,605 / 7,995 / 4,462 / 20,552 次变异，未发现崩溃。`actionlint` 检查 `.github/workflows/fuzz.yml` 通过；GitHub run [40912070562](https://github.com/yuhuotech/rustzip/actions/runs/40912070562) 四个 target 均通过并保存 corpus cache。
+- GitHub 手动 fuzz run [40998596381](https://github.com/yuhuotech/rustzip/actions/runs/40998596381) 四个 target 均成功并保存 corpus cache：ZIP recovery 709,656 次、CHM 34,762 次、bzip2 10,758 次、RAR 158,595 次；无 crash artifact。预期每日 schedule 未出现在 Actions run 列表。
 - `cargo test -p rz-formats --test zip_parallel --all-features` 通过 6 项；36 MiB CJK 名称、重复块伪随机内容分块往返通过本机 `unzip -t`。引擎 40 MiB 文件流式解压和取消清理用例通过；源在第二块后失败时 worker 正常退出。
 - `cargo test -p rz-app --lib zip_copy_edit_preserves_archive_and_entry_comments_and_extra_fields` 通过；验证删除和重命名后的归档注释、文件注释及自定义 extra field。
 - `RZ_BENCH_MB=8 cargo bench -p rz-engine --bench throughput` 全矩阵完成并校验输出；ZIP 单条目基准以 BLAKE3 校验 40 / 64 / 128 MiB 样本，每尺寸每设置 3 轮。详细环境和中位数见[基准记录](benchmarks/2026-10-29-zip-large-deflate.md)。
+- 2026-10-30 RAR 详情预览改为单条目有界内存读取，继续遵守 `ArchiveReader::open` 64 MiB 兼容上限、`max_total`、声明大小、压缩比和取消检查；通用选择性提取仍使用临时文件以保持大条目流式。`cargo fmt --all --check` 与全工作区 all-features Clippy 通过。本次未运行测试。
 
 ## 后续仍需完成
 
