@@ -54,10 +54,11 @@
 
 ## 最新远端验收
 
+- 2026-10-30：提交 `b32d77d` 的 CI [41097739228](https://github.com/yuhuotech/rustzip/actions/runs/41097739228) 七个 job 全部通过：三平台 core / GUI 和 benchmark 均成功；RAR 多条目累计输出上限回归在三平台 all-features core 测试通过。
 - 2026-10-30：提交 `9deb72c` 的 Release dry-run [41090713832](https://github.com/yuhuotech/rustzip/actions/runs/41090713832) 的所有构建、RAR 验证、汇总验签和 artifact job 均通过：macOS arm64 / x86_64、Linux x86_64、Windows x86_64 常规与 RAR 包均成功，Windows RAR 安装 / 卸载及 macOS Quick Look 注册 smoke 通过；`publish` 按 dry-run 规则跳过。
 - 2026-10-30：前一轮 CI [41084058660](https://github.com/yuhuotech/rustzip/actions/runs/41084058660) 的 core default lint 找到未按 `rar` feature 条件编译的 `Read` 导入，已修正。提交 `b5c2bd4` 的 CI [41086116233](https://github.com/yuhuotech/rustzip/actions/runs/41086116233) 七个 job 全部通过：Ubuntu / macOS / Windows core、三平台 GUI 和 benchmark 均成功。新增对比回归覆盖加密 7z 独立密码、RAR、CHM、ISO 9660、LHA/LZH、RPM 与 XAR；Windows GUI 安装器 smoke 通过。
 - 2026-10-30：提交 `6fd8e65` 的 Release dry-run [41079816983](https://github.com/yuhuotech/rustzip/actions/runs/41079816983) 成功：四平台常规包与 RAR 包验证、Windows RAR 安装 / 关联 / 卸载冒烟、汇总验签和 artifacts 上传均通过；`publish` 按 dry-run 规则跳过。Fuzz run [41079856580](https://github.com/yuhuotech/rustzip/actions/runs/41079856580) 的五个目标及受控 crash artifact smoke 均通过。
-- Fuzz workflow 每日 13:37 UTC 的 schedule 尚无实际 run 证据；本次 `41079856580` 是手动触发，不能代替定时验收。
+- Fuzz workflow 定时验收仍未通过：13:37 UTC 与 workflow 重新注册后的 16:53、17:35 UTC 探测均没有生成 `schedule` run。workflow API 状态为 active，长期 cron 已恢复 13:37 UTC；手动 dispatch 不能代替定时验收。
 
 ## 未完成的验收
 

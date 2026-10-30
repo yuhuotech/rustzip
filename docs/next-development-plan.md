@@ -14,7 +14,7 @@ RustZIP 的主要归档与桌面主流程已实现。2026-10-30 增加 macOS Fin
 
 提交 `b5c2bd4` 的三平台 CI [41086116233](https://github.com/yuhuotech/rustzip/actions/runs/41086116233) 七个 job 全部通过：三平台 core、三平台 GUI 与 benchmark 均成功，覆盖本轮新增的加密 7z、RAR、CHM、ISO 9660、LHA/LZH、RPM 和 XAR 对比回归。
 
-提交 `9deb72c` 的 Release dry-run [41090713832](https://github.com/yuhuotech/rustzip/actions/runs/41090713832) 完成四平台常规与 RAR 包验证、Windows 安装 / 卸载关联 smoke、macOS Quick Look 注册、manifest 验签和 bundles 上传；公开 `publish` 跳过。Fuzz cron 在 `16:53 UTC` 的探测未产生 schedule run；workflow 已于 `17:11 UTC` 重新注册为 active，目前正观察 `17:35 UTC` 的第二次探测，随后恢复 `13:37 UTC` cron。
+提交 `9deb72c` 的 Release dry-run [41090713832](https://github.com/yuhuotech/rustzip/actions/runs/41090713832) 完成四平台常规与 RAR 包验证、Windows 安装 / 卸载关联 smoke、macOS Quick Look 注册、manifest 验签和 bundles 上传；公开 `publish` 跳过。Fuzz cron 在 `16:53 UTC` 探测及 workflow 于 `17:11 UTC` 重新注册后的 `17:35 UTC` 探测均未产生 schedule run；workflow 状态 active，已恢复 `13:37 UTC` cron。
 
 四个曾经占位的侧栏功能——常用位置、密码本、格式转换、压缩包修复——在当前代码中已经实现，不能继续列为“未开发”。转换与修复的符号链接和损坏数据边界见 [侧栏实现记录](sidebar-implementation.md) 与 [决策 D9](decisions.md#d9-左栏工具的数据安全与恢复边界)。
 
