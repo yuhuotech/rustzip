@@ -30,7 +30,8 @@ $install = Join-Path $work "app"
 $installLog = Join-Path $work "install.log"
 $uninstallLog = Join-Path $work "uninstall.log"
 $dist = if ([string]::IsNullOrWhiteSpace($OutputDir)) { Join-Path $work "dist" } else { $OutputDir }
-New-Item -ItemType Directory -Path $dist | Out-Null
+New-Item -ItemType Directory -Path $work | Out-Null
+New-Item -ItemType Directory -Path $dist -Force | Out-Null
 $exe = Join-Path $PWD "target\release\rustzip.exe"
 $zipKey = "$classes\.zip"
 $zipBefore = if (Test-Path -LiteralPath $zipKey) { (Get-Item -LiteralPath $zipKey).GetValue("") } else { $null }
