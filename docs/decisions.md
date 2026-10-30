@@ -270,7 +270,7 @@
 - 选中条目逐块写入私有临时文件，单个文件不超过其声明大小和剩余 `max_total` 的较小值；每项消费后删除。未选条目通过 UnRAR 测试流继续固实解码，不写临时盘，并在数据回调中检查取消。
 - `ArchiveReader::for_each_selected` 让引擎将选择索引交给顺序格式；RAR 可以跳过未选条目的临时输出，同时保留固实流状态。兼容性 `open` 的整条目内存读取限制为 64 MiB。`open` 对选中条目直接使用有界内存缓冲，不落临时盘；通用选择性提取仍逐块写入私有临时文件，避免大条目整体驻留内存。
 - 图片预览使用 8 MiB 上限、文本预览使用 64 KiB 上限；RAR 只在启用 `rar` feature 的构建中可预览。该决策取代 D35 的 RAR 预览禁用状态及 D36 中“临时输出没有硬上限”的旧实现状态，不改变 D36 的默认关闭、许可证和文件关联要求。
-- 回归覆盖原生回调超限中止、取消、RAR 测试、选择性输出及应用层图片 / 文本读取限额。Release dry-run [41012225195](https://github.com/yuhuotech/rustzip/actions/runs/41012225195) 已验证四平台 opt-in 测试包和许可证；正式签名 Release 仍待验收。
+- 回归覆盖原生回调超限中止、取消、RAR 测试、选择性输出、多个选中条目的累计总输出限额及应用层图片 / 文本读取限额。Release dry-run [41090713832](https://github.com/yuhuotech/rustzip/actions/runs/41090713832) 已验证四平台 opt-in 测试包、许可证和 Windows RAR 安装 / 卸载关联；正式签名 Release 仍待验收。
 - 当前 HEAD `db0d14e` 的 GitHub Fuzz run [41005418831](https://github.com/yuhuotech/rustzip/actions/runs/41005418831) 对 RAR target 执行 233,347 次变异并保存 corpus cache，未发现崩溃。
 
 ## D39 bzip2 并行解压与 gzip 分块 Deflate
