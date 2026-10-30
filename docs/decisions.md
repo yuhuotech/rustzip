@@ -340,3 +340,4 @@
 - GUI 对识别出的 NSIS 返回专用本地化提示；`.nsis` 之类扩展名本身不会触发该提示。
 - `sniff_nsis` 由 synthetic PE overlay 单元用例和 nightly `nsis` fuzz target 覆盖；种子只包含虚构头部与零填充，不包含可执行代码。本机 nightly ASan 运行 119,304 次、GitHub fuzz run [41010338879](https://github.com/yuhuotech/rustzip/actions/runs/41010338879) 运行 3,287,482 次，均无崩溃并保存了 corpus cache。
 - FirstHeader 的签名字段依据 [NSIS 官方 `fileform.h`](https://github.com/NSIS-Dev/NSIS/blob/master/Source/exehead/fileform.h)；识别代码不依赖第三方解析器或新增依赖。
+- 另以 [上游 `deflate_nonsolid.exe` fixture](https://github.com/ATRAPSLLC/nsis-rs/blob/f20d03c407674dd670787ebcb2fa9e5f0d65a0ad/tests/fixtures/deflate_nonsolid.exe) 做本机只读冒烟：文件头确认为 NSIS，`rz l` 返回 NSIS 专属“不支持读取”错误。该 fixture 仅临时下载到 `/tmp`，不进入 RustZIP 分发内容。
