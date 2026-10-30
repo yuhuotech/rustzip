@@ -1,0 +1,10 @@
+"entries" = "Einträge";
+"size" = "Entpackte Größe";
+"file" = "Datei";
+"folder" = "Ordner";
+"omitted" = "Nur die ersten 200 Einträge werden angezeigt.";
+"limited" = "Der Archivindex überschreitet die Vorschau-Sicherheitsgrenze.";
+"unsupported" = "Diese aufgeteilte ZIP-Datei kann nicht angezeigt werden.";
+"unavailable" = "Der ZIP-Index konnte nicht gelesen werden.";
+"name" = "Name";
+"type" = "Typ";

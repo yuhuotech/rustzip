@@ -1,0 +1,10 @@
+"entries" = "Entries";
+"size" = "Uncompressed size";
+"file" = "File";
+"folder" = "Folder";
+"omitted" = "Only the first 200 entries are shown.";
+"limited" = "The archive index exceeds the preview safety limit.";
+"unsupported" = "This multi-volume ZIP cannot be previewed.";
+"unavailable" = "The ZIP index could not be read.";
+"name" = "Name";
+"type" = "Type";

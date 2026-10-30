@@ -1,0 +1,10 @@
+"entries" = "항목 수";
+"size" = "압축 해제 크기";
+"file" = "파일";
+"folder" = "폴더";
+"omitted" = "처음 200개 항목만 표시합니다.";
+"limited" = "보관 파일 색인이 미리보기 안전 한도를 초과했습니다.";
+"unsupported" = "이 분할 ZIP은 미리 볼 수 없습니다.";
+"unavailable" = "ZIP 색인을 읽을 수 없습니다.";
+"name" = "이름";
+"type" = "유형";

@@ -1,0 +1,10 @@
+"entries" = "Itens";
+"size" = "Tamanho descompactado";
+"file" = "Arquivo";
+"folder" = "Pasta";
+"omitted" = "Somente os primeiros 200 itens são exibidos.";
+"limited" = "O índice do arquivo excede o limite de segurança da pré-visualização.";
+"unsupported" = "Este ZIP dividido não pode ser pré-visualizado.";
+"unavailable" = "Não foi possível ler o índice ZIP.";
+"name" = "Nome";
+"type" = "Tipo";

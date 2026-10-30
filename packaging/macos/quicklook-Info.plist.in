@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key><string>en</string>
+    <key>CFBundleExecutable</key><string>RustZIPQuickLook</string>
+    <key>CFBundleIdentifier</key><string>com.yuhuotech.rustzip.quicklook</string>
+    <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+    <key>CFBundleName</key><string>RustZIP Quick Look</string>
+    <key>CFBundlePackageType</key><string>XPC!</string>
+    <key>CFBundleShortVersionString</key><string>@VERSION@</string>
+    <key>CFBundleVersion</key><string>@VERSION@</string>
+    <key>CFBundleSupportedPlatforms</key><array><string>MacOSX</string></array>
+    <key>LSMinimumSystemVersion</key><string>12.0</string>
+    <key>LSUIElement</key><true/>
+    <key>NSPrincipalClass</key><string>NSApplication</string>
+    <key>NSExtension</key>
+    <dict>
+        <key>NSExtensionAttributes</key>
+        <dict>
+            <key>QLSupportedContentTypes</key><array><string>public.zip-archive</string></array>
+            <key>QLSupportsSearchableItems</key><false/>
+        </dict>
+        <key>NSExtensionPointIdentifier</key><string>com.apple.quicklook.preview</string>
+        <key>NSExtensionPrincipalClass</key><string>RustZIPQuickLook.PreviewProvider</string>
+    </dict>
+</dict>
+</plist>

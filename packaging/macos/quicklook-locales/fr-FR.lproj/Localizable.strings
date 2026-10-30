@@ -1,0 +1,10 @@
+"entries" = "Entrées";
+"size" = "Taille décompressée";
+"file" = "Fichier";
+"folder" = "Dossier";
+"omitted" = "Seules les 200 premières entrées sont affichées.";
+"limited" = "L’index dépasse la limite de sécurité de l’aperçu.";
+"unsupported" = "Cet ZIP fractionné ne peut pas être prévisualisé.";
+"unavailable" = "Impossible de lire l’index ZIP.";
+"name" = "Nom";
+"type" = "Type";

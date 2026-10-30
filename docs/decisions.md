@@ -323,3 +323,11 @@
 - 动作 URL 由已有锁定版本的 `url` 2.5.8 解析（MIT OR Apache-2.0）；它原本已是工作区传递依赖，此次仅在 GUI 中显式声明。URL 总长限制 1 MiB，单次动作最多 4,096 个路径。
 - Finder Sync 扩展由用户在 macOS 系统设置中启用。该设置授权扩展读取 Finder 所选项目 URL；RustZIP 默认桌面构建仍保持未沙箱化，以继续使用现有系统钥匙串与文件访问流程。
 - 2026-10-30 在 macOS 27.0.1 的本机测试 bundle 中手动点击压缩和解压菜单：压缩打开 RustZIP 创建窗口；解压后文件 BLAKE3 与测试 ZIP 内文件一致。该 ad-hoc 测试不替代 Developer ID 签名安装包、公证后启用验收。
+
+## D46 macOS Quick Look ZIP 目录预览
+
+- `.zip` Quick Look 首版只读取中央目录，并展示路径、条目类型、解压后大小和加密标记；不解压文件内容、不渲染 HTML / 脚本，也不生成缩略图。普通图片 / 文本的应用内预览仍由 RustZIP 详情栏提供。
+- ZIP 预览最多读取 16 MiB 中央目录、解析 50,000 个条目并展示前 200 项；支持 ZIP64 目录元数据。分卷 / 多磁盘 ZIP 显示明确的不支持提示。损坏目录或超过限制时显示安全提示。
+- Quick Look 扩展使用 App Sandbox 和只读用户所选文件权限，按系统请求的 URL 读取。条目名必须经 HTML 转义；不得使用网络资源、脚本或解压内容。
+- `.7z`、RAR、tar 系和其他类型暂不注册 Quick Look provider，避免在应用层之外重复引入未验证的解析后端。
+- `packaging/macos/test-quicklook.sh` 的 Swift smoke 覆盖常规 ZIP、ZIP64 EOCD、CJK / 特殊字符名称、HTML 转义、损坏中央目录、多卷输入和 16 MiB 上限。实际 Finder 空格预览与签名 / 公证安装包验收仍待完成。

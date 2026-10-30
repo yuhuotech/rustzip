@@ -13,6 +13,9 @@ const MACOS_FINDER_EXTENSION: &str = include_str!("../../../packaging/macos/find
 const MACOS_FINDER_INFO: &str = include_str!("../../../packaging/macos/finder-sync-Info.plist.in");
 const MACOS_FINDER_ENTITLEMENTS: &str =
     include_str!("../../../packaging/macos/finder-sync.entitlements");
+const MACOS_QUICKLOOK: &str = include_str!("../../../packaging/macos/quicklook-preview.swift");
+const MACOS_QUICKLOOK_INFO: &str = include_str!("../../../packaging/macos/quicklook-Info.plist.in");
+const MACOS_QUICKLOOK_TEST: &str = include_str!("../../../packaging/macos/test-quicklook.sh");
 const LINUX_TARBALL: &str = include_str!("../../../packaging/linux/build-tarball.sh");
 const LINUX_INSTALL: &str = include_str!("../../../packaging/linux/install.sh");
 
@@ -107,6 +110,21 @@ fn macos_finder_actions_are_packaged_and_routed_through_the_app() {
     assert!(MACOS_FINDER_EXTENSION.contains("finder.extractHere"));
     assert!(MACOS_FINDER_EXTENSION.contains("#if RUSTZIP_WITH_RAR"));
     assert!(MACOS_FINDER_EXTENSION.contains("controller.selectedItemURLs()"));
+}
+
+#[test]
+fn macos_quicklook_is_bounded_and_only_advertises_zip() {
+    assert!(MACOS_BUILD.contains("RustZIPQuickLook.appex"));
+    assert!(MACOS_BUILD.contains("quicklook-locales"));
+    assert!(MACOS_QUICKLOOK_INFO.contains("com.apple.quicklook.preview"));
+    assert!(MACOS_QUICKLOOK_INFO.contains("public.zip-archive"));
+    assert!(!MACOS_QUICKLOOK_INFO.contains("public.pdf"));
+    assert!(MACOS_BUILD.contains("quicklook-preview.swift"));
+    assert!(MACOS_QUICKLOOK_TEST.contains("quicklook-smoke.swift"));
+    assert!(MACOS_QUICKLOOK.contains("maxCentralDirectoryBytes"));
+    assert!(MACOS_QUICKLOOK.contains("maxEntries"));
+    assert!(MACOS_QUICKLOOK.contains("startAccessingSecurityScopedResource"));
+    assert!(MACOS_QUICKLOOK.contains("dataOfContentType: .html"));
 }
 
 #[test]

@@ -1,0 +1,10 @@
+"entries" = "条目数";
+"size" = "解压后大小";
+"file" = "文件";
+"folder" = "文件夹";
+"omitted" = "仅显示前 200 个条目。";
+"limited" = "归档目录超出预览安全上限。";
+"unsupported" = "暂不支持预览此分卷 ZIP。";
+"unavailable" = "无法读取 ZIP 目录。";
+"name" = "名称";
+"type" = "类型";

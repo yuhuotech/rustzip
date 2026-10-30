@@ -1,0 +1,10 @@
+"entries" = "Elementos";
+"size" = "Tamaño descomprimido";
+"file" = "Archivo";
+"folder" = "Carpeta";
+"omitted" = "Solo se muestran los primeros 200 elementos.";
+"limited" = "El índice supera el límite de seguridad de la vista previa.";
+"unsupported" = "No se puede previsualizar este ZIP dividido.";
+"unavailable" = "No se pudo leer el índice ZIP.";
+"name" = "Nombre";
+"type" = "Tipo";

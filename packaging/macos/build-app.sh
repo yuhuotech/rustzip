@@ -43,8 +43,10 @@ fi
 app="$out/RustZIP.app"
 rm -rf "$app"
 finder_extension="$app/Contents/PlugIns/RustZIPFinderSync.appex"
+quicklook_extension="$app/Contents/PlugIns/RustZIPQuickLook.appex"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources" \
-    "$finder_extension/Contents/MacOS" "$finder_extension/Contents/Resources"
+    "$finder_extension/Contents/MacOS" "$finder_extension/Contents/Resources" \
+    "$quicklook_extension/Contents/MacOS" "$quicklook_extension/Contents/Resources"
 cp "$bin" "$app/Contents/MacOS/rustzip"
 cp packaging/icons/RustZIP.icns "$app/Contents/Resources/RustZIP.icns"
 cp packaging/licenses/libchm.txt "$app/Contents/Resources/libchm-license.txt"
@@ -75,19 +77,35 @@ xcrun swiftc -application-extension -parse-as-library -O \
     -Xlinker -e -Xlinker _NSExtensionMain \
     -o "$finder_extension/Contents/MacOS/RustZIPFinderSync" \
     packaging/macos/finder-sync.swift
+sed -e "s/@VERSION@/$version/g" \
+    packaging/macos/quicklook-Info.plist.in > "$quicklook_extension/Contents/Info.plist"
+plutil -lint "$quicklook_extension/Contents/Info.plist"
+cp -R packaging/macos/quicklook-locales/. "$quicklook_extension/Contents/Resources/"
+xcrun swiftc -application-extension -parse-as-library -O \
+    -module-name RustZIPQuickLook -target "$swift_target" -sdk "$sdk" \
+    -framework AppKit -framework QuickLook -framework QuickLookUI \
+    -Xlinker -e -Xlinker _NSExtensionMain \
+    -o "$quicklook_extension/Contents/MacOS/RustZIPQuickLook" \
+    packaging/macos/quicklook-preview.swift
 
 identity="${MACOS_SIGN_IDENTITY:--}"
 if [ "$identity" = "-" ]; then
     codesign --force --entitlements packaging/macos/finder-sync.entitlements \
         --sign - "$finder_extension"
+    codesign --force --entitlements packaging/macos/finder-sync.entitlements \
+        --sign - "$quicklook_extension"
     codesign --force --sign - "$app"
 else
     codesign --force --options runtime --timestamp \
         --entitlements packaging/macos/finder-sync.entitlements \
         --sign "$identity" "$finder_extension"
+    codesign --force --options runtime --timestamp \
+        --entitlements packaging/macos/finder-sync.entitlements \
+        --sign "$identity" "$quicklook_extension"
     codesign --force --options runtime --timestamp --sign "$identity" "$app"
 fi
 codesign --verify --deep --strict "$finder_extension"
+codesign --verify --deep --strict "$quicklook_extension"
 codesign --verify --deep --strict "$app"
 
 dmg="$out/RustZIP-$version-macos-$arch.dmg"
