@@ -9,6 +9,7 @@ rust-version.workspace = true
 [dependencies]
 tempfile.workspace = true
 dirs.workspace = true
+reflink-copy = "0.1.30"
 
 [lints]
 workspace = true

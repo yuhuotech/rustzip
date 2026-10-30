@@ -1,8 +1,9 @@
 //! Changing an archive that already exists: adding files and deleting entries.
 //!
 //! Edits are staged beside the original, checked, and only then swapped in.
-//! Eligible ZIP deletions, renames and replacements reuse compressed entries; other edits unpack
-//! into a scratch folder and repack. Failure or cancellation preserves the original.
+//! Eligible ZIP edits append changed records to a reflink clone when possible, with the raw-copy
+//! path as fallback; other edits unpack into a scratch folder and repack. Failure or cancellation
+//! preserves the original.
 
 use rz_core::{
     clean_path, is_within, CancelToken, CreateOptions, Entry, EntryKind, Error, NoProgress,
@@ -588,24 +589,56 @@ fn edit_zip_copy(
         std::process::id(),
         unique_seq()
     ));
-    let output = OpenOptions::new()
-        .write(true)
-        .read(true)
-        .create_new(true)
-        .open(&staged_path)?;
     let staged = StagedFile(staged_path);
-    rz_formats::zip_edit::copy_entries(
-        source.try_clone()?,
-        output,
-        plan,
-        replacement,
-        cancel,
-        &mut EditPhase {
-            phase: 1,
-            files_per_phase: entries.len() as u64,
-            progress,
-        },
-    )?;
+    let cloned = rz_platform::reflink_file(archive, &staged.0).is_ok();
+    let mut appended = false;
+    if cloned {
+        match OpenOptions::new().write(true).read(true).open(&staged.0) {
+            Ok(output) => {
+                match rz_formats::zip_edit::append_entries(
+                    source.try_clone()?,
+                    output,
+                    plan,
+                    replacement.clone(),
+                    cancel,
+                    &mut EditPhase {
+                        phase: 1,
+                        files_per_phase: entries.len() as u64,
+                        progress,
+                    },
+                ) {
+                    Ok(()) => appended = true,
+                    Err(_) if cancel.is_cancelled() => return Err(Error::Cancelled),
+                    Err(_) => {
+                        let _ = fs::remove_file(&staged.0);
+                    }
+                }
+            }
+            Err(_) => {
+                let _ = fs::remove_file(&staged.0);
+            }
+        }
+    }
+    if !appended {
+        let _ = fs::remove_file(&staged.0);
+        let output = OpenOptions::new()
+            .write(true)
+            .read(true)
+            .create_new(true)
+            .open(&staged.0)?;
+        rz_formats::zip_edit::copy_entries(
+            source.try_clone()?,
+            output,
+            plan,
+            replacement,
+            cancel,
+            &mut EditPhase {
+                phase: 1,
+                files_per_phase: entries.len() as u64,
+                progress,
+            },
+        )?;
+    }
     let report = verify_progress(
         &staged.0,
         None,
@@ -1266,7 +1299,7 @@ mod tests {
         let before = fs::read(&archive).unwrap();
         let token = CancelToken::new();
         let mut progress = |p: Progress| {
-            if p.bytes_done > 1_000_000 && p.files_done * 3 == p.files_total && p.files_total > 0 {
+            if (1_000_000..2_000_000).contains(&p.bytes_done) {
                 token.cancel();
             }
         };

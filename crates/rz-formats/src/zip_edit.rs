@@ -69,6 +69,15 @@ impl Write for Output<'_> {
     }
 }
 
+impl Read for Output<'_> {
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        self.cancel
+            .check()
+            .map_err(|_| io::Error::other("cancelled"))?;
+        self.file.read(buffer)
+    }
+}
+
 impl Seek for Output<'_> {
     fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
         self.cancel
@@ -218,6 +227,163 @@ pub fn copy_entries(
         }
         done.set(done.get() + 1);
     }
+    let output = writer.finish().map_err(|error| {
+        if cancel.is_cancelled() {
+            Error::Cancelled
+        } else {
+            map_err(error)
+        }
+    })?;
+    output.file.sync_all()?;
+    cancel.check()
+}
+
+/// Writes changed entries and a rebuilt central directory into a staged copy.
+/// Unchanged entries keep pointing at their original local records; only renamed
+/// and replaced entries get new local records.
+pub fn append_entries(
+    source: File,
+    output: File,
+    names: &[Option<String>],
+    replacement: Option<(usize, PathBuf, u32)>,
+    cancel: &CancelToken,
+    progress: &mut dyn ProgressSink,
+) -> Result<()> {
+    let total_bytes = source.metadata()?.len().max(1);
+    let source = Source {
+        file: source,
+        cancel,
+    };
+    let mut archive = ZipArchive::new(source).map_err(|error| {
+        if cancel.is_cancelled() {
+            Error::Cancelled
+        } else {
+            map_err(error)
+        }
+    })?;
+    if archive.len() != names.len() {
+        return Err(Error::Corrupt("ZIP entry count changed".into()));
+    }
+
+    let changed_total = names
+        .iter()
+        .enumerate()
+        .filter(|(index, name)| {
+            name.is_none()
+                || replacement
+                    .as_ref()
+                    .is_some_and(|(replace, _, _)| replace == index)
+                || name.as_deref().is_some_and(|name| {
+                    archive.by_index_raw(*index).is_ok_and(|entry| {
+                        entry.name().is_ok_and(|old_name| old_name.as_ref() != name)
+                    })
+                })
+        })
+        .count() as u64;
+    let done = Rc::new(Cell::new(0));
+    let output = Output {
+        file: output,
+        cancel,
+        progress,
+        files_done: Rc::clone(&done),
+        files_total: changed_total.max(1),
+        bytes_done: 0,
+        bytes_total: total_bytes,
+        last: None,
+    };
+    let mut writer = ZipWriter::new_append(output).map_err(|error| {
+        if cancel.is_cancelled() {
+            Error::Cancelled
+        } else {
+            map_err(error)
+        }
+    })?;
+
+    // Remove superseded central-directory records before adding their new names.
+    // The source reader stays separate, so renamed payloads remain available.
+    for (index, name) in names.iter().enumerate() {
+        cancel.check()?;
+        let entry = archive.by_index_raw(index).map_err(|error| {
+            if cancel.is_cancelled() {
+                Error::Cancelled
+            } else {
+                map_err(error)
+            }
+        })?;
+        let old_name = entry.name().map_err(map_err)?.into_owned();
+        let changed = name.as_deref().is_none_or(|name| name != old_name)
+            || replacement
+                .as_ref()
+                .is_some_and(|(replace, _, _)| *replace == index);
+        drop(entry);
+        if changed {
+            writer.hide_file(&old_name).map_err(|error| {
+                if cancel.is_cancelled() {
+                    Error::Cancelled
+                } else {
+                    map_err(error)
+                }
+            })?;
+            if name.is_none() {
+                done.set(done.get().saturating_add(1));
+            }
+        }
+    }
+
+    for (index, name) in names.iter().enumerate() {
+        cancel.check()?;
+        let Some(name) = name else { continue };
+        let entry = archive.by_index_raw(index).map_err(|error| {
+            if cancel.is_cancelled() {
+                Error::Cancelled
+            } else {
+                map_err(error)
+            }
+        })?;
+        let old_name = entry.name().map_err(map_err)?.into_owned();
+        if let Some((_, path, level)) = replacement
+            .as_ref()
+            .filter(|(replace, _, _)| *replace == index)
+        {
+            let file_comment = entry.comment().to_owned();
+            drop(entry);
+            let meta = std::fs::metadata(path)?;
+            let mut options = zip::write::SimpleFileOptions::default()
+                .large_file(meta.len() >= u64::from(u32::MAX));
+            options = if *level == 0 {
+                options.compression_method(zip::CompressionMethod::Stored)
+            } else {
+                options
+                    .compression_method(zip::CompressionMethod::Deflated)
+                    .compression_level(Some(i64::from((*level).min(9))))
+            };
+            if let Some(mode) = rz_platform::mode_of(&meta) {
+                options = options.unix_permissions(mode);
+            }
+            if let Some(time) = rz_platform::mtime_of(&meta).and_then(crate::zip_fmt::unix_to_dos) {
+                options = options.last_modified_time(time);
+            }
+            writer
+                .start_file(
+                    name,
+                    options.into_full_options().with_file_comment(file_comment),
+                )
+                .map_err(map_err)?;
+            let mut input = Source {
+                file: File::open(path)?,
+                cancel,
+            };
+            io::copy(&mut input, &mut writer)
+                .map_err(zip::result::ZipError::Io)
+                .map_err(map_err)?;
+        } else if *name != old_name {
+            writer.raw_copy_file_rename(entry, name).map_err(map_err)?;
+        } else {
+            continue;
+        }
+        done.set(done.get().saturating_add(1));
+    }
+
     let output = writer.finish().map_err(|error| {
         if cancel.is_cancelled() {
             Error::Cancelled

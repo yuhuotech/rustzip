@@ -29,6 +29,7 @@ if [ "${1:-}" = "--uninstall" ]; then
     rm -f "$prefix/share/doc/rustzip/rodio-mit.txt" "$prefix/share/doc/rustzip/rodio-apache-2.0.txt"
     rm -f "$prefix/share/doc/rustzip/cpal-apache-2.0.txt" "$prefix/share/doc/rustzip/symphonia-mpl-2.0.txt"
     rm -f "$prefix/share/doc/rustzip/video-preview-licenses.txt" "$prefix/share/doc/rustzip/mp4-mit.txt"
+    rm -f "$prefix/share/doc/rustzip/reflink-copy-mit.txt"
     rm -f "$prefix/share/doc/rustzip/rust-h264-mit.txt" "$prefix/share/doc/rustzip/rust-h264-apache-2.0.txt"
     rm -f "$nautilus_binary"
     rmdir "$nautilus_scripts/.rustzip" 2>/dev/null || true
@@ -51,6 +52,7 @@ install -Dm644 "$here/rodio-apache-2.0.txt" "$prefix/share/doc/rustzip/rodio-apa
 install -Dm644 "$here/cpal-apache-2.0.txt" "$prefix/share/doc/rustzip/cpal-apache-2.0.txt"
 install -Dm644 "$here/symphonia-mpl-2.0.txt" "$prefix/share/doc/rustzip/symphonia-mpl-2.0.txt"
 install -Dm644 "$here/video-preview-licenses.txt" "$prefix/share/doc/rustzip/video-preview-licenses.txt"
+install -Dm644 "$here/reflink-copy-mit.txt" "$prefix/share/doc/rustzip/reflink-copy-mit.txt"
 install -Dm644 "$here/mp4-mit.txt" "$prefix/share/doc/rustzip/mp4-mit.txt"
 install -Dm644 "$here/rust-h264-mit.txt" "$prefix/share/doc/rustzip/rust-h264-mit.txt"
 install -Dm644 "$here/rust-h264-apache-2.0.txt" "$prefix/share/doc/rustzip/rust-h264-apache-2.0.txt"

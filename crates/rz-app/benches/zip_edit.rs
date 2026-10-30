@@ -1,4 +1,4 @@
-//! Compare raw-copy ZIP editing with the existing extract-and-repack path.
+//! Compare staged incremental ZIP editing with the extract-and-repack path.
 
 use rz_app::modify::{edit_archive, Edit};
 use rz_core::{CancelToken, CreateOptions, EntryKind, NoProgress};
@@ -65,30 +65,45 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &CancelToken::new(),
         &mut NoProgress,
     )?;
+    let reflink_probe = dir.path().join("reflink-probe.zip");
+    let reflink_available = rz_platform::reflink_file(&original, &reflink_probe).is_ok();
+    let _ = std::fs::remove_file(&reflink_probe);
+    println!("filesystem reflink: {reflink_available}");
+
     let mut expected = None;
-    for (label, encoding) in [("raw-copy", None), ("repack", Some("utf-8"))] {
-        let archive = dir.path().join(format!("{label}.zip"));
-        std::fs::copy(&original, &archive)?;
-        let start = Instant::now();
-        edit_archive(
-            &archive,
-            &Edit::Delete(vec!["source/delete.bin".into()]),
-            &ExtractOptions::default(),
-            6,
-            encoding,
-            &CancelToken::new(),
-            &mut NoProgress,
-        )?;
-        let elapsed = start.elapsed().as_secs_f64();
-        let hashes = content(&archive)?;
-        if let Some(reference) = &expected {
-            if reference != &hashes {
-                return Err("edited archives contain different data".into());
+    let mut samples = BTreeMap::<String, Vec<f64>>::new();
+    for round in 0..3 {
+        for (label, encoding) in [("staged-incremental", None), ("full-repack", Some("utf-8"))] {
+            let archive = dir.path().join(format!("{label}-{round}.zip"));
+            std::fs::copy(&original, &archive)?;
+            let start = Instant::now();
+            edit_archive(
+                &archive,
+                &Edit::Delete(vec!["source/delete.bin".into()]),
+                &ExtractOptions::default(),
+                6,
+                encoding,
+                &CancelToken::new(),
+                &mut NoProgress,
+            )?;
+            samples
+                .entry(label.to_owned())
+                .or_default()
+                .push(start.elapsed().as_secs_f64());
+            let hashes = content(&archive)?;
+            if let Some(reference) = &expected {
+                if reference != &hashes {
+                    return Err("edited archives contain different data".into());
+                }
+            } else {
+                expected = Some(hashes);
             }
-        } else {
-            expected = Some(hashes);
         }
-        println!("{label}: {elapsed:.3} s ({size_mb} MiB retained)");
+    }
+    for (label, values) in &mut samples {
+        values.sort_by(f64::total_cmp);
+        let median = values[values.len() / 2];
+        println!("{label}: {median:.3} s median over 3 rounds ({size_mb} MiB retained)");
     }
     Ok(())
 }

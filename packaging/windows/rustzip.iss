@@ -78,6 +78,7 @@ Source: "..\licenses\rodio-apache-2.0.txt"; DestDir: "{app}\licenses"; DestName:
 Source: "..\licenses\cpal-apache-2.0.txt"; DestDir: "{app}\licenses"; DestName: "cpal-apache-2.0.txt"; Flags: ignoreversion
 Source: "..\licenses\symphonia-mpl-2.0.txt"; DestDir: "{app}\licenses"; DestName: "symphonia-mpl-2.0.txt"; Flags: ignoreversion
 Source: "..\licenses\video-preview.txt"; DestDir: "{app}\licenses"; DestName: "video-preview.txt"; Flags: ignoreversion
+Source: "..\licenses\reflink-copy-mit.txt"; DestDir: "{app}\licenses"; DestName: "reflink-copy-mit.txt"; Flags: ignoreversion
 Source: "..\licenses\mp4-mit.txt"; DestDir: "{app}\licenses"; DestName: "mp4-mit.txt"; Flags: ignoreversion
 Source: "..\licenses\rust-h264-mit.txt"; DestDir: "{app}\licenses"; DestName: "rust-h264-mit.txt"; Flags: ignoreversion
 Source: "..\licenses\rust-h264-apache-2.0.txt"; DestDir: "{app}\licenses"; DestName: "rust-h264-apache-2.0.txt"; Flags: ignoreversion

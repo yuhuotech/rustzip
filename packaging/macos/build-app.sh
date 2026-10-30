@@ -65,6 +65,7 @@ cp packaging/licenses/rodio-apache-2.0.txt "$app/Contents/Resources/rodio-apache
 cp packaging/licenses/cpal-apache-2.0.txt "$app/Contents/Resources/cpal-apache-2.0.txt"
 cp packaging/licenses/symphonia-mpl-2.0.txt "$app/Contents/Resources/symphonia-mpl-2.0.txt"
 cp packaging/licenses/video-preview.txt "$app/Contents/Resources/video-preview-licenses.txt"
+cp packaging/licenses/reflink-copy-mit.txt "$app/Contents/Resources/reflink-copy-mit.txt"
 cp packaging/licenses/mp4-mit.txt "$app/Contents/Resources/mp4-mit.txt"
 cp packaging/licenses/rust-h264-mit.txt "$app/Contents/Resources/rust-h264-mit.txt"
 cp packaging/licenses/rust-h264-apache-2.0.txt "$app/Contents/Resources/rust-h264-apache-2.0.txt"

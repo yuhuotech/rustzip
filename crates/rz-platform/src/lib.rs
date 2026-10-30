@@ -8,6 +8,14 @@ use std::io;
 use std::path::Path;
 use std::time::{Duration, UNIX_EPOCH};
 
+/// Creates a copy-on-write clone when the destination filesystem supports it.
+///
+/// The destination must not already exist. Unsupported filesystems return an
+/// error so callers can choose a cancellable copy path that fits their task.
+pub fn reflink_file(source: &Path, destination: &Path) -> io::Result<()> {
+    reflink_copy::reflink(source, destination)
+}
+
 /// Applies the permission bits of an archive entry.
 ///
 /// Only the lower nine bits are applied: setuid, setgid and sticky bits from an
