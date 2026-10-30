@@ -6,13 +6,13 @@
    - 把这个文件的内容(64 个十六进制字符)存成 GitHub 仓库的 **Secret `RZ_UPDATE_KEY`**。
    - **私钥不进仓库,也不要发给任何人。** 丢了只能换密钥:旧版本不认新公钥,用户要手动重装一次。
    - 备份到密码管理器。
-2. **统计服务器地址**(可选):先按 [`web/README.md`](../web/README.md) 部署官网和 Neon 数据库,然后把 `https://rustzip.vercel.app/api/v1/telemetry` 设为 GitHub 仓库 **Variable `RZ_STATS_URL`**。以后切换到 `rustzip.com` 时更新该变量即可。没设就不会上报任何东西。
+2. **统计服务器地址**(可选):先按 [`web/README.md`](../web/README.md) 部署官网和 Neon 数据库,然后把 `https://rustzip.vercel.app/api/v1/telemetry` 设为 GitHub 仓库 **Variable `RZ_STATS_URL`**。2026-10-30 已确认官网、`/formats`、`/privacy` 与 `/api/health` 均返回 HTTP 200，数据库健康；仓库变量已设置。以后切换到 `rustzip.com` 时更新该变量即可。变量为空时客户端不发送统计。
 3. **macOS 签名**(可选,强烈建议):没有 Apple 开发者账号时 dmg 只做临时签名,用户首次打开要在"系统设置 → 隐私与安全"里点"仍要打开"。有账号则设置 Secrets:`MACOS_CERT_P12`(base64)、`MACOS_CERT_PASSWORD`、`MACOS_SIGN_IDENTITY`,公证再加 `APPLE_ID`、`APPLE_TEAM_ID`、`APPLE_APP_PASSWORD`。
 4. **Windows 签名**:目前不签。SmartScreen 会提示"未知发布者",买代码签名证书后再接入。
 
 ## 发一个版本
 
-> 主 CI 和 Release workflow 由 Actions 页面手动触发。Release dry-run 可从任意分支运行；正式发布只接受 `v*` tag。Fuzz workflow 目标为每日定时运行 ZIP recovery、CHM、bzip2、RAR 和 NSIS identification，不构建或发布安装包；定时触发仍待验收。
+> 主 CI 和 Release workflow 由 Actions 页面手动触发。Release dry-run 可从任意分支运行；正式发布只接受 `v*` tag。Fuzz workflow 目标为每日 09:37 UTC 定时运行 ZIP recovery、CHM、bzip2、RAR 和 NSIS identification，不构建或发布安装包；新时刻的定时触发仍待验收。
 
 1. 改根 `Cargo.toml` 里 `[workspace.package] version`,提交。
 2. 先在 `main` 上手动触发 Release workflow，保留默认 `dry_run=true`；它会生成一次性测试密钥、构建四个平台产物、签名并校验平台集合和实际文件，保存名为 `release-dry-run-bundle` 的 14 天 artifact。测试签名不匹配应用公钥，dry-run 包不能用于更新安装。
@@ -44,7 +44,7 @@ Dry-run 默认不创建 GitHub Release，也不提交 Apple notarization 请求�
 
 服务端由仓库 `web/` 提供:`POST /api/v1/telemetry` 只接受上述 7 个字段,按安装 ID 和日期幂等去重。原始 UUID 在写入数据库前用 HMAC-SHA-256 转换;不保存文件信息或请求 IP。健康检查为 `GET /api/health`。数据库查询和本地验证方法见 [`web/README.md`](../web/README.md)。
 
-Vercel build 会在部署期间自动应用 Neon Postgres migrations;检查部署日志确认迁移成功,并确认 `/api/health` 返回 200。域名配置完成后,再将完整统计地址写入 GitHub Repository Settings → Secrets and variables → Actions → Variables → `RZ_STATS_URL`。应用更新仍使用 GitHub Release 内的签名 `update.json`,不依赖 Vercel。
+Vercel build 会在部署期间自动应用 Neon Postgres migrations;检查部署日志确认迁移成功,并确认 `/api/health` 返回 200。2026-10-30 线上健康检查返回 `{"status":"ok","database":"ok"}`，仓库 `RZ_STATS_URL` 已设置为完整接口地址。应用更新仍使用 GitHub Release 内的签名 `update.json`,不依赖 Vercel。
 
 ## 本地打包(不发布)
 
@@ -70,7 +70,7 @@ Windows MSVC 构建通过 CI 的 `native-archive-deps` action 安装 `x64-window
 |---|---|---|---|
 | 双击/"打开方式"打开压缩包 | 已做(Info.plist 文档类型 + 系统打开事件) | 已做(安装程序注册,不抢默认程序) | 已做(`.desktop` 的 MimeType) |
 | 右键"用 RustZIP 压缩"/"解压到此处" | Finder Sync 扩展已加入 `.app`，macOS 27.0.1 ad-hoc 测试包中两项均实际点击通过；用户需在系统设置启用扩展，Developer ID / 公证包仍待验收 | 已做(安装程序写注册表，原生菜单点击仍待验收) | 安装器写入 Dolphin 的 KIO `servicemenus` 与旧版 `kservices5/ServiceMenus`，并安装 Nemo 动作；Nautilus 50.2.2 的 Scripts 子菜单、压缩入口和逐字节解压已在 Ubuntu 26.04 / Xvfb 验收。Dolphin / Nemo 实机点击仍待验收 |
-| 预览(Quick Look 等) | ZIP 目录视图扩展已打包并签名；Swift smoke、`qlmanage` provider 调用和 WebKit 页面加载通过，Finder 空格键可见 UI 与公证包仍待验收 | 未做 | 未做 |
+| 预览(Quick Look 等) | ZIP 目录视图扩展已打包并签名；Swift smoke 通过。macOS 27.0.1 临时 `.app` 经 Launch Services / PlugInKit 注册后 provider 可见并由 `qlmanage` 启动；Release macOS matrix 现运行注册 smoke 并撤销临时状态。Finder 空格键可见页面与公证包仍待验收 | 未做 | 未做 |
 
 macOS 的“打开方式”声明包含已接入的常见只读格式及 LZ4，RAR 仅在显式启用时声明；声明本身不改变系统默认程序，实际 Finder 展示仍需在安装后的系统上验收。
 
@@ -85,7 +85,9 @@ macOS 的“打开方式”声明包含已接入的常见只读格式及 LZ4，R
 - 修复版 Release dry-run [40982574540](https://github.com/yuhuotech/rustzip/actions/runs/40982574540) 全部通过：四个平台常规包构建、签名和汇总验签成功；macOS arm64 / x86_64、Linux x86_64、Windows x86_64 的 RAR 包均构建并检查通过，Windows RAR 安装 / 卸载与关联冒烟通过。`release-dry-run-bundle` 和 `rar-package-validation-bundle` 成功上传；`publish` 按 dry-run 规则跳过，未创建公开 Release。
 - 最终 Quick Look 安全边界提交 `0d58852` 的 Release dry-run [40994239520](https://github.com/yuhuotech/rustzip/actions/runs/40994239520) 全部通过：双架构 macOS、Windows、Linux 常规包及四目标 RAR 验证包构建成功，RAR 安装 / 卸载、manifest 验签和 bundles 上传通过；公开发布 job 按 dry-run 规则跳过。
 - 当前 HEAD `67b4c2e` 的 Release dry-run [41012225195](https://github.com/yuhuotech/rustzip/actions/runs/41012225195) 全部通过：四个平台常规包构建 / 签名、四目标 RAR 包构建检查、Windows RAR 安装 / 关联 / 卸载冒烟、manifest 汇总验签及两个 bundles 上传成功；公开 `publish` job 按 dry-run 条件跳过，未创建正式 Release。
+- 提交 `fabff8b` 的 Release dry-run [41026007832](https://github.com/yuhuotech/rustzip/actions/runs/41026007832) 全部通过：四个平台常规包构建签名、四平台 RAR 包验证、Windows RAR 安装 / 关联 / 卸载、manifest 汇总验签及两个 bundle 上传成功；`publish` 按 dry-run 条件跳过，未创建公开 Release。
+- 提交 `fabff8b` 的三平台 CI [41026008129](https://github.com/yuhuotech/rustzip/actions/runs/41026008129) 七个 job 全部通过；五目标 Fuzz [41026029882](https://github.com/yuhuotech/rustzip/actions/runs/41026029882) 均成功并保存 corpus cache。
 - 本机 Finder Sync ad-hoc 验收包不等同正式签名 Release；签名密钥和公证配置仍未用于公开发布。
 - 2026-10-29 最新 Fuzz 手动 run [40961694769](https://github.com/yuhuotech/rustzip/actions/runs/40961694769) 在提交 `70addea` 上四个 target 均通过并保存 corpus cache：ZIP recovery 743,952 次、CHM 34,172 次、bzip2 8,454 次、RAR 187,945 次，无 crash。每日 schedule 在 03:23 UTC；该次 run 在下次触发时间前结束。
 
-2026-10-28 的手动 CI、macOS 钥匙串 / Launch Services 检查与 Windows 修复见[第二阶段验收](phase-2-platform-acceptance.md)：提交 `30c4201` 的六个 CI 任务全部通过。之后 CI [41010338749](https://github.com/yuhuotech/rustzip/actions/runs/41010338749) 的七个 job 在 Windows / macOS / Ubuntu 全部通过；当前 HEAD `67b4c2e` 的 Release dry-run [41012225195](https://github.com/yuhuotech/rustzip/actions/runs/41012225195) 完成四平台常规 / RAR 包及 Windows RAR 安装器验收。正式签名 Release 和部分原生系统交互仍待完成。
+2026-10-28 的手动 CI、macOS 钥匙串 / Launch Services 检查与 Windows 修复见[第二阶段验收](phase-2-platform-acceptance.md)。当前提交 `fabff8b` 的三平台 CI [41026008129](https://github.com/yuhuotech/rustzip/actions/runs/41026008129)、Release dry-run [41026007832](https://github.com/yuhuotech/rustzip/actions/runs/41026007832) 与五目标 Fuzz [41026029882](https://github.com/yuhuotech/rustzip/actions/runs/41026029882) 均成功。正式签名 Release 和部分原生系统交互仍待完成。

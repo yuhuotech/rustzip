@@ -6,7 +6,7 @@
 
 ## 1. 结论
 
-RustZIP 的主要归档与桌面主流程已实现。2026-10-30 增加 macOS Finder Sync 压缩 / 解压菜单并在 macOS 27.0.1 ad-hoc 包实机点击验收；ZIP Quick Look 视图扩展已实现，ZIP/ZIP64 安全 smoke 和系统 WebKit 加载通过。Finder 空格键实测只显示系统通用 ZIP 图标，PlugInKit 注册列表中没有 RustZIP provider，因此可见内容未通过。本次补上 GUI 的 ZIP 文件名编码设置，支持自动、UTF-8、GBK、Shift-JIS、EUC-KR、Big5 和 Windows-1252；GUI 持久化回归、Rust 1.96 全工作区 all-features 测试及 Clippy 均已通过，最新三平台 CI 将在提交后触发。最新已完成的跨平台 CI [41010338749](https://github.com/yuhuotech/rustzip/actions/runs/41010338749) 七个 job 全部通过；当前 HEAD `67b4c2e` 的 Release dry-run [41012225195](https://github.com/yuhuotech/rustzip/actions/runs/41012225195) 也全部通过。其余主要缺口为 PDF / 音视频应用内预览、与 D11 崩溃保全约束冲突的 ZIP 真正原地增量编辑，以及安全 / 许可门槛尚未满足的 WIM / DMG / NSIS reader。Windows 原生交互、Dolphin / Nemo 实机菜单和正式签名发布仍待验收。虚拟挂载、云端按需解压、WASM 插件和 SFX 仍列为远期需求。
+RustZIP 的主要归档与桌面主流程已实现。2026-10-30 增加 macOS Finder Sync 压缩 / 解压菜单并在 macOS 27.0.1 ad-hoc 包实机点击验收；ZIP Quick Look 视图扩展已实现，ZIP/ZIP64 安全 smoke 和系统 WebKit 加载通过。本轮验证了临时 `.app` 经 Launch Services 注册并将 Quick Look provider election 设为 use 后，PlugInKit 可发现 provider，`qlmanage` 能启动扩展；Finder 空格键可见内容因桌面捕获不可用仍未验收，临时注册已撤销。本次 GUI 的 ZIP 文件名编码设置支持自动、UTF-8、GBK、Shift-JIS、EUC-KR、Big5 和 Windows-1252；GUI 持久化回归、Rust 1.96 全工作区 all-features 测试、Clippy 及三平台 CI [41026008129](https://github.com/yuhuotech/rustzip/actions/runs/41026008129) 七个 job 均通过。最新 Release dry-run [41026007832](https://github.com/yuhuotech/rustzip/actions/runs/41026007832) 的常规和四平台 RAR 构建、安装冒烟与汇总验签均通过；公开发布 job 跳过。最新五目标 fuzz run [41026029882](https://github.com/yuhuotech/rustzip/actions/runs/41026029882) 全部通过。其余主要缺口为 PDF / 音视频应用内预览、与 D11 崩溃保全约束冲突的 ZIP 真正原地增量编辑，以及安全 / 许可门槛尚未满足的 WIM / DMG / NSIS reader。Windows 原生交互、Dolphin / Nemo 实机菜单和正式签名发布仍待验收。虚拟挂载、云端按需解压、WASM 插件和 SFX 仍列为远期需求。
 
 四个曾经占位的侧栏功能——常用位置、密码本、格式转换、压缩包修复——在当前代码中已经实现，不能继续列为“未开发”。转换与修复的符号链接和损坏数据边界见 [侧栏实现记录](sidebar-implementation.md) 与 [决策 D9](decisions.md#d9-左栏工具的数据安全与恢复边界)。
 
@@ -23,17 +23,17 @@ RustZIP 的主要归档与桌面主流程已实现。2026-10-30 增加 macOS Fin
 | P0 | bzip2 多线程 | 单文件和 tar.bz2 按块并行压缩；读取通过 `pbz2` 并行解码单流和串接 member，按线程 / 内存预算估算限 worker；压缩与解压均有顺序回退，系统 bzip2 互通用例通过 | 扩大外部样本、损坏 / 取消边界和三平台验收 |
 | P0 | 大文件 Deflate | `.gz` / `.tar.gz` 在多线程模式下以最多 900,000 字节块压成有序标准 gzip members；未加密 ZIP 大条目已分块并行 Deflate，通过 Info-ZIP `unzip -t`、引擎往返、取消清理和 BLAKE3 校验。40 / 64 / 128 MiB 每种三轮的中位数见[基准记录](benchmarks/2026-10-29-zip-large-deflate.md) | Windows / macOS 7-Zip、WinZip 外部互通与其他数据类型性能样本；ZIP 加密继续顺序编码 |
 | P0 | 校验和 | `rz-app` 流式 SHA-256 / BLAKE3、CLI `rz h` 和最近文件 / 常用位置的 GUI 入口已接入；标准向量、分块进度、取消、非普通文件拒绝及 workspace 回归通过 | 无；保留与归档 CRC 校验的语义区分 |
-| P1 | 预览 | 详情栏支持受限图片 / UTF-8 文本；启用 RAR 时单条目预览走有界内存读取，不写临时文件。macOS Quick Look 视图扩展列出 ZIP 目录（中央目录最多 16 MiB / 50,000 项，显示 200 项），不解压内容；`qlmanage` 加载 WebKit 页面通过。Finder 空格键实测走系统通用 ZIP 图标，PlugInKit 未登记 RustZIP provider，实际内容仍未验收。PDF / 音视频仍由系统程序打开 | 在已安装应用的 PlugInKit 注册 provider 后复测 Finder Quick Look；仅在资源硬上限与许可证符合 D30 后评估 PDF；再评估音视频预览 |
+| P1 | 预览 | 详情栏支持受限图片 / UTF-8 文本；启用 RAR 时单条目预览走有界内存读取，不写临时文件。macOS Quick Look 视图扩展列出 ZIP 目录（中央目录最多 16 MiB / 50,000 项，显示 200 项），不解压内容；安全 smoke 与 `qlmanage` provider 加载通过。临时包经 Launch Services / PlugInKit 注册后 provider 可发现并启动；Finder 可见页面、正式签名包注册仍待验收。PDF / 音视频仍由系统程序打开 | 验收 Finder 空格键可见 UI 和 Developer ID / 公证包注册；仅在资源硬上限与许可证符合 D30 后评估 PDF；再评估音视频预览 |
 | P1 | 压缩包内编辑 | 添加、删除、重命名已实现；可用系统程序编辑条目并自动写回。符合条件的单卷、无密码 ZIP 删除 / 重命名 / 条目写回复制原压缩数据，保留归档 / 条目注释、自定义扩展字段和 ZIP64 扩展数据；替换条目时仍保留原注释；自解压前缀、非 UTF-8 名称、加密、分卷及其他操作回退完整重打包；仍非原地增量写入 | 扩大厂商扩展字段和跨平台替换验证；原地增量写入仍需先解决与 D11 崩溃保全的决策冲突 |
 | P1 | 完成后动作与通知 | 设置可控解压完成后显示目录；历史记录为本次运行内成功任务提供本次运行结果定位，不持久化结果路径；可选系统通知只发通用成功 / 失败信息，默认关闭。Ubuntu GNOME 开启时实际投递、关闭时静默均已通过 | 验收 macOS / Windows 通知实际投递与设置切换；关机等高影响动作暂不纳入 |
 | P1 | 压缩预设 | 极速 / 均衡 / 最小体积、邮件分享（20 MiB 默认分卷）和跨平台兼容预设已接入；自定义分卷、权限规范化用例与 8 MiB 基准通过 | 无；用户指定的分卷大小会直接覆盖预设值 |
 | P1 | 重复文件检测 | GUI 压缩前按内容 BLAKE3 检查同大小普通文件，任务可取消并报告进度；发现重复后可继续压缩或取消，不自动删除；超过 100,000 个文件时可明确选择继续 | 扩充大目录压力样本；自动去重另行评估 |
 | P1 | 多语言和无障碍 | 十种语言的 381 个界面资源键已实现；八种新增语言各有完整词条包，覆盖及占位符测试通过。十种菜单选项逐项切换测试通过；设置和窗口顶栏共用语言下拉菜单，系统首选语言读取可用，侧栏使用简短本地化标签并保留省略保护 | Windows 原生语言设置、真实屏幕阅读器、阿拉伯语 RTL 整页布局仍待平台验收 |
 | P1 | ZIP 文件名编码 | 核心自动识别及 CLI 手动指定已实现；GUI 全局设置可选自动、UTF-8、GBK、Shift-JIS、EUC-KR、Big5、Windows-1252，关闭并重新打开压缩包后生效。十种语言资源均已更新；macOS GUI 设置持久化回归及 Rust 1.96 全工作区 all-features 测试通过 | 本轮三平台 CI 通过后关闭此项平台验证 |
-| P1 | 文件关联与系统菜单 | macOS Finder Sync 右键扩展已打入 `.app` 并在 macOS 27.0.1 实际点击验收；用户需启用扩展，Developer ID / 公证包待验收。ZIP Quick Look 扩展已打包，`qlmanage` 加载 WebKit 页面通过；Finder 空格键当前只显示系统通用 ZIP 图标，PlugInKit 中未登记 RustZIP provider，实际内容尚未验收。Nautilus 50.2.2 Scripts 菜单在 Ubuntu 26.04 / Xvfb 已点击验收；Dolphin / Nemo 和 Windows 注册表菜单的原生点击仍待验收 | 安装并注册 Quick Look provider 后复测；验收 Plasma Dolphin、Nemo 和 Windows 菜单 |
+| P1 | 文件关联与系统菜单 | macOS Finder Sync 右键扩展已打入 `.app` 并在 macOS 27.0.1 实际点击验收；用户需启用扩展，Developer ID / 公证包待验收。ZIP Quick Look 扩展已打包；临时包注册后 provider 在 PlugInKit 可见并被 `qlmanage` 启动。Release macOS matrix 新增注册 smoke，本机脚本通过，Finder 空格键可见 UI 仍待验收。Nautilus 50.2.2 Scripts 菜单在 Ubuntu 26.04 / Xvfb 已点击验收；Dolphin / Nemo 和 Windows 注册表菜单的原生点击仍待验收 | 运行新增注册 smoke；验收 Finder 可见页面与正式签名包；验收 Plasma Dolphin、Nemo 和 Windows 菜单 |
 | P1 | 持续 fuzz | nightly ASan 工作流覆盖 ZIP recovery、CHM、bzip2、RAR、NSIS。最新手动 run [41023957604](https://github.com/yuhuotech/rustzip/actions/runs/41023957604) 五个 target 全部成功并保存 corpus cache：ZIP recovery 287,292 次、CHM 66,874 次、NSIS 1,674,414 次、RAR 118,009 次、bzip2 5,041 次，无 crash artifact | 03:23、05:53、07:37 UTC schedule 均未生成 run；cron 改为每日 09:37 UTC，等待推送后验证真实定时触发 |
 | P1 | 跨平台桌面与打包 | macOS `.app` / DMG arm64 签名与启动通过，尚未公证。Ubuntu 26.04.1 x86_64 的全工作区 all-features 测试与 Clippy 通过（3 项环境条件测试忽略）；Linux tarball 构建、隔离安装 / 卸载、Nautilus 菜单点击通过。真实 Wayland GUI 启动、GNOME Secret Service 唯一标签往返、通知启用投递 / 关闭静默通过。CI [40958398639](https://github.com/yuhuotech/rustzip/actions/runs/40958398639) 的七个 job 全部通过，包括新增对比功能的 GUI、三平台 core 和基准；Windows core 17 分 37 秒、Windows GUI / 安装器 18 分 44 秒。Windows GUI 缓存保存有非致命告警。详细证据见 [第二阶段验收](phase-2-platform-acceptance.md) | Windows 原生输入法 / 渲染 / 钥匙串 / 通知、macOS 公证 / Finder / 通知、Dolphin / Nemo 点击、屏幕阅读器、正式三平台发布流程仍需验收 |
-| P1 | 自动更新与 Release | 有安装包签名校验、更新发现和下载后交给系统安装器的流程；自动化用例覆盖验签后才启动、篡改内容拒绝启动及启动失败提示。当前 HEAD `67b4c2e` 的 dry-run [41012225195](https://github.com/yuhuotech/rustzip/actions/runs/41012225195) 四平台常规包、四平台 RAR 包、Windows RAR 安装卸载、manifest 汇总验签和 bundle 上传全部通过，公开发布按 dry-run 规则跳过 | 正式签名 Release 尚未执行；正式签名 / 公证、三平台更新器交接和真实安装流程仍需验收 |
+| P1 | 自动更新与 Release | 有安装包签名校验、更新发现和下载后交给系统安装器的流程；自动化用例覆盖验签后才启动、篡改内容拒绝启动及启动失败提示。提交 `fabff8b` 的 dry-run [41026007832](https://github.com/yuhuotech/rustzip/actions/runs/41026007832) 四平台常规包、四平台 RAR 包、Windows RAR 安装卸载、manifest 汇总验签和两个 bundle 上传全部通过，公开发布按 dry-run 规则跳过 | 正式签名 Release 尚未执行；正式签名 / 公证、三平台更新器交接和真实安装流程仍需验收 |
 | P2 | 压缩包对比 | 已接入 GUI 已打开标签对比和 CLI `rz diff`；按路径 / 类型识别新增、删除和类型变化，同路径同大小普通文件流式计算 BLAKE3；遵守取消、进度、总输出和压缩比限制。已验证 ZIP、固实 7z 与 tar.gz 对比及目录隐式项处理；单包最多 1,000,000 条目，符号链接目标标记未比较 | 扩展外部格式样本和大归档性能采样；验证加密 7z、RAR 和长尾格式输入 |
 | P2 | 虚拟磁盘挂载、云端按需解压、WASM 插件、自解压包 | 尚未实现，仍属远期需求 | 分别评估平台成本、威胁模型与许可后再立项 |
 
@@ -84,7 +84,7 @@ RustZIP 的主要归档与桌面主流程已实现。2026-10-30 增加 macOS Fin
 - 延续 [稳定性提升计划](testing-stability-plan.md) 与 [S1 执行报告](testing-s1-report.md)：先完成仍待执行的 GUI 可恢复性和跨平台格式 / 系统验收，再做压力、性能与发布产物检查。
 - 所有新格式、分卷、转换、修复和编辑都验证取消、损坏输入、路径边界、同名冲突、旧目标保全及临时文件清理。
 - 触碰压缩 / 解压热路径时跑基准并与同机基线比较；不能用单次吞吐结果替代正确性。
-- 生产遥测服务的部署状态本次未核验；官网 / 统计服务代码在当前工作树中，启用统计地址前按 [发布文档](release.md) 完成生产健康检查和数据库迁移。
+- 2026-10-30 已对线上 `https://rustzip.vercel.app` 完成只读验收：官网、`/formats`、`/privacy` 和 `/api/health` 返回 HTTP 200，健康接口报告数据库正常；GitHub `RZ_STATS_URL` 已设为生产遥测地址。尚无正式 Release，现有安装包不会自动改变；未来发布的客户端仍受首次告知及用户选择控制。
 
 ## 5. 建议的首批实施顺序
 

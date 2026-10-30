@@ -149,6 +149,10 @@ jobs:
           fi
           packaging/macos/build-app.sh dist
 
+      - name: Verify Quick Look provider registration (macOS)
+        if: runner.os == 'macOS'
+        run: bash packaging/macos/verify-quicklook-registration.sh dist/RustZIP.app
+
       - name: Package (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
