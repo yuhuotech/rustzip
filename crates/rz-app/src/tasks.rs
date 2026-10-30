@@ -639,9 +639,12 @@ fn worker(shared: &Arc<Shared>) {
             if !entry.token.is_paused() {
                 entry.info.state = TaskState::Running;
             }
-            (id, entry.spec.clone(), entry.token.clone())
+            let task = (id, entry.spec.clone(), entry.token.clone());
+            // Keep observable start order aligned with FIFO queue removal when
+            // multiple workers wake at once.
+            shared.emit(Event::Started(id));
+            task
         };
-        shared.emit(Event::Started(id));
 
         let started = Instant::now();
         let result = run(shared, id, &spec, &token, started);

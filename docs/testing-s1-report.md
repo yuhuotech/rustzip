@@ -51,6 +51,8 @@
 
 另一次未插桩 workspace 运行在取消风暴处超过 3 分钟未结束，按栈确认卡在 ZIP worker 的阻塞接收并终止该运行；该现象促成 producer-done 的有界退出标记。之后完整 default workspace 和 default/all-features 覆盖运行都通过。
 
+2026-10-30，在启用安装统计地址的 all-features 回归中，`only_max_concurrent_tasks_run_and_the_rest_wait_in_order` 曾观察到第二个 `Started` 事件先于第一个。worker 虽按 FIFO 出队，但在释放任务队列锁之后才发送事件，调度器可以反转事件顺序。现将 `Started` 与 FIFO 出队置于同一临界区，避免观察顺序与调度顺序分离。该用例修复后重复运行 20 次通过；随后启用统计地址的全工作区 all-features 测试通过。
+
 ## S2 定向异步竞态
 
 | 用例 | 状态 | 变体与证据 |

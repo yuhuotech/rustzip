@@ -112,6 +112,14 @@ jobs:
         shell: bash
         run: echo "version=$(awk -F'"' '/^version *=/ {print $2; exit}' Cargo.toml)" >> "$GITHUB_OUTPUT"
 
+      - name: Verify build-time telemetry URL
+        if: env.RZ_STATS_URL != ''
+        run: cargo test -p rz-services --lib build_time_stats_url_is_used_when_runtime_override_is_absent
+
+      - name: Verify unset telemetry configuration
+        if: env.RZ_STATS_URL == ''
+        run: cargo test -p rz-services --lib unset_build_and_runtime_urls_disable_statistics
+
       - name: Linux libraries
         if: runner.os == 'Linux'
         run: |
@@ -165,6 +173,10 @@ jobs:
       - name: Package (Linux)
         if: runner.os == 'Linux'
         run: packaging/linux/build-tarball.sh dist
+
+      - name: Verify build-time telemetry URL
+        if: env.RZ_STATS_URL != ''
+        run: cargo test -p rz-services build_time_stats_url_is_used_when_runtime_override_is_absent
 
       - name: Sign for the updater
         shell: bash
