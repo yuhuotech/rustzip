@@ -54,6 +54,7 @@
 
 ## 最新远端验收
 
+- 2026-10-30：前一轮 CI [41084058660](https://github.com/yuhuotech/rustzip/actions/runs/41084058660) 的 core default lint 找到未按 `rar` feature 条件编译的 `Read` 导入，已修正。提交 `b5c2bd4` 的 CI [41086116233](https://github.com/yuhuotech/rustzip/actions/runs/41086116233) 七个 job 全部通过：Ubuntu / macOS / Windows core、三平台 GUI 和 benchmark 均成功。新增对比回归覆盖加密 7z 独立密码、RAR、CHM、ISO 9660、LHA/LZH、RPM 与 XAR；Windows GUI 安装器 smoke 通过。
 - 2026-10-30：提交 `6fd8e65` 的 Release dry-run [41079816983](https://github.com/yuhuotech/rustzip/actions/runs/41079816983) 成功：四平台常规包与 RAR 包验证、Windows RAR 安装 / 关联 / 卸载冒烟、汇总验签和 artifacts 上传均通过；`publish` 按 dry-run 规则跳过。Fuzz run [41079856580](https://github.com/yuhuotech/rustzip/actions/runs/41079856580) 的五个目标及受控 crash artifact smoke 均通过。
 - Fuzz workflow 每日 13:37 UTC 的 schedule 尚无实际 run 证据；本次 `41079856580` 是手动触发，不能代替定时验收。
 

@@ -42,7 +42,7 @@
 
 ## 后续仍需完成
 
-- ZIP 9.1.3 的 8 MiB 编辑对照基准已运行；仍需多尺寸、多次采样。最新三平台 CI [40926953354](https://github.com/yuhuotech/rustzip/actions/runs/40926953354) 六个 job 全部通过；真实签名 Release 和系统交互验收仍待完成。
+- ZIP 9.1.3 的 8 MiB 编辑对照基准已运行；仍需多尺寸、多次采样。最新三平台 CI [41086116233](https://github.com/yuhuotech/rustzip/actions/runs/41086116233) 七个 job 全部通过，含三平台 core / GUI、Windows 安装器 smoke 和 benchmark；真实签名 Release 和系统交互验收仍待完成。
 - ZIP 大条目分块 Deflate 已接入；本机 40 / 64 / 128 MiB × 3 轮基准通过内容校验，仍需 Windows / macOS 外部工具矩阵和其他文件类型性能样本。合格 ZIP 编辑快路径的注释和扩展字段保真见 D42；真正原地增量编辑仍需先处理 D11 的崩溃保全边界。
 - 持续 fuzz 当前最新手动 run [41079856580](https://github.com/yuhuotech/rustzip/actions/runs/41079856580) 的五个 target 与受控 crash artifact smoke 全部通过；前次 [41046064115](https://github.com/yuhuotech/rustzip/actions/runs/41046064115) 的 492-byte artifact 已下载并确认内容。每日 13:37 UTC 的 schedule 尚未观测到 run，手动 dispatch 不作为 schedule 验收。
 - WIM / DMG 仍只有签名识别；NSIS 仅有受限 FirstHeader 识别。三种格式的浏览 / 测试 / 提取 reader 仍需通过 D37。
