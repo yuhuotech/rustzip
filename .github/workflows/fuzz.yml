@@ -9,7 +9,7 @@ on:
         type: boolean
         default: false
   schedule:
-    - cron: "35 17 * * *"
+    - cron: "37 13 * * *"
 
 permissions:
   contents: read
