@@ -47,3 +47,10 @@ required-features = ["rar"]
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "nsis"
+path = "fuzz_targets/nsis.rs"
+test = false
+doc = false
+bench = false

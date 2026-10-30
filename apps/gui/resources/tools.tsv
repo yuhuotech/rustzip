@@ -259,6 +259,7 @@ converted	转换完成，新包已通过完整性校验。	Conversion complete. 
 recovered	恢复完成，请查看恢复报告确认是否有跳过项。	Recovery complete. Review the report for skipped entries.
 open_not_archive	你选择的文件不是一个压缩包。	The file you chose is not an archive.
 open_unsupported	暂不支持该类型文件的压缩、解压和管理。	This file type is not supported for compressing, extracting or managing yet.
+open_nsis_unsupported	已识别为 NSIS 安装程序，但当前版本还不能浏览或提取其中内容。	Recognized as an NSIS installer, but browsing or extracting its contents is not supported yet.
 open_corrupt	这个压缩包已损坏，无法打开。	This archive is damaged and cannot be opened.
 open_missing	找不到这个文件，它可能已被移动或删除。	The file was not found. It may have been moved or deleted.
 open_denied	没有权限读取这个文件，请检查文件权限。	You do not have permission to read this file. Check its permissions.

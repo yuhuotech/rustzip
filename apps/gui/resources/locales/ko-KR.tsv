@@ -260,6 +260,7 @@ converted	변환 완료. 새 압축 파일의 무결성 확인을 통과했습�
 recovered	복구 완료. 건너뛴 항목이 있는지 보고서를 확인하세요.
 open_not_archive	선택한 파일은 압축 파일이 아닙니다.
 open_unsupported	이 파일 형식의 압축, 압축 풀기 및 관리 기능은 아직 지원되지 않습니다.
+open_nsis_unsupported	NSIS 설치 프로그램을 감지했지만 현재 내용을 찾아보거나 추출할 수 없습니다.
 open_corrupt	이 압축 파일은 손상되어 열 수 없습니다.
 open_missing	파일을 찾을 수 없습니다. 이동되거나 삭제되었을 수 있습니다.
 open_denied	이 파일을 읽을 권한이 없습니다. 권한을 확인하세요.

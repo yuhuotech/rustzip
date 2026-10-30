@@ -1,5 +1,5 @@
 //! Format backends for read/write ZIP, 7z, tar and single-file streams, plus
-//! read-only RAR, ISO 9660, CAB, CPIO, AR, LHA, RPM and XAR readers.
+//! read-only RAR, NSIS identification, ISO 9660, CAB, CPIO, AR, LHA, RPM and XAR readers.
 
 mod chm_fmt;
 mod codec;
@@ -128,6 +128,10 @@ pub fn open(path: &Path) -> Result<Box<dyn ArchiveReader>> {
         )),
         Format::Dmg => Err(Error::Unsupported(
             "DMG disk images (read-only support is not available yet)".into(),
+        )),
+        Format::Nsis => Err(Error::Unsupported(
+            "NSIS installer detected (read-only browsing and extraction are not available yet)"
+                .into(),
         )),
         Format::Chm => Ok(Box::new(chm_fmt::ChmReader::new(path)?)),
         Format::Wim => Err(Error::Unsupported(

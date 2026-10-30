@@ -17,7 +17,7 @@ RustZIP 的主要归档与桌面主流程已实现。2026-10-30 增加 macOS Fin
 | P0 | 基础压缩、解压、浏览、加密、任务队列和 CLI | 主路径已完成；CLI 提供 `a / l / x / t / c / r / h`，长操作均支持 Ctrl+C 与进度 | 保持现有安全契约，继续做平台验收与性能验收 |
 | P0 | 分卷压缩与多卷解压 | ZIP / 7z 容量设置、缺卷诊断和无覆盖发布已接入；往返、取消、现有卷保护和发布竞态回滚测试通过。Linux arm64 上与 p7zip 26.02 双向互通；Ubuntu 26.04 x86_64 上与 p7zip 26.00 双向互通，Info-ZIP 3.0 创建的 split ZIP 可由 RustZIP 测试和解压 | 扩大到 Windows / macOS 官方 7-Zip、WinZip 等常用工具版本；Info-ZIP `unzip` 不支持本测试的 split ZIP，不能作为读取验收 |
 | P0 | LZ4 与 tar.lz4 | 标准 LZ4 Frame 读写、魔数识别、CLI、编辑、转换和 GUI tar.lz4 入口已接入；格式及引擎往返通过，外部 `lz4 -t` 和 `tar -tf` 通过；8 MiB 基准已记录 | 扩大外部样本和性能采样，保留 Frame 格式边界 |
-| P0 | ISO、CAB、WIM、DMG、CPIO、AR、LHA、XAR、RPM、DEB、CHM、NSIS 等只读格式 | ISO 9660、CAB、CPIO、AR、LHA/LZH、XAR、RPM 已通过隔离的 libarchive 后端接入；CHM 经独立样本验证，使用纯 Rust reader 支持只读浏览 / 测试 / 提取；WIM、DMG 仅按内容识别并返回不支持；NSIS 尚未识别或读取；DEB 按 AR 容器读取。候选审查和限制见[第三阶段记录](phase-3-format-assessment.md) | 为 WIM / DMG / NSIS 继续评估具备流式、取消、硬资源上限和独立样本的后端；未满足条件时继续明确不支持；保持 RAR 只读边界 |
+| P0 | ISO、CAB、WIM、DMG、CPIO、AR、LHA、XAR、RPM、DEB、CHM、NSIS 等只读格式 | ISO 9660、CAB、CPIO、AR、LHA/LZH、XAR、RPM 已通过隔离的 libarchive 后端接入；CHM 经独立样本验证，使用纯 Rust reader 支持只读浏览 / 测试 / 提取；WIM、DMG 仅按内容识别并返回不支持；NSIS 现按 PE overlay 的 FirstHeader 签名识别但仍不读取；DEB 按 AR 容器读取。候选审查和限制见[第三阶段记录](phase-3-format-assessment.md) | 为 WIM / DMG / NSIS 继续评估具备流式、取消、硬资源上限和独立样本的后端；NSIS 识别不等于安装器读取；保持 RAR 只读边界 |
 | P0 | 压缩参数 | ZIP 压缩级别 / 线程与 7z 字典大小 / 固实块大小已接入 CLI / GUI；7z 并行工作集受内存预算估算限制；自动字典下调、超预算拒绝及固实块结构用例通过 | 无；ZIP 的 deflate 字典不适用 |
 | P0 | 7z 多块并行解压 | 多个独立固实块按块调度，支持选择性解压、AES 和取消；按 LZMA2 字典估算并行内存，遇到其他编码或预算不足回退顺序解码。加密、错误密码、损坏块、取消、选择和低预算回退的本机用例通过 | 验证外部工具样本、更多字典与分卷组合，并在三平台和大数据集上对比性能 |
 | P0 | bzip2 多线程 | 单文件和 tar.bz2 按块并行压缩；读取通过 `pbz2` 并行解码单流和串接 member，按线程 / 内存预算估算限 worker；压缩与解压均有顺序回退，系统 bzip2 互通用例通过 | 扩大外部样本、损坏 / 取消边界和三平台验收 |
@@ -36,7 +36,7 @@ RustZIP 的主要归档与桌面主流程已实现。2026-10-30 增加 macOS Fin
 | P2 | 压缩包对比 | 已接入 GUI 已打开标签对比和 CLI `rz diff`；按路径 / 类型识别新增、删除和类型变化，同路径同大小普通文件流式计算 BLAKE3；遵守取消、进度、总输出和压缩比限制。已验证 ZIP、固实 7z 与 tar.gz 对比及目录隐式项处理；单包最多 1,000,000 条目，符号链接目标标记未比较 | 扩展外部格式样本和大归档性能采样；验证加密 7z、RAR 和长尾格式输入 |
 | P2 | 虚拟磁盘挂载、云端按需解压、WASM 插件、自解压包 | 尚未实现，仍属远期需求 | 分别评估平台成本、威胁模型与许可后再立项 |
 
-格式范围的依据：产品规格承诺 LZ4 读写及一组只读长尾格式；当前识别枚举已包含 ZIP、tar、gzip、7z、RAR、xz、zstd、bzip2、LZ4、ISO 9660、CAB、CPIO、AR、LHA/LZH、XAR、CHM、WIM 和 DMG。CHM 可读；WIM / DMG 仅识别并明确不支持。NSIS 暂不从通用 PE / `.exe` 扩展名识别。RAR 仍只通过可选 `unrar` 后端只读。
+格式范围的依据：产品规格承诺 LZ4 读写及一组只读长尾格式；当前识别枚举已包含 ZIP、tar、gzip、7z、RAR、xz、zstd、bzip2、LZ4、ISO 9660、CAB、CPIO、AR、LHA/LZH、XAR、CHM、WIM、DMG 和 NSIS。CHM 可读；WIM / DMG 仅识别并明确不支持；NSIS 只识别有效 PE overlay FirstHeader，仍不读取。RAR 仍只通过可选 `unrar` 后端只读。
 
 ## 3. 分阶段计划
 
@@ -55,7 +55,7 @@ RustZIP 的主要归档与桌面主流程已实现。2026-10-30 增加 macOS Fin
 2. ~~接入 LZ4 与 tar.lz4 读写、格式识别和转换。~~ 格式 / 引擎往返、外部 `lz4 -t`、workspace all-features 编译通过；8 MiB 本机基准已运行。新增依赖许可证已核对。
 3. ~~增加格式相关的字典大小、固实块等高级参数。~~ 7z 字典 / 固实块入口已接入，按格式隐藏；参数边界、固实块 / 非固实块、CLI / GUI 创建、workspace 测试和 Clippy 通过。8 MiB 基准矩阵完整运行并校验输出；受限样本仅用于运行路径验收，没有拿来作性能回归对比。
 4. ~~补齐文件 SHA-256 / BLAKE3 校验。~~ `rz-app` 单次流式读取同时计算算法、支持取消和进度；CLI `rz h` 与最近文件 / 常用位置的 GUI 操作入口已接入。标准向量、分块进度、取消、普通文件边界、workspace 测试、fmt 与 Clippy 通过；保留 `rz t` 的归档完整性测试语义。
-5. ISO 9660、CAB、CPIO、AR、LHA/LZH、XAR 与 RPM 只读实现已接入；RPM 用 bzip2/gzip CPIO 样本验证内置滤镜、CLI 列表/完整性/安全提取，并由 p7zip 26.00 独立测试。第三阶段新增 CHM 只读 reader，以 `rustchm` 生成的独立 fixture 验证目录、LZX 多块读取、取消、上限和路径安全。WIM / DMG 仅明确识别不支持，NSIS 不按 `.exe` 扩展名猜测；其余后端候选不满足门槛。详见[第三阶段记录](phase-3-format-assessment.md)。
+5. ISO 9660、CAB、CPIO、AR、LHA/LZH、XAR 与 RPM 只读实现已接入；RPM 用 bzip2/gzip CPIO 样本验证内置滤镜、CLI 列表/完整性/安全提取，并由 p7zip 26.00 独立测试。第三阶段新增 CHM 只读 reader，以 `rustchm` 生成的独立 fixture 验证目录、LZX 多块读取、取消、上限和路径安全。WIM / DMG 仅明确识别不支持；NSIS 现只识别 PE overlay FirstHeader，reader 仍不满足 D37，普通 `.exe` 不作推测；其余后端候选不满足门槛。详见[第三阶段记录](phase-3-format-assessment.md)。
 
 **退出条件：** 已接入的新格式和分卷操作具备损坏输入、加密适用性、缺卷、取消与路径安全验收；候选不满足安全门槛的承诺格式在嗅探、界面提示和文档中保持明确不支持，不计入已实现能力；新参数受全局内存预算约束。
 
@@ -89,7 +89,7 @@ RustZIP 的主要归档与桌面主流程已实现。2026-10-30 增加 macOS Fin
 
 1. 优先完成 Windows 原生 GUI、安装器、文件关联及注册表菜单验收，并补上 Windows CI / 发布证据。
 2. 完成 macOS 系统钥匙串与通知验收；验证 Dolphin / Nemo 菜单点击和 Linux GUI CI。
-3. ~~评估 WIM、DMG、CHM、NSIS 等只读格式候选并按安全门槛接入。~~ CHM 已接入只读 reader；WIM / DMG 魔数分流到明确不支持；NSIS 不依据通用 `.exe` 扩展名判定。其余格式只有后端满足流式、取消、资源上限和独立样本要求后再接入，证据见[第三阶段记录](phase-3-format-assessment.md)。
+3. ~~评估 WIM、DMG、CHM、NSIS 等只读格式候选并按安全门槛接入。~~ CHM 已接入只读 reader；WIM / DMG 魔数分流到明确不支持；NSIS 已加 PE overlay FirstHeader 识别，但读取仍待符合 D37 的后端。其余格式只有后端满足流式、取消、资源上限和独立样本要求后再接入，证据见[第三阶段记录](phase-3-format-assessment.md)。
 4. 评估 PDF 原生预览的硬资源上限；音视频继续调用系统程序，直到资源和平台成本明确。
 5. 完成 Windows 安装器和三平台 release 工作流演练，验证更新的验签、下载与安装器交接后再发布首个正式版本。
 

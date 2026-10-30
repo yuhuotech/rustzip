@@ -260,6 +260,7 @@ converted	Conversão concluída. O novo arquivo compactado passou na verificaç�
 recovered	Recuperação concluída. Consulte o relatório para ver os itens ignorados.
 open_not_archive	O arquivo selecionado não é um arquivo compactado.
 open_unsupported	A compactação, extração e administração deste tipo de arquivo ainda não são compatíveis.
+open_nsis_unsupported	Instalador NSIS detectado, mas ainda não é possível navegar ou extrair seu conteúdo.
 open_corrupt	Este arquivo compactado está danificado e não pode ser aberto.
 open_missing	O arquivo não foi encontrado. Ele pode ter sido movido ou excluído.
 open_denied	Você não tem permissão para ler este arquivo. Verifique as permissões.

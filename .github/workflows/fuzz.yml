@@ -34,6 +34,9 @@ jobs:
           - target: rar
             features: rar
             max_len: 8388608
+          - target: nsis
+            features: ""
+            max_len: 16777216
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/native-archive-deps
@@ -59,7 +62,13 @@ jobs:
       - name: Restore reviewed seed corpus
         env:
           FUZZ_TARGET: ${{ matrix.target }}
-        run: cp -R "fuzz/seeds/$FUZZ_TARGET/." "fuzz/corpus/$FUZZ_TARGET/"
+        shell: bash
+        run: |
+          if [[ "$FUZZ_TARGET" == "nsis" ]]; then
+            python3 fuzz/make_nsis_seed.py "fuzz/corpus/$FUZZ_TARGET/synthetic-pe-overlay"
+          else
+            cp -R "fuzz/seeds/$FUZZ_TARGET/." "fuzz/corpus/$FUZZ_TARGET/"
+          fi
       - name: Build fuzz target
         env:
           FUZZ_TARGET: ${{ matrix.target }}

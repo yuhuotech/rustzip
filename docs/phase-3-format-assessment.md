@@ -6,7 +6,7 @@
 
 - CHM 已接入只读浏览、测试和提取；reader 使用固定版本的 MIT `libchm` 源码，并补上流式范围读取、分块取消和资源上限。
 - WIM 和 DMG 已加入魔数识别。RustZIP 能按内容判断格式，并明确返回“暂不支持”，不会调用未验收的解析器。
-- NSIS 暂不从 `.exe` 扩展名或普通 PE 头推断。NSIS 数据位于 PE overlay，需要验证内部 FirstHeader；普通 Windows 可执行文件不能一概识别成归档。
+- NSIS 现只在 PE overlay 中检测到有效 FirstHeader 后识别，并给出明确的不支持读取提示；不依据 `.exe` 扩展名或普通 PE 头推断。扫描最多检查 overlay 前 8 MiB，固定读取缓冲，不按头部长度分配内存。真正浏览 / 提取仍未接入。
 - 新增依赖为 MIT 的 `libchm` 0.3.0；上游源代码保存在 [`vendor/libchm`](../vendor/libchm/PATCHES.md)，来源 revision 和本地安全补丁都有记录。
 - Windows / macOS 的 Open With 列表和 Linux 的桌面 / Nemo MIME 声明已加入 `.chm`；三种打包路径均携带 libchm MIT notice。清单级测试通过，实际 Windows / macOS / GNOME / Nemo 点击仍属于各平台 runner / 桌面验收。
 - WIM、DMG、NSIS 仍不能浏览、测试或提取。只对这三种格式保留明确不支持状态。
@@ -19,7 +19,7 @@
 | WIM | [`wim-parser` 0.1.2](https://crates.io/crates/wim-parser/0.1.2) 为 MIT，但只覆盖镜像元数据并对声明长度分配 XML。[`isomage` 2.1.0](https://crates.io/crates/isomage/2.1.0) 的 WIM reader 也只列镜像名，不展开镜像文件。完整候选 [`wim` 0.1.3](https://crates.io/crates/wim/0.1.3) / [`wim-format` 0.1.1](https://crates.io/crates/wim-format/0.1.1) 含 LGPL/GPL 且要求 Rust 1.96；[`ms-compress` 0.2.1](https://crates.io/crates/ms-compress/0.2.1) 含 LGPL。 | 当前完整候选涉及静态链接不允许的许可证，且高于工作区 Rust 1.93 MSRV。MIT 候选没有完整文件浏览 / 提取能力。 | 只识别 `MSWIM\0\0\0`，不注册 reader。 |
 | DMG | [`dmg-core` 0.1.5](https://crates.io/crates/dmg-core/0.1.5) 为 Apache-2.0，提供 `Read + Seek` 虚拟磁盘和每块 64 MiB 输出上限，但一次缓冲由 trailer 声明的整个 XML plist，也不解析 HFS+ / APFS 文件。MIT [`isomage` 2.1.0](https://crates.io/crates/isomage/2.1.0) 只列 DMG 分区名，没有解码 `mish` 区块；MIT [`dpp` 0.6.1](https://crates.io/crates/dpp/0.6.1) 的已审查实现会对 plist、区块数或分区数据做大块分配，且缺少取消。 | 没有候选提供完整文件系统浏览 / 提取，同时满足元数据上限、流式解码与取消。 | 只识别 trailer 的 `koly`，不注册 reader。 |
 | CHM | [`libchm` 0.3.0](https://crates.io/crates/libchm/0.3.0) 是 MIT、纯 Rust；上游提供 LZX 解码和结构校验，LZX 窗口最高 2 MiB，目录块最高 1 MiB。上游整条目 API 返回 `Vec`，因此 RustZIP 保留其源码并补充 64 KiB 范围读取、分块取消、4 MiB 压缩块上限、8 MiB reset-table 上限、16 MiB 目录元数据上限及 100,000 条目上限。作为对照，[`chmlib` 1.0.0](https://crates.io/crates/chmlib/1.0.0) 有范围读取，但 LGPL 且默认由 build script 静态编译；本阶段不采用。 [`rustchm` 0.1.2](https://crates.io/crates/rustchm/0.1.2) 用于独立生成测试 fixture。 | reader 满足本阶段的流式、取消和资源上限要求；独立 fixture 覆盖多块 LZX、空文件、CJK 名称和 Zip Slip。 | 接入只读 reader；写入仍不支持。 |
-| NSIS | [`nsis` 0.6.0](https://github.com/ATRAPSLLC/nsis-rs/tree/f20d03c407674dd670787ebcb2fa9e5f0d65a0ad) 为 Apache-2.0，默认限制未知长度流解压到 64 MiB，但入口要求完整 `&[u8]`，会同步把 solid 流解压成 `Vec`，没有 RustZIP 可驱动的取消或流式条目接口。 | 输入和输出仍整体缓冲；解析和固实流解压不能被调用方取消。扩展名 `.exe` 不能区分 NSIS 与其他 Windows 可执行文件。 | 不新增 PE / NSIS 启发式识别，不注册 reader。 |
+| NSIS | [`nsis` 0.6.0](https://github.com/ATRAPSLLC/nsis-rs/tree/f20d03c407674dd670787ebcb2fa9e5f0d65a0ad) 为 Apache-2.0，默认限制未知长度流解压到 64 MiB，但入口要求完整 `&[u8]`，会同步把 solid 流解压成 `Vec`，没有 RustZIP 可驱动的取消或流式条目接口。 | 输入和输出仍整体缓冲；解析和固实流解压不能被调用方取消。 | 只用经验证的 PE overlay FirstHeader 做 bounded identification；reader 未通过 D37 前仍返回“不支持”，不按 `.exe` 扩展名判定。 |
 
 ## 2026-10-30 候选复查
 
@@ -31,12 +31,13 @@
 
 - `nsis-rs` 当前主分支 Cargo.toml 声明 0.6.0；上游 0.3.0 起已把未知长度数据的默认解压预算设为 64 MiB，并允许调用方调小预算。但入口仍是 `NsisInstallerBuilder<&[u8]>`，固实数据解码结果保存在 `Vec<u8>`，没有可中断的 `Read` / 回调接口。该更新只补强膨胀上限，仍不满足 D37 的流式输入与分块取消条件。依据：[0.3.0 解码预算变更](https://github.com/ATRAPSLLC/nsis-rs/releases)、[当前 parser 实现](https://github.com/ATRAPSLLC/nsis-rs/blob/f20d03c407674dd670787ebcb2fa9e5f0d65a0ad/src/installer/nsisinstaller.rs)。
 - `dpp` 0.6.1 的 MIT pipeline 已默认将分区数据流入匿名临时文件，并提供文件到 writer 的流式 API；但底层 `udif` 打开时仍按 trailer 声明长度把 plist 和整个 data fork 读入 `Vec`，分区 block 解码也按 block map 声明大小分配缓冲区。`DmgReaderOptions` 只有校验和选项，没有元数据 / block / partition 限额或取消 token；匿名临时分区没有磁盘配额，HFS+ / APFS 遍历会收集 `Vec` 且无调用方取消。故新版改善了通常路径的峰值内存，但仍不满足 D37，DMG 暂不接入。依据：[固定上游提交](https://github.com/Dil4rd/dpp/tree/3a73ee28fdab192fcdfbe8edcad7b520867f2417)、[UDIF reader](https://github.com/Dil4rd/dpp/blob/3a73ee28fdab192fcdfbe8edcad7b520867f2417/udif/src/reader.rs)、[pipeline](https://github.com/Dil4rd/dpp/blob/3a73ee28fdab192fcdfbe8edcad7b520867f2417/dpp/src/pipeline.rs)、[APFS reader](https://github.com/Dil4rd/dpp/blob/3a73ee28fdab192fcdfbe8edcad7b520867f2417/apfs/src/lib.rs)。
+- D47 增加 NSIS 的受限内容识别：PE section table 和 FirstHeader 都需结构有效，扫描 overlay 最多 8 MiB，不使用文件声明长度分配；普通 PE 仍为未知格式。该识别器不是 NSIS reader。
 
 候选源码核对点：[`dmg-core` trailer 与 XML plist 缓冲](https://docs.rs/crate/dmg-core/0.1.5/source/src/lib.rs)、[`isomage` WIM 元数据范围](https://github.com/JackDanger/isomage/tree/v2.1.0/src/formats)、[`libchm` 上游源码](https://github.com/trypsynth/libchm/tree/927cec11c4cf8165d28731fe1b3e07b40f8ddf5e)、[RustZIP 的局部补丁和上游来源](../vendor/libchm/PATCHES.md)。NSIS [`from_bytes 与解压上限`](https://github.com/ATRAPSLLC/nsis-rs/blob/f20d03c407674dd670787ebcb2fa9e5f0d65a0ad/src/installer/nsisinstaller.rs#L305-L345)、[`固实流预解压`](https://github.com/ATRAPSLLC/nsis-rs/blob/f20d03c407674dd670787ebcb2fa9e5f0d65a0ad/src/installer/nsisinstaller.rs#L607-L660)。
 
 ## 实现与验证
 
-- `rz-formats::sniff` 依据 WIM / CHM 头部和 DMG 512-byte trailer 识别格式；文件扩展名不参与判断。
+- `rz-formats::sniff` 依据 WIM / CHM 头部、DMG 512-byte trailer 及 NSIS 的 PE overlay FirstHeader 识别格式；文件扩展名不参与判断。NSIS reader 仍不支持。
 - `rz-formats::open` 对 WIM / DMG 返回明确的 `Error::Unsupported`；CHM 返回只读 `ArchiveReader`。
 - `chm_basic.chm` 由独立 `rustchm` 编译器生成，覆盖多块 LZX、空文件、CJK 名称和误导性 `.bin` 扩展名。定向测试覆盖列举 / 内容逐字节比对、输出上限、元数据取消、多块解码中的取消、损坏输入和 Zip Slip 拒绝。
 - `cargo test` 与 `cargo test --all-features` 全工作区通过；各有 3 项按项目定义忽略的环境测试（两个要求非 root Unix 用户、一个真实系统钥匙串）。`cargo clippy --all-targets -- -D warnings`、工作区 / vendor 格式检查、vendor `libchm` 50 项单元测试 + 2 项文档测试及独立 Clippy 均通过。现有依赖 `block v0.1.6` 仍有 Rust future-incompatibility 提示。

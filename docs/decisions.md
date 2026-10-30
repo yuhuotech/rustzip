@@ -260,7 +260,7 @@
 
 - CHM 以只读格式接入 `rz-formats::chm_fmt`，使用 MIT `libchm` 0.3.0 的固定 vendor 副本。局部补丁提供范围读取、directory 回调和 LZX block 取消；条目读取每次最多 64 KiB、每次操作总输出按应用设置限制（未设置时为 1 TiB）、单压缩 block 4 MiB、reset table 8 MiB、目录元数据 16 MiB / 100,000 条。测试 fixture 由独立 `rustchm` 0.1.2 生成；解压路径仍统一经过引擎的 `safe_join`。
 - `fuzz/fuzz_targets/chm.rs` 会模糊测试 CHM 打开、枚举和范围读取。2026-10-29 本机 nightly ASan fuzz 已运行 15 秒，约 21,000 次变异未发现崩溃；这只作为短时冒烟，发布前仍需在持续 nightly runner 中重复运行。
-- WIM 和 DMG 仅按魔数 / trailer 识别并返回明确的“不支持”。已审候选只读镜像或分区元数据，或缺少对元数据、解压和取消的完整控制；WIM 完整候选还涉及 LGPL / GPL 静态链接许可及更高 MSRV。2026-10-30 复查 `wim-format` 0.1.1 确认其许可证为 LGPL-2.1-or-later OR GPL-3.0-or-later；MIT `caddy-archive-core` 的 WIM feature 仍依赖该 crate，不能绕过限制。NSIS 位于 PE overlay，不以通用 `.exe` 扩展名或普通 PE 头认定为归档。
+- WIM 和 DMG 仅按魔数 / trailer 识别并返回明确的“不支持”。已审候选只读镜像或分区元数据，或缺少对元数据、解压和取消的完整控制；WIM 完整候选还涉及 LGPL / GPL 静态链接许可及更高 MSRV。2026-10-30 复查 `wim-format` 0.1.1 确认其许可证为 LGPL-2.1-or-later OR GPL-3.0-or-later；MIT `caddy-archive-core` 的 WIM feature 仍依赖该 crate，不能绕过限制。NSIS 仅按 D47 的 bounded FirstHeader 规则识别，读取仍不支持。
 - 最新 `nsis` 0.6.0 为 Apache-2.0，增加了分块输出预算，但公开入口仍接收整份 `&[u8]`，solid 文件流仍被解压到缓存 `Vec`；没有 caller-driven cancellation / streaming entry reader，暂不注册。依据：[nsis crate API](https://docs.rs/nsis/0.6.0/nsis/installer/struct.NsisInstaller.html)、[solid stream behavior](https://docs.rs/nsis/0.6.0/nsis/installer/enum.SolidStatus.html)、[`wim-format` 许可证与 API](https://docs.rs/crate/wim-format/0.1.1)。
 - 新格式 reader 只有在提供流式 / 有界读取、分块取消与进度、元数据和解压输出硬上限、通用路径安全处理、损坏输入与 fuzz 覆盖，以及实际工具生成的独立 fixture 后，才可注册并宣称支持。具体候选证据见[第三阶段记录](phase-3-format-assessment.md)。
 
@@ -331,3 +331,12 @@
 - Quick Look 扩展使用 App Sandbox 和只读用户所选文件权限，按系统请求的 URL 读取。条目名必须经 HTML 转义；不得使用网络资源、脚本或解压内容。
 - `.7z`、RAR、tar 系和其他类型暂不注册 Quick Look provider，避免在应用层之外重复引入未验证的解析后端。
 - `packaging/macos/test-quicklook.sh` 的 Swift smoke 覆盖常规 ZIP、ZIP64 EOCD / 越界长度、CJK / 特殊字符名称、HTML 转义、损坏中央目录、多卷输入和 16 MiB 上限。macOS 27.0.1 上 `qlmanage -p -x` 曾启动 Quick Look 扩展并确认 WebKit HTML 页面加载；2026-10-30 Finder 空格键实测只显示系统通用 ZIP 图标，PlugInKit 注册列表也没有 `com.yuhuotech.rustzip.quicklook`，因此这次未能验证 RustZIP provider 的可见内容。正式注册扩展后仍需复测 Finder 和签名 / 公证安装包。
+
+## D47 NSIS 内容识别边界
+
+- NSIS 仅在输入包含结构有效的 PE section table，并在 overlay 前 8 MiB 内找到标准或 NSIS 1.x FirstHeader 签名、合法 flags 和正数长度字段时识别。不得依据 `.exe` 扩展名、PE 签名或 `.ndata` section 单独认定为 NSIS。
+- 探测只进行范围读取，section 数最多检查 96 个，FirstHeader 固定 28 字节；文件声明长度不会驱动分配或长距离读取。普通 PE 和不完整 / 不一致的 FirstHeader 返回未知格式。
+- 此决策只增加内容识别和明确“不支持读取”的分流，不注册浏览、测试或提取 reader。reader 仍须满足 D37 的许可、流式输入、取消和硬资源上限要求后才能接入。
+- GUI 对识别出的 NSIS 返回专用本地化提示；`.nsis` 之类扩展名本身不会触发该提示。
+- `sniff_nsis` 由 synthetic PE overlay 单元用例和 nightly `nsis` fuzz target 覆盖；种子只包含虚构头部与零填充，不包含可执行代码。
+- FirstHeader 的签名字段依据 [NSIS 官方 `fileform.h`](https://github.com/NSIS-Dev/NSIS/blob/master/Source/exehead/fileform.h)；识别代码不依赖第三方解析器或新增依赖。

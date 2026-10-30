@@ -260,6 +260,7 @@ converted	Konvertierung abgeschlossen. Das neue Archiv hat die Integritätsprüf
 recovered	Wiederherstellung abgeschlossen. Prüfe im Bericht, ob Einträge übersprungen wurden.
 open_not_archive	Die ausgewählte Datei ist kein Archiv.
 open_unsupported	Dieser Dateityp wird noch nicht zum Komprimieren, Entpacken oder Verwalten unterstützt.
+open_nsis_unsupported	NSIS-Installationsprogramm erkannt, sein Inhalt kann derzeit jedoch noch nicht durchsucht oder extrahiert werden.
 open_corrupt	Dieses Archiv ist beschädigt und kann nicht geöffnet werden.
 open_missing	Die Datei wurde nicht gefunden. Möglicherweise wurde sie verschoben oder gelöscht.
 open_denied	Du hast keine Berechtigung, diese Datei zu lesen. Prüfe die Dateiberechtigungen.

@@ -260,6 +260,7 @@ converted	Conversion terminée. La nouvelle archive a passé la vérification d�
 recovered	Récupération terminée. Consultez le rapport pour connaître les éléments ignorés.
 open_not_archive	Le fichier sélectionné n’est pas une archive.
 open_unsupported	La compression, l’extraction et la gestion de ce type de fichier ne sont pas encore prises en charge.
+open_nsis_unsupported	Installateur NSIS détecté, mais son contenu ne peut pas encore être parcouru ni extrait.
 open_corrupt	Cette archive est endommagée et ne peut pas être ouverte.
 open_missing	Fichier introuvable. Il a peut-être été déplacé ou supprimé.
 open_denied	Vous n’avez pas la permission de lire ce fichier. Vérifiez ses permissions.

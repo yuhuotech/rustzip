@@ -260,6 +260,7 @@ converted	Conversión completada. El nuevo archivo comprimido ha superado la com
 recovered	Recuperación completada. Revisa el informe para ver los elementos omitidos.
 open_not_archive	El archivo seleccionado no es un archivo comprimido.
 open_unsupported	Aún no se admite comprimir, extraer ni administrar este tipo de archivo.
+open_nsis_unsupported	Se ha detectado un instalador NSIS, pero aún no se puede explorar ni extraer su contenido.
 open_corrupt	Este archivo comprimido está dañado y no se puede abrir.
 open_missing	No se ha encontrado el archivo. Puede que se haya movido o eliminado.
 open_denied	No tienes permiso para leer este archivo. Comprueba sus permisos.
