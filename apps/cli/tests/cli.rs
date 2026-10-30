@@ -175,6 +175,8 @@ fn diff_reads_long_tail_archives_through_the_cli() {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../crates/rz-formats/tests/fixtures");
     for name in [
         "chm_basic.chm",
+        "longtail_iso9660.iso.gz",
+        "longtail_lha_lh0.lzh",
         "longtail_rpm_bzip2.rpm",
         "longtail_rpm_gzip.rpm",
         "longtail_xar.xar",

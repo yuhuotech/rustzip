@@ -462,7 +462,9 @@ mod tests {
     use super::*;
     use std::fs;
     use std::fs::File;
-    use std::io::{Read, Write};
+    #[cfg(feature = "rar")]
+    use std::io::Read;
+    use std::io::Write;
     use zip::write::SimpleFileOptions;
 
     fn make_zip(path: &Path, entries: &[(&str, &[u8])]) {
@@ -567,6 +569,8 @@ mod tests {
             Path::new(env!("CARGO_MANIFEST_DIR")).join("../../crates/rz-formats/tests/fixtures");
         for name in [
             "chm_basic.chm",
+            "longtail_iso9660.iso.gz",
+            "longtail_lha_lh0.lzh",
             "longtail_rpm_bzip2.rpm",
             "longtail_rpm_gzip.rpm",
             "longtail_xar.xar",
@@ -582,8 +586,19 @@ mod tests {
                 &mut rz_core::NoProgress,
             )
             .unwrap();
-            assert_eq!(report.counts, CompareCounts::default(), "{name}");
-            assert!(report.differences.is_empty(), "{name}");
+            let expected_not_compared = if name == "longtail_lha_lh0.lzh" { 2 } else { 0 };
+            assert_eq!(report.counts.added, 0, "{name}");
+            assert_eq!(report.counts.removed, 0, "{name}");
+            assert_eq!(report.counts.changed, 0, "{name}");
+            assert_eq!(report.counts.type_changed, 0, "{name}");
+            assert_eq!(report.counts.not_compared, expected_not_compared, "{name}");
+            assert!(
+                report
+                    .differences
+                    .iter()
+                    .all(|diff| diff.kind == DifferenceKind::NotCompared),
+                "{name}"
+            );
             assert!(report.bytes_hashed > 0, "{name} did not stream any content");
         }
     }
