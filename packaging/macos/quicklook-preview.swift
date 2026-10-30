@@ -62,6 +62,7 @@ struct ZipIndex {
         if totalEntries16 == UInt16.max || centralSize32 == UInt32.max || centralOffset32 == UInt32.max {
             let absoluteEocd = directoryBoundary
             guard absoluteEocd >= 20 else { throw PreviewFailure.invalidArchive }
+            let locatorOffset = absoluteEocd - 20
             try handle.seek(toOffset: absoluteEocd - 20)
             let locator = try readExactly(handle, count: 20)
             guard u32(locator, 0) == zip64LocatorSignature,
@@ -79,7 +80,9 @@ struct ZipIndex {
             guard u32(zip64, 0) == zip64EndSignature,
                   let zip64RecordSize = u64(zip64, 4),
                   zip64RecordSize >= 44,
-                  zip64RecordSize <= fileSize - zip64Offset - 12,
+                  zip64Offset <= locatorOffset,
+                  locatorOffset - zip64Offset >= 12,
+                  zip64RecordSize <= locatorOffset - zip64Offset - 12,
                   u32(zip64, 16) == 0,
                   u32(zip64, 20) == 0,
                   let diskCount = u64(zip64, 24),

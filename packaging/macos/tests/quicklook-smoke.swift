@@ -3,7 +3,7 @@ import Foundation
 @main
 enum QuickLookSmoke {
     static func main() throws {
-        guard CommandLine.arguments.count == 6 else {
+        guard CommandLine.arguments.count == 7 else {
             throw NSError(domain: "RustZIPQuickLookSmoke", code: 1)
         }
         let normal = try ZipIndex.read(URL(fileURLWithPath: CommandLine.arguments[1]))
@@ -29,7 +29,8 @@ enum QuickLookSmoke {
         for (path, expected) in [
             (CommandLine.arguments[3], PreviewFailure.invalidArchive),
             (CommandLine.arguments[4], PreviewFailure.metadataLimit),
-            (CommandLine.arguments[5], PreviewFailure.unsupportedArchive)
+            (CommandLine.arguments[5], PreviewFailure.unsupportedArchive),
+            (CommandLine.arguments[6], PreviewFailure.unsupportedArchive)
         ] {
             do {
                 _ = try ZipIndex.read(URL(fileURLWithPath: path))

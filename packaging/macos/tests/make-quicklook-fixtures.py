@@ -4,7 +4,7 @@ import sys
 import zipfile
 from pathlib import Path
 
-base, zip64, malformed, oversized, multi_disk = map(Path, sys.argv[1:])
+base, zip64, malformed, oversized, multi_disk, bad_zip64 = map(Path, sys.argv[1:])
 with zipfile.ZipFile(base, "w") as archive:
     archive.writestr("readme.txt", "preview only")
     archive.writestr("資料/數據.csv", "x,y\n1,2")
@@ -46,3 +46,10 @@ oversized.write_bytes(large_metadata)
 multiple_disk = bytearray(raw)
 struct.pack_into("<H", multiple_disk, eocd + 4, 1)
 multi_disk.write_bytes(multiple_disk)
+
+bad_record = bytearray(zip64.read_bytes())
+zip64_eocd = bad_record.rfind(b"PK\x06\x06")
+if zip64_eocd < 0:
+    raise SystemExit("failed to find ZIP64 end record")
+struct.pack_into("<Q", bad_record, zip64_eocd + 4, 1 << 40)
+bad_zip64.write_bytes(bad_record)
