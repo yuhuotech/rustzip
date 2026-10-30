@@ -14,6 +14,27 @@ fn fixture() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../rz-formats/tests/fixtures/container.rar")
 }
 
+fn duplicate_container_entry() -> Vec<u8> {
+    let mut archive = fs::read(fixture()).unwrap();
+    let entry_start = 7 + 13;
+    assert_eq!(archive[entry_start + 2], 0x74);
+    let header_size = u16::from_le_bytes(
+        archive[entry_start + 5..entry_start + 7]
+            .try_into()
+            .unwrap(),
+    ) as usize;
+    let packed_size = u32::from_le_bytes(
+        archive[entry_start + 7..entry_start + 11]
+            .try_into()
+            .unwrap(),
+    ) as usize;
+    let entry_end = entry_start + header_size + packed_size;
+    assert!(entry_end < archive.len());
+    let duplicate = archive[entry_start..entry_end].to_vec();
+    archive.splice(entry_end..entry_end, duplicate);
+    archive
+}
+
 #[test]
 fn rar_is_listed_read_and_extracted() {
     let mut r = rz_formats::open(&fixture()).unwrap();
@@ -75,6 +96,26 @@ fn rar_streaming_output_stops_at_the_configured_limit() {
         Ok(())
     });
     assert!(matches!(result, Err(Error::LimitExceeded(_))));
+}
+
+#[test]
+fn selected_rar_entries_share_the_total_output_limit() {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("two-entries.rar");
+    fs::write(&path, duplicate_container_entry()).unwrap();
+    let mut reader = rz_formats::open(&path).unwrap();
+    assert_eq!(reader.entries().unwrap().len(), 2);
+
+    reader.set_read_control(CancelToken::new(), 20);
+    let mut visited = 0;
+    let result = reader.for_each_selected(Some(&[0, 1]), &mut |_, data| {
+        std::io::copy(data, &mut std::io::sink())?;
+        visited += 1;
+        Ok(())
+    });
+
+    assert!(matches!(result, Err(Error::LimitExceeded(_))));
+    assert_eq!(visited, 1, "the second entry must not be extracted");
 }
 
 #[test]
