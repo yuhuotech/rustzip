@@ -12,7 +12,7 @@
 
 ## 发一个版本
 
-> 主 CI 和 Release workflow 由 Actions 页面手动触发。Release dry-run 可从任意分支运行；正式发布只接受 `v*` tag。Fuzz workflow 当前配置为每日 01:37 UTC 运行 ZIP recovery、CHM、bzip2、RAR、NSIS、PDF、音频和视频八个 target，不构建或发布安装包；可手动启用 `verify_crash_artifact` 对受控 sentinel crash 的 artifact 上传做端到端检查。run [41046064115](https://github.com/yuhuotech/rustzip/actions/runs/41046064115) 已通过 artifact smoke；新的定时配置尚待远端触发验收。
+> 主 CI 和 Release workflow 由 Actions 页面手动触发。Release dry-run 可从任意分支运行；正式发布只接受 `v*` tag。Fuzz workflow 当前配置为每日 02:07 UTC 运行 ZIP recovery、CHM、bzip2、RAR、NSIS、PDF、音频和视频八个 target，不构建或发布安装包；可手动启用 `verify_crash_artifact` 对受控 sentinel crash 的 artifact 上传做端到端检查。run [41046064115](https://github.com/yuhuotech/rustzip/actions/runs/41046064115) 已通过 artifact smoke；新 schedule 仍待远端触发验收。
 
 1. 改根 `Cargo.toml` 里 `[workspace.package] version`,提交。
 2. 先在 `main` 上手动触发 Release workflow，保留默认 `dry_run=true`；它会生成一次性测试密钥、构建四个平台产物、签名并校验平台集合和实际文件，保存名为 `release-dry-run-bundle` 的 14 天 artifact。测试签名不匹配应用公钥，dry-run 包不能用于更新安装。
@@ -64,6 +64,11 @@ Windows 使用 `x64-windows-static-md` vcpkg triplet 静态链接原生归档库
 
 Windows MSVC 构建通过 CI 的 `native-archive-deps` action 安装 `x64-windows-static-md` vcpkg 库，将 zlib 的 `zs.lib` 适配为 `libarchive2-sys` 使用的 `zlib.lib`，并清理 `libarchive2-sys` 旧构建结果以按新 triplet 重新检测压缩库。原生链接和测试仍需 Windows runner 实测。
 
+## 2026-10-31 最新验证
+
+- Release dry-run [41154738556](https://github.com/yuhuotech/rustzip/actions/runs/41154738556) 对 `0a5c460` 四个平台常规包、四个 RAR 验证包、Windows 安装 smoke、manifest 汇总验签及 artifact 上传全部成功；公开 `publish` 按 dry-run 条件跳过。
+- CI [41154082845](https://github.com/yuhuotech/rustzip/actions/runs/41154082845) 对 `0a5c460` 的七个 job 全部通过。随后该提交的 video Fuzz [41154063015](https://github.com/yuhuotech/rustzip/actions/runs/41154063015) 发现 `rust_h264` 8×8 intra-block 越界；vendor bounds patch 已覆盖该路径并有 helper / renderer 回归，修补版 CI、Fuzz 与 Release dry-run 待重新触发。
+
 ## 系统集成现状
 
 | 能力 | macOS | Windows | Linux |
@@ -76,7 +81,7 @@ macOS 的“打开方式”声明包含已接入的常见只读格式及 LZ4，R
 
 命令行入口:`rustzip --extract-here <压缩包>...` 解压到压缩包所在目录;`rustzip --compress <文件或文件夹>...` 打开新建压缩窗口。
 
-**验证状态**：macOS arm64 `.app` / DMG 的打包、签名校验和启动通过，尚未公证；Finder Sync 扩展在 macOS 27.0.1 的 ad-hoc 测试包中完成右键压缩 / 解压点击验收。Linux x86_64 tarball 已在 Ubuntu 26.04 构建，并通过隔离安装 / 卸载和 Nautilus Scripts 菜单验收。Windows runner 已编译 GUI / Inno 安装器并完成自动安装 / 卸载冒烟；原生 GUI 人工验收和正式 Release 流程仍未完成。当前 GitHub Actions 只允许手动触发 CI；Release 需在 `v*` tag 上手动运行。仓库截至 2026-10-30 尚无公开 GitHub Release。
+**验证状态**：macOS arm64 `.app` / DMG 的打包、签名校验和启动通过，尚未公证；Finder Sync 扩展在 macOS 27.0.1 的 ad-hoc 测试包中完成右键压缩 / 解压点击验收。Linux x86_64 tarball 已在 Ubuntu 26.04 构建，并通过隔离安装 / 卸载和 Nautilus Scripts 菜单验收。Windows runner 已编译 GUI / Inno 安装器并完成自动安装 / 卸载冒烟；原生 GUI 人工验收和正式 Release 流程仍未完成。当前 GitHub Actions 只允许手动触发 CI；Release 需在 `v*` tag 上手动运行。仓库截至 2026-10-31 尚无公开 GitHub Release。
 
 2026-10-31 仓库 Secrets 核对：当前未配置 Actions Secrets；`RZ_STATS_URL` Variable 已配置。正式签名 Release 需要维护者按本文流程添加 `RZ_UPDATE_KEY`，以及选择性配置 macOS Developer ID / notarization secrets；测试用 disposable key 只用于 dry-run。
 
