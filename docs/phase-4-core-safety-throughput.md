@@ -44,6 +44,7 @@
 
 ## 后续仍需完成
 
+- 第三处 H.264 crash 位于 intra 16×16 luma write；`rust_h264` vendor bounds fix 现覆盖 4×4 / 8×8 / 16×16，新增 fixture 与 helper 子进程回归通过。30 秒本机 nightly ASan 在更新 corpus 上执行 46,076 次、峰值 RSS 432 MiB，无崩溃；vendor tests 205 + doctests 6 passed、2 slow ignored。修补版远端 Fuzz / CI 仍待验收。
 - Fuzz workflow API 仍报告 `active`，但 Actions run list 在 2026-10-31 02:13 UTC 仍无 `schedule` 事件（每日 cron 02:07 UTC）。GitHub 官方说明 scheduled runs 在 Actions 高负载时可能延迟或丢弃，详见[workflow troubleshooting](https://docs.github.com/en/actions/how-tos/troubleshoot-workflows#scheduled-workflows-running-at-unexpected-times)；应继续观察后续 cron，不能用手动 push run 替代。
 - 最新修补版 `62d5ccd` 的 CI [41157889872](https://github.com/yuhuotech/rustzip/actions/runs/41157889872)、Release dry-run [41157889524](https://github.com/yuhuotech/rustzip/actions/runs/41157889524) 在运行，Fuzz [41157872841](https://github.com/yuhuotech/rustzip/actions/runs/41157872841) 排队，等待包含 8×8 bounds fix 的远端验收。每日 schedule 在 02:07 UTC 仍未出现 `schedule` run；workflow API 显示 active。
 - `0a5c460` 的 CI [41154082845](https://github.com/yuhuotech/rustzip/actions/runs/41154082845) 七个 job 全部通过，Release dry-run [41154738556](https://github.com/yuhuotech/rustzip/actions/runs/41154738556) 四个平台及 RAR 验证全部通过。该提交的 Fuzz [41154063015](https://github.com/yuhuotech/rustzip/actions/runs/41154063015) 又找到 H.264 8×8 intra 写越界；本地 4×4 / 8×8 bounds fix、Crash seed 定向复放、renderer/helper 回归、全 workspace Clippy / 测试和 30 秒 ASan 已通过，最新版本远端复验待运行。

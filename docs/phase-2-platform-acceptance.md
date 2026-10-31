@@ -54,6 +54,7 @@
 
 ## 最新远端验收
 
+- 2026-10-31：`rust_h264` bounds patch 又覆盖 intra 16×16 路径，源代码回归、helper process test、完整 workspace Clippy / tests 及 30 秒 ASan 通过。上游库完整测试 205 项 + 6 项文档测试通过，2 项慢速测试忽略。后续 remote Fuzz / CI / Release run 待提交后验收。
 - 2026-10-31 最新修补版 `62d5ccd`：CI [41157889872](https://github.com/yuhuotech/rustzip/actions/runs/41157889872) 及 Release dry-run [41157889524](https://github.com/yuhuotech/rustzip/actions/runs/41157889524) 仍在进行，Fuzz [41157872841](https://github.com/yuhuotech/rustzip/actions/runs/41157872841) 排队。每日 schedule 02:07 UTC 未观察到事件，workflow 处于 active。
 - CI [41154082845](https://github.com/yuhuotech/rustzip/actions/runs/41154082845) 对 `0a5c460` 七个 job 全部通过；Release dry-run [41154738556](https://github.com/yuhuotech/rustzip/actions/runs/41154738556) 对 `0a5c460` 的四平台常规包、RAR 验证包、Windows 安装冒烟、manifest 验签和 artifact 上传通过，publish 跳过。Fuzz run [41154063015](https://github.com/yuhuotech/rustzip/actions/runs/41154063015) 找到 H.264 8×8 intra 越界；已在本机 vendor patch 中修复并加入 renderer/helper regression，更新版 runner 待 push。
 - 2026-10-30：提交 `b32d77d` 的 CI [41097739228](https://github.com/yuhuotech/rustzip/actions/runs/41097739228) 七个 job 全部通过：三平台 core / GUI 和 benchmark 均成功；RAR 多条目累计输出上限回归在三平台 all-features core 测试通过。
