@@ -1,0 +1,11 @@
+/target
+
+TODO.md
+
+# JM reference encoder artifacts
+data.txt
+leakybucketparam.cfg
+log.dat
+
+# macOS
+.DS_Store

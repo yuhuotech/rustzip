@@ -1,0 +1,48 @@
+[package]
+name = "rust_h264"
+version = "0.5.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Pure Rust H.264/AVC video decoder"
+repository = "https://github.com/roticv/rust_h264"
+keywords = ["h264", "avc", "video", "decoder", "codec"]
+categories = ["multimedia::video"]
+exclude = ["testdata/", "examples/", "fuzz/", "BENCHMARK.md"]
+
+[features]
+default = ["std"]
+# Standard library support. Disable for `no_std` + `alloc` builds.
+std = []
+# Motion-compensation kernels via `core::simd` (requires nightly).
+portable-simd = []
+# Optional windowed playback example (`cargo run --example play --features minifb`).
+minifb = ["dep:minifb"]
+# pprof sampling + phase timers for `bench_decode` (see `profile.rs`).
+# Needs std (timers) and dev-internals (the example's sha256 digest).
+profile = ["std", "dev-internals", "dep:pprof"]
+# Expose internal modules (sps, pps, slice) for debug/diagnostic examples.
+dev-internals = []
+
+[[example]]
+name = "play"
+required-features = ["minifb"]
+
+[[example]]
+name = "bench_decode"
+required-features = ["dev-internals"]
+
+[[example]]
+name = "check_pps"
+required-features = ["dev-internals"]
+
+[[example]]
+name = "compare_tests"
+required-features = ["dev-internals"]
+
+[[example]]
+name = "debug_cavlc"
+required-features = ["dev-internals"]
+
+[dependencies]
+minifb = { version = "0.28", optional = true }
+pprof = { version = "0.14", features = ["flamegraph"], optional = true }

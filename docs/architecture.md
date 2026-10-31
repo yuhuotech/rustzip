@@ -92,7 +92,7 @@ trait ArchiveWriter { /* add / finish / 增量更新 */ }
 - **模糊测试**:所有解析器对不可信输入做 `cargo-fuzz`。
 - **平台属性**:权限位、symlink、xattr、NTFS ADS、macOS quarantine 标记按策略保留(解压出的可执行文件应继承 quarantine)。
 - **密码**:内存中短暂保留并用 `zeroize` 清除;持久化走系统钥匙串。
-- **多媒体预览**:PDF 和 MP4 / M4V / MOV H.264 首帧均由一次性 helper 解析；两者最多读入 16 MiB，helper 共享 256 MiB live heap / 512 MiB 累计分配与 10 秒时限，像素最多 16,777,216、PNG 最多 8 MiB，并在 GUI 校验输出。MP4 解析前还有有限深度 / 数量的 box-tree 范围预检和 sample-table 一致性检查。音频使用纯 Rust Symphonia 解码，限 8 MiB 源数据、18,000,000 个 PCM 样本 / 3 分钟，在独立后台 worker 播放并可于切换条目时取消。详见 D30、D50、D51 和 D52。
+- **多媒体预览**:PDF 和 MP4 / M4V / MOV H.264 首帧均由一次性 helper 解析；两者最多读入 16 MiB，helper 共享 256 MiB live heap / 512 MiB 累计分配与 10 秒时限，像素最多 16,777,216、PNG 最多 8 MiB，并在 GUI 校验输出。MP4 解析前还有有限深度 / 数量的 box-tree 范围预检和 sample-table 一致性检查；`rust_h264` 0.5.0 的 vendor 安全补丁会在 intra 4×4 block 写入前检查 frame plane 边界。音频使用纯 Rust Symphonia 解码，限 8 MiB 源数据、18,000,000 个 PCM 样本 / 3 分钟，在独立后台 worker 播放并可于切换条目时取消。详见 D30、D50、D51 和 D52。
 
 ## 6. GUI 技术
 

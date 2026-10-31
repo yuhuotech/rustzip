@@ -21,6 +21,7 @@ on:
       - "crates/rz-formats/**"
       - "vendor/libchm/**"
       - "vendor/pbz2/**"
+      - "vendor/rust_h264/**"
   workflow_dispatch:
     inputs:
       verify_crash_artifact:
@@ -112,6 +113,7 @@ jobs:
               apps/video-renderer/tests/fixtures/zero-samples-per-chunk.mp4 \
               apps/video-renderer/tests/fixtures/missing-stts-entry.mp4 \
               apps/video-renderer/tests/fixtures/extended-box-size.mp4 \
+              apps/video-renderer/tests/fixtures/intra4x4-out-of-frame.mov \
               "fuzz/corpus/$FUZZ_TARGET/"
           else
             cp -R "fuzz/seeds/$FUZZ_TARGET/." "fuzz/corpus/$FUZZ_TARGET/"

@@ -493,6 +493,12 @@ mod tests {
         assert!(render_first_frame(malformed).is_err());
     }
 
+    #[test]
+    fn rejects_intra_blocks_outside_the_coded_frame_without_panicking() {
+        let malformed = include_bytes!("../tests/fixtures/intra4x4-out-of-frame.mov");
+        assert!(render_first_frame(malformed).is_err());
+    }
+
     fn assert_first_frame_is_red(video: &[u8]) {
         let png = render_first_frame(video).unwrap();
         let image = image::load_from_memory(&png).unwrap();

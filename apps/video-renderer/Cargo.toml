@@ -18,7 +18,7 @@ path = "src/main.rs"
 [dependencies]
 image = { version = "0.25", default-features = false, features = ["png"] }
 mp4 = "0.14.0"
-rust_h264 = { version = "0.5.0", default-features = false, features = ["std"] }
+rust_h264 = { path = "../../vendor/rust_h264", default-features = false, features = ["std"] }
 rz-preview-budget = { path = "../preview-budget" }
 
 [lints.rust]

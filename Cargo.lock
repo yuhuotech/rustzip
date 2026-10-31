@@ -6825,8 +6825,6 @@ dependencies = [
 [[package]]
 name = "rust_h264"
 version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c04f909e4a6406a10619f58f95661b667d52806a8f15aff77d913ded2631776"
 
 [[package]]
 name = "rustc-demangle"

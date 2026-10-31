@@ -17,7 +17,7 @@ members = [
     "apps/preview-budget",
     "apps/video-renderer",
 ]
-exclude = ["vendor/libchm", "vendor/pbz2"]
+exclude = ["vendor/libchm", "vendor/pbz2", "vendor/rust_h264"]
 
 [workspace.package]
 version = "0.1.0"
@@ -51,6 +51,7 @@ crc32fast = "1"
 
 [patch.crates-io]
 pbz2 = { path = "vendor/pbz2" }
+rust_h264 = { path = "vendor/rust_h264" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
