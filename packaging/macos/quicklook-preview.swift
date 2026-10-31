@@ -1,8 +1,6 @@
 import AppKit
 import Foundation
-import UniformTypeIdentifiers
 import QuickLookUI
-import WebKit
 
 private let maxCentralDirectoryBytes = 16 * 1024 * 1024
 private let maxEntries = 50_000
@@ -220,76 +218,169 @@ struct ZipIndex {
     }
 }
 
-final class PreviewController: NSViewController, QLPreviewingController {
-    private var previewWebView: WKWebView!
+final class PreviewController: NSViewController, QLPreviewingController, NSTableViewDataSource, NSTableViewDelegate {
+    private var titleField: NSTextField!
+    private var summaryField: NSTextField!
+    private var omittedField: NSTextField!
+    private var tableView: NSTableView!
+    private var entries: [ZipEntry] = []
 
     override func loadView() {
-        let webView = WKWebView(frame: NSRect(x: 0, y: 0, width: 860, height: 640))
-        webView.autoresizingMask = [.width, .height]
-        previewWebView = webView
-        view = webView
+        let root = NSView(frame: NSRect(x: 0, y: 0, width: 860, height: 640))
+
+        titleField = NSTextField(labelWithString: "")
+        titleField.font = .systemFont(ofSize: 18, weight: .semibold)
+        titleField.lineBreakMode = .byTruncatingMiddle
+
+        summaryField = NSTextField(labelWithString: "")
+        summaryField.textColor = .secondaryLabelColor
+
+        omittedField = NSTextField(labelWithString: localized("omitted"))
+        omittedField.textColor = .secondaryLabelColor
+        omittedField.isHidden = true
+
+        let header = NSStackView(views: [titleField, summaryField, omittedField])
+        header.orientation = .vertical
+        header.alignment = .leading
+        header.spacing = 6
+        header.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(header)
+
+        tableView = NSTableView(frame: NSRect(x: 0, y: 0, width: 780, height: 500))
+        tableView.autoresizingMask = [.width]
+        tableView.dataSource = self
+        tableView.delegate = self
+        tableView.rowHeight = 30
+        tableView.intercellSpacing = NSSize(width: 0, height: 0)
+        tableView.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
+
+        let nameColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("name"))
+        nameColumn.title = localized("name")
+        nameColumn.width = 500
+        nameColumn.minWidth = 200
+        tableView.addTableColumn(nameColumn)
+
+        let typeColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("type"))
+        typeColumn.title = localized("type")
+        typeColumn.width = 130
+        typeColumn.minWidth = 80
+        tableView.addTableColumn(typeColumn)
+
+        let sizeColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("size"))
+        sizeColumn.title = localized("size")
+        sizeColumn.width = 150
+        sizeColumn.minWidth = 90
+        tableView.addTableColumn(sizeColumn)
+
+        let scrollView = NSScrollView()
+        scrollView.borderType = .noBorder
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = true
+        scrollView.documentView = tableView
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(scrollView)
+
+        NSLayoutConstraint.activate([
+            header.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 24),
+            header.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -24),
+            header.topAnchor.constraint(equalTo: root.topAnchor, constant: 24),
+            scrollView.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 24),
+            scrollView.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -24),
+            scrollView.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 18),
+            scrollView.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -24),
+        ])
+
+        view = root
     }
 
     func preparePreviewOfFile(at url: URL, completionHandler: @escaping (Error?) -> Void) {
         DispatchQueue.global(qos: .userInitiated).async {
             let accessed = url.startAccessingSecurityScopedResource()
             defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-            let html: String
+            let index: ZipIndex
             do {
-                let index = try ZipIndex.read(url)
-                html = render(index, title: url.lastPathComponent)
+                index = try ZipIndex.read(url)
             } catch {
-                html = renderFailure(error, title: url.lastPathComponent)
+                DispatchQueue.main.async {
+                    self.showFailure(error, title: url.lastPathComponent)
+                    completionHandler(nil)
+                }
+                return
             }
             DispatchQueue.main.async {
-                self.previewWebView.loadHTMLString(html, baseURL: nil)
+                self.show(index: index, title: url.lastPathComponent)
                 completionHandler(nil)
             }
         }
     }
-}
 
-func render(_ index: ZipIndex, title: String) -> String {
-    let title = escapeHTML(title)
-    let rows = index.entries.map { entry in
-        let kind = entry.isDirectory ? localized("folder") : localized("file")
-        let lock = entry.encrypted ? " 🔒" : ""
-        return "<tr><td>\(escapeHTML(entry.name))\(lock)</td><td>\(kind)</td><td class=number>\(ByteCountFormatter.string(fromByteCount: Int64(clamping: entry.size), countStyle: .file))</td></tr>"
-    }.joined()
-    let omitted = index.totalEntries > UInt64(index.entries.count)
-        ? "<p class=muted>\(localized("omitted"))</p>" : ""
-    return """
-    <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
-    <style>
-    :root{color-scheme:light dark}body{font:13px -apple-system,BlinkMacSystemFont,sans-serif;color:CanvasText;background:Canvas;margin:24px}
-    h1{font-size:18px;margin:0 0 8px;word-break:break-all}.summary,.muted{color:GrayText}.summary{margin:0 0 18px}
-    table{border-collapse:collapse;width:100%}th,td{text-align:left;border-bottom:1px solid GrayText;padding:7px 8px}
-    th{color:GrayText;font-weight:500}td:first-child{overflow-wrap:anywhere}.number{font-family:ui-monospace,monospace;text-align:right;white-space:nowrap}
-    </style></head><body><h1>\(title)</h1>
-    <p class=summary>\(localized("entries")): \(index.totalEntries.formatted()) · \(localized("size")): \(ByteCountFormatter.string(fromByteCount: Int64(clamping: index.totalUncompressedSize), countStyle: .file))</p>
-    <table><thead><tr><th>\(localized("name"))</th><th>\(localized("type"))</th><th class=number>\(localized("size"))</th></tr></thead><tbody>\(rows)</tbody></table>\(omitted)</body></html>
-    """
-}
-
-private func renderFailure(_ error: Error, title: String) -> String {
-    let message: String
-    switch error {
-    case PreviewFailure.metadataLimit: message = localized("limited")
-    case PreviewFailure.unsupportedArchive: message = localized("unsupported")
-    default: message = localized("unavailable")
+    func numberOfRows(in tableView: NSTableView) -> Int {
+        entries.count
     }
-    return "<!doctype html><html><meta charset=utf-8><body><h2>\(escapeHTML(title))</h2><p>\(message)</p></body></html>"
+
+    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+        guard entries.indices.contains(row), let column = tableColumn else { return nil }
+        let identifier = column.identifier
+        let cell = (tableView.makeView(withIdentifier: identifier, owner: self) as? NSTextField)
+            ?? makeCell(identifier: identifier)
+        let entry = entries[row]
+
+        switch identifier.rawValue {
+        case "name":
+            cell.stringValue = entry.encrypted ? "\(entry.name) 🔒" : entry.name
+            cell.alignment = .left
+            cell.font = .systemFont(ofSize: NSFont.systemFontSize)
+        case "type":
+            cell.stringValue = localized(entry.isDirectory ? "folder" : "file")
+            cell.alignment = .left
+            cell.font = .systemFont(ofSize: NSFont.systemFontSize)
+        case "size":
+            cell.stringValue = ByteCountFormatter.string(
+                fromByteCount: Int64(clamping: entry.size),
+                countStyle: .file
+            )
+            cell.alignment = .right
+            cell.font = .monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        default:
+            return nil
+        }
+        return cell
+    }
+
+    private func show(index: ZipIndex, title: String) {
+        entries = index.entries
+        titleField.stringValue = title
+        summaryField.stringValue = "\(localized("entries")): \(index.totalEntries.formatted()) · \(localized("size")): \(ByteCountFormatter.string(fromByteCount: Int64(clamping: index.totalUncompressedSize), countStyle: .file))"
+        omittedField.isHidden = index.totalEntries <= UInt64(index.entries.count)
+        tableView.isHidden = false
+        tableView.reloadData()
+    }
+
+    private func showFailure(_ error: Error, title: String) {
+        entries = []
+        titleField.stringValue = title
+        summaryField.stringValue = failureMessage(error)
+        omittedField.isHidden = true
+        tableView.isHidden = true
+    }
+
+    private func makeCell(identifier: NSUserInterfaceItemIdentifier) -> NSTextField {
+        let cell = NSTextField(labelWithString: "")
+        cell.identifier = identifier
+        cell.lineBreakMode = .byTruncatingTail
+        cell.usesSingleLineMode = true
+        return cell
+    }
+}
+
+private func failureMessage(_ error: Error) -> String {
+    switch error {
+    case PreviewFailure.metadataLimit: return localized("limited")
+    case PreviewFailure.unsupportedArchive: return localized("unsupported")
+    default: return localized("unavailable")
+    }
 }
 
 private func localized(_ key: String) -> String {
     NSLocalizedString(key, bundle: .main, comment: "Quick Look archive summary")
-}
-
-private func escapeHTML(_ value: String) -> String {
-    value.replacingOccurrences(of: "&", with: "&amp;")
-        .replacingOccurrences(of: "<", with: "&lt;")
-        .replacingOccurrences(of: ">", with: "&gt;")
-        .replacingOccurrences(of: "\"", with: "&quot;")
-        .replacingOccurrences(of: "'", with: "&#39;")
 }

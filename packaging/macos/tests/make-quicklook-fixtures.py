@@ -4,7 +4,7 @@ import sys
 import zipfile
 from pathlib import Path
 
-base, zip64, malformed, oversized, multi_disk, bad_zip64 = map(Path, sys.argv[1:])
+base, zip64, malformed, oversized, multi_disk, bad_zip64, encrypted = map(Path, sys.argv[1:])
 with zipfile.ZipFile(base, "w") as archive:
     archive.writestr("readme.txt", "preview only")
     archive.writestr("資料/數據.csv", "x,y\n1,2")
@@ -53,3 +53,11 @@ if zip64_eocd < 0:
     raise SystemExit("failed to find ZIP64 end record")
 struct.pack_into("<Q", bad_record, zip64_eocd + 4, 1 << 40)
 bad_zip64.write_bytes(bad_record)
+
+encrypted_entry = bytearray(raw)
+name_start = central_offset + 46
+if encrypted_entry[name_start : name_start + len(b"readme.txt")] != b"readme.txt":
+    raise SystemExit("expected the first central-directory entry to be readme.txt")
+flags = struct.unpack_from("<H", encrypted_entry, central_offset + 8)[0]
+struct.pack_into("<H", encrypted_entry, central_offset + 8, flags | 1)
+encrypted.write_bytes(encrypted_entry)

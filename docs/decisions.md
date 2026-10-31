@@ -328,12 +328,12 @@
 
 ## D46 macOS Quick Look ZIP 目录预览
 
-- `.zip` Quick Look 首版使用 `NSViewController` 视图式扩展，只读取中央目录并展示路径、条目类型、解压后大小和加密标记；不解压文件内容、不渲染归档 HTML / 脚本，也不生成缩略图。普通图片 / 文本的应用内预览仍由 RustZIP 详情栏提供。
+- `.zip` Quick Look 首版使用 `NSViewController` 与原生 `NSTableView`，只读取中央目录并展示路径、条目类型、解压后大小和加密标记；不解压文件内容、不渲染归档 HTML / 脚本，也不生成缩略图。普通图片 / 文本的应用内预览仍由 RustZIP 详情栏提供。
 - ZIP 预览最多读取 16 MiB 中央目录、解析 50,000 个条目并展示前 200 项；支持 ZIP64 目录元数据。分卷 / 多磁盘 ZIP 显示明确的不支持提示。损坏目录或超过限制时显示安全提示。
-- Quick Look 扩展使用 App Sandbox 和只读用户所选文件权限，按系统请求的 URL 读取。条目名必须经 HTML 转义；不得使用网络资源、脚本或解压内容。
+- Quick Look 扩展使用 App Sandbox 和只读用户所选文件权限，按系统请求的 URL 读取。条目名作为原生文本控件内容显示；不使用 WebKit、网络资源或脚本，也不读取解压后的内容。
 - `.7z`、RAR、tar 系和其他类型暂不注册 Quick Look provider，避免在应用层之外重复引入未验证的解析后端。
-- `packaging/macos/test-quicklook.sh` 的 Swift smoke 覆盖常规 ZIP、ZIP64 EOCD / 越界长度、CJK / 特殊字符名称、HTML 转义、损坏中央目录、多卷输入和 16 MiB 上限。macOS 27.0.1 上 `qlmanage -p -x` 曾启动 Quick Look 扩展并确认 WebKit HTML 页面加载。2026-10-30 使用临时包验证：先经 Launch Services 注册父 `.app`，再显式注册 `.appex` 并设置 PlugInKit election 为 use 后，provider 出现在 `com.apple.quicklook.preview` 列表，`qlmanage` 启动了 `RustZIPQuickLook` 进程。该次 Finder 空格键可见 UI 因桌面捕获不可用而未验收；临时 PlugInKit 和 Launch Services 注册已撤销。正式签名 / 公证包仍需完成 Finder 可见界面与注册验收。
-- `.github/workflows/release.yml` 的 macOS dry-run / release matrix 运行 `packaging/macos/verify-quicklook-registration.sh`：先注册父 app，再将 provider 设为 PlugInKit `use`，确认 provider identifier、extension point 和实际 appex 路径均匹配，退出时恢复默认 election 并移除临时注册。macOS 27.0.1 本机及 Release dry-run [41043955928](https://github.com/yuhuotech/rustzip/actions/runs/41043955928) 的 arm64 / x86_64 runner 均通过该 smoke；Finder Spacebar 可见页面仍需 GUI 实测。
+- `packaging/macos/test-quicklook.sh` 的 Swift smoke 覆盖常规 ZIP、ZIP64 EOCD / 越界长度、CJK / 特殊字符名称、汇总大小、加密标记、损坏中央目录、多卷输入和 16 MiB 上限。2026-10-31 在 macOS 27.0.1 的当前源码 ad-hoc `.app` 中注册临时 Quick Look provider 后，以 Finder 空格键实测可见目录、条目类型、大小和加密锁标记；特殊字符名称按文本显示。测试后恢复 PlugInKit election 并移除临时注册。此前 WebKit 实现的预览正文为空 / 持续加载，现以原生表格替换并移除 WebKit 依赖。
+- `.github/workflows/release.yml` 的 macOS dry-run / release matrix 运行 `packaging/macos/verify-quicklook-registration.sh`：先注册父 app，再将 provider 设为 PlugInKit `use`，确认 provider identifier、extension point 和实际 appex 路径均匹配，退出时恢复默认 election 并移除临时注册。macOS 27.0.1 本机及 Release dry-run [41043955928](https://github.com/yuhuotech/rustzip/actions/runs/41043955928) 的 arm64 / x86_64 runner 均通过该 smoke；本地 Finder 可见界面已在 ad-hoc 包验证，正式签名 / 公证包仍需验收。
 
 ## D47 NSIS 内容识别边界
 

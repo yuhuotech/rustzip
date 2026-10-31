@@ -3,27 +3,29 @@ import Foundation
 @main
 enum QuickLookSmoke {
     static func main() throws {
-        guard CommandLine.arguments.count == 7 else {
+        guard CommandLine.arguments.count == 8 else {
             throw NSError(domain: "RustZIPQuickLookSmoke", code: 1)
         }
         let normal = try ZipIndex.read(URL(fileURLWithPath: CommandLine.arguments[1]))
         guard normal.totalEntries == 3,
+              normal.entries.count == 3,
+              normal.entries.reduce(UInt64(0), { $0 + $1.size }) == normal.totalUncompressedSize,
               normal.entries.map(\.name).contains("資料/數據.csv"),
               normal.entries.map(\.name).contains("unsafe <tag> & name.txt")
         else {
             throw NSError(domain: "RustZIPQuickLookSmoke", code: 2)
         }
-        let html = render(normal, title: "unsafe <archive>.zip")
-        guard html.contains("unsafe &lt;archive&gt;.zip"),
-              html.contains("unsafe &lt;tag&gt; &amp; name.txt"),
-              !html.contains("<script>")
-        else {
-            throw NSError(domain: "RustZIPQuickLookSmoke", code: 3)
-        }
 
         let zip64 = try ZipIndex.read(URL(fileURLWithPath: CommandLine.arguments[2]))
         guard zip64.totalEntries == normal.totalEntries else {
             throw NSError(domain: "RustZIPQuickLookSmoke", code: 4)
+        }
+
+        let encrypted = try ZipIndex.read(URL(fileURLWithPath: CommandLine.arguments[7]))
+        guard encrypted.entries.first?.encrypted == true,
+              encrypted.entries.dropFirst().allSatisfy({ !$0.encrypted })
+        else {
+            throw NSError(domain: "RustZIPQuickLookSmoke", code: 5)
         }
 
         for (path, expected) in [
@@ -34,10 +36,10 @@ enum QuickLookSmoke {
         ] {
             do {
                 _ = try ZipIndex.read(URL(fileURLWithPath: path))
-                throw NSError(domain: "RustZIPQuickLookSmoke", code: 5)
+                throw NSError(domain: "RustZIPQuickLookSmoke", code: 6)
             } catch let actual as PreviewFailure {
                 guard String(describing: actual) == String(describing: expected) else {
-                    throw NSError(domain: "RustZIPQuickLookSmoke", code: 6)
+                    throw NSError(domain: "RustZIPQuickLookSmoke", code: 7)
                 }
             }
         }

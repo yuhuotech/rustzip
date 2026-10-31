@@ -124,11 +124,16 @@ fn macos_quicklook_is_bounded_and_only_advertises_zip() {
     assert!(MACOS_BUILD.contains("quicklook-preview.swift"));
     assert!(MACOS_CI.contains("packaging/macos/test-quicklook.sh"));
     assert!(MACOS_QUICKLOOK_TEST.contains("quicklook-smoke.swift"));
+    assert!(MACOS_QUICKLOOK_TEST.contains("encrypted.zip"));
     assert!(MACOS_QUICKLOOK.contains("maxCentralDirectoryBytes"));
     assert!(MACOS_QUICKLOOK.contains("maxEntries"));
     assert!(MACOS_QUICKLOOK.contains("NSViewController"));
+    assert!(MACOS_QUICKLOOK.contains("NSTableView"));
+    assert!(MACOS_QUICKLOOK.contains("tableView.reloadData()"));
     assert!(MACOS_QUICKLOOK.contains("startAccessingSecurityScopedResource"));
-    assert!(MACOS_QUICKLOOK.contains("loadHTMLString"));
+    assert!(!MACOS_QUICKLOOK.contains("WebKit"));
+    assert!(!MACOS_BUILD.contains("-framework WebKit"));
+    assert!(!MACOS_QUICKLOOK_TEST.contains("-framework WebKit"));
 }
 
 #[test]

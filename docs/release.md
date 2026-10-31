@@ -76,7 +76,7 @@ Windows MSVC 构建通过 CI 的 `native-archive-deps` action 安装 `x64-window
 |---|---|---|---|
 | 双击/"打开方式"打开压缩包 | 已做(Info.plist 文档类型 + 系统打开事件) | 已做(安装程序注册,不抢默认程序) | 已做(`.desktop` 的 MimeType) |
 | 右键"用 RustZIP 压缩"/"解压到此处" | Finder Sync 扩展已加入 `.app`，macOS 27.0.1 ad-hoc 测试包中两项均实际点击通过；用户需在系统设置启用扩展，Developer ID / 公证包仍待验收 | 已做(安装程序写注册表，原生菜单点击仍待验收) | 安装器写入 Dolphin 的 KIO `servicemenus` 与旧版 `kservices5/ServiceMenus`，并安装 Nemo 动作；Nautilus 50.2.2 的 Scripts 子菜单、压缩入口和逐字节解压已在 Ubuntu 26.04 / Xvfb 验收。Dolphin / Nemo 实机点击仍待验收 |
-| 预览(Quick Look 等) | ZIP 目录视图扩展已打包并签名；Swift smoke 通过。macOS 27.0.1 临时 `.app` 经 Launch Services / PlugInKit 注册后 provider 可见并由 `qlmanage` 启动；Release dry-run [41043955928](https://github.com/yuhuotech/rustzip/actions/runs/41043955928) 的 macOS arm64 / x86_64 注册 smoke 通过并撤销临时状态。Finder 空格键可见页面与公证包仍待验收 | 未做 | 未做 |
+| 预览(Quick Look 等) | ZIP 原生列表视图扩展已打包并签名；Swift smoke 通过。macOS 27.0.1 当前源码 ad-hoc `.app` 经 Launch Services / PlugInKit 临时注册后，Finder 空格键可见目录、类型和大小；测试后注册已撤销。正式 Developer ID / 公证包仍待验收 | 未做 | 未做 |
 
 macOS 的“打开方式”声明包含已接入的常见只读格式及 LZ4，RAR 仅在显式启用时声明；声明本身不改变系统默认程序，实际 Finder 展示仍需在安装后的系统上验收。
 
