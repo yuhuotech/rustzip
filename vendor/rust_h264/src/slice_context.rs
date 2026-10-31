@@ -1587,7 +1587,30 @@ impl SliceContext<'_> {
         above_avail: bool,
         left_avail: bool,
         above_left_avail: bool,
-    ) {
+    ) -> Result<(), DecodeError> {
+        let Some(last_row) = 15usize
+            .checked_mul(self.ly_stride)
+            .and_then(|row| self.ly_offset.checked_add(row))
+        else {
+            return Err(DecodeError::InvalidSyntax(
+                "intra 16x16 block row exceeds the coded frame",
+            ));
+        };
+        let Some(last_index) = mb_x
+            .checked_add(15)
+            .and_then(|col| last_row.checked_add(col))
+        else {
+            return Err(DecodeError::InvalidSyntax(
+                "intra 16x16 block column exceeds the coded frame",
+            ));
+        };
+        if mb_x.checked_add(16).is_none_or(|end| end > self.stride)
+            || last_index >= self.frame.y.len()
+        {
+            return Err(DecodeError::InvalidSyntax(
+                "intra 16x16 block exceeds the coded frame",
+            ));
+        }
         let above: Option<Vec<u8>> = if self.ly_offset >= self.ly_stride && above_avail {
             Some(
                 (0..16)
@@ -1623,9 +1646,16 @@ impl SliceContext<'_> {
             for c in 0..16 {
                 let val =
                     (luma_pred[r * 16 + c] as i32 + luma_residual[r * 16 + c]).clamp(0, 255) as u8;
-                self.frame.y[self.ly_offset + r * self.ly_stride + mb_x + c] = val;
+                let index = self.ly_offset + r * self.ly_stride + mb_x + c;
+                let Some(pixel) = self.frame.y.get_mut(index) else {
+                    return Err(DecodeError::InvalidSyntax(
+                        "intra 16x16 block exceeds the coded frame",
+                    ));
+                };
+                *pixel = val;
             }
         }
+        Ok(())
     }
 
     /// Compute intra chroma prediction for both U and V planes.

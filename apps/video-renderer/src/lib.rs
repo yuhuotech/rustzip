@@ -495,8 +495,10 @@ mod tests {
 
     #[test]
     fn rejects_intra_blocks_outside_the_coded_frame_without_panicking() {
-        let malformed = include_bytes!("../tests/fixtures/intra4x4-out-of-frame.mov");
-        assert!(render_first_frame(malformed).is_err());
+        let malformed_8x8 = include_bytes!("../tests/fixtures/intra8x8-out-of-frame.mov");
+        assert!(render_first_frame(malformed_8x8).is_err());
+        let malformed_16x16 = include_bytes!("../tests/fixtures/intra16x16-out-of-frame.mov");
+        assert!(render_first_frame(malformed_16x16).is_err());
     }
 
     fn assert_first_frame_is_red(video: &[u8]) {

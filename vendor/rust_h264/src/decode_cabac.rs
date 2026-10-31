@@ -752,7 +752,7 @@ impl SliceContext<'_> {
                         above_mb_avail,
                         left_mb_avail,
                         above_left_mb_avail,
-                    );
+                    )?;
 
                     // Chroma prediction
                     let _chroma_width = (self.width / 2) as usize;
@@ -3917,7 +3917,7 @@ impl SliceContext<'_> {
                 above_mb_avail_i,
                 left_mb_avail_i,
                 above_left_mb_avail_i,
-            );
+            )?;
 
             // Chroma (same as I4x4 CABAC path)
             let _chroma_width = (self.width / 2) as usize;

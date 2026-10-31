@@ -2126,7 +2126,7 @@ impl SliceContext<'_> {
                 above_mb_avail,
                 left_mb_avail,
                 above_left_mb_avail,
-            );
+            )?;
         } else if mb_type == 25 {
             // === I_PCM macroblock ===
             reader.align_to_byte();

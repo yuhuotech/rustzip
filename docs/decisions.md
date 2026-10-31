@@ -383,7 +383,7 @@
 - 归档条目最多读取 16 MiB。MP4 容器与 H.264 decoder 运行在 `rz-video-renderer` 子进程；共享分配器最多同时持有 256 MiB heap、累计最多 512 MiB，MP4 reader 最多执行 16,384 次读取 / seek，helper 与 GUI 父进程各有 10 秒时限。编码尺寸在解码前限制为最多 8,192×8,192 和 16,777,216 像素，参考帧 / 重排帧不超过 16；关键帧最多 8 MiB，PNG 最多 8 MiB / 16,777,216 像素。超限、损坏或不支持时保留系统播放器打开路径。
 - 调用第三方 `mp4` parser 前先对完整 box tree 做范围检查：每个 box 必须落在父 box 内，深度最多 16、box 数最多 16,384；不接受 64-bit extended-size box。选中关键帧前校验 `stsc` 分块数和 `stts` 时间表覆盖，避免依赖库对损坏字段执行未检查的除法或 `unwrap()`。这会把合法的 extended-size MP4 排除在内置预览外，其他文件仍可用系统播放器打开。
 - 使用 `mp4` 0.14.0（MIT）解析 ISO-MP4 / QuickTime 容器，使用 `rust_h264` 0.5.0（MIT OR Apache-2.0）解码；二者均为 Rust reader / decoder，不依赖系统编解码器或外部进程。发行包需携带两个依赖的完整许可证文本。
-- `rust_h264` 0.5.0 以 upstream commit `c18b35e` 的 vendor 副本构建。局部补丁在 intra 4×4 / 8×8 luma block 写入前校验 frame plane 范围，损坏 slice 越界时返回 `InvalidSyntax`；原始 crash fixture 加入 renderer 单测和持续 Fuzz corpus。上游许可保持 MIT OR Apache-2.0，补丁说明见 `vendor/rust_h264/PATCHES.md`。
+- `rust_h264` 0.5.0 以 upstream commit `c18b35e` 的 vendor 副本构建。局部补丁在 intra 4×4 / 8×8 / 16×16 luma block 写入前校验 frame plane 范围，损坏 slice 越界时返回 `InvalidSyntax`；原始 crash fixture 加入 renderer 单测和持续 Fuzz corpus。上游许可保持 MIT OR Apache-2.0，补丁说明见 `vendor/rust_h264/PATCHES.md`。
 - nightly ASan `video_decoder` target 调用同一 renderer 核心，输入限制 16 MiB，CI seed 是合成的两帧 H.264 MP4 / MOV。fixture 生成来源见 `apps/video-renderer/tests/fixtures/README.md`。
 - 这项功能只生成首帧缩略预览，不提供视频播放、音频轨播放或时间轴；超出受支持范围的文件仍由系统播放器处理。
 

@@ -113,7 +113,8 @@ jobs:
               apps/video-renderer/tests/fixtures/zero-samples-per-chunk.mp4 \
               apps/video-renderer/tests/fixtures/missing-stts-entry.mp4 \
               apps/video-renderer/tests/fixtures/extended-box-size.mp4 \
-              apps/video-renderer/tests/fixtures/intra4x4-out-of-frame.mov \
+              apps/video-renderer/tests/fixtures/intra8x8-out-of-frame.mov \
+              apps/video-renderer/tests/fixtures/intra16x16-out-of-frame.mov \
               "fuzz/corpus/$FUZZ_TARGET/"
           else
             cp -R "fuzz/seeds/$FUZZ_TARGET/." "fuzz/corpus/$FUZZ_TARGET/"
