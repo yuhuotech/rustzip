@@ -43,6 +43,9 @@ jobs:
       # The optional RAR reader builds the unRAR C++ sources.
       - run: cargo clippy --workspace --exclude rustzip-gui --exclude gpui-probe --all-targets --all-features -- -D warnings
       - run: cargo test --workspace --exclude rustzip-gui --exclude gpui-probe --all-features
+      - name: Smoke test Windows system keychain
+        if: runner.os == 'Windows'
+        run: cargo test -p rz-services --all-features keychain::tests::round_trip_through_the_real_keychain -- --ignored --exact
 
   gui:
     name: gui / ${{ matrix.os }}
