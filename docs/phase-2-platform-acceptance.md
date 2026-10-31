@@ -67,7 +67,8 @@
 
 ## 未完成的验收
 
-- Windows CI 与安装器自动化验收通过；原生 GUI 的输入法、渲染、钥匙串、通知和人工交互仍待验收。
+- Windows core、GUI、Credential Manager 隔离条目 round-trip 与 installer smoke 自动化均有通过记录；原生 GUI 输入法 / 显示、实际通知投递和用户点击仍需实机验收。
+- Windows Credential Manager 隔离条目测试已加入 core CI，并在 [41170859027](https://github.com/yuhuotech/rustzip/actions/runs/41170859027) 上通过：临时 service 写入、读取、列举和删除均成功，退出清理索引和凭据。该 CI run 的 Windows installer smoke 因 runner 上的并发/排队时间超过平台限制被取消，安装器本身应参考已通过的 [41163708768](https://github.com/yuhuotech/rustzip/actions/runs/41163708768)；后续仍需以一次完整 green run 收口。
 - macOS Finder Sync 右键菜单已实机验收；ZIP Quick Look 原生列表在 macOS 27.0.1 当前源码 ad-hoc 包中已由 Finder 空格键显示条目名、类型、大小和加密锁标记，临时 provider 与 Launch Services 注册已撤销。Release macOS runner 注册 smoke [41043955928](https://github.com/yuhuotech/rustzip/actions/runs/41043955928) 的 arm64 / x86_64 job 通过。正式 Developer ID / 公证包的注册、公证、通知横幅投递与权限、屏幕阅读器及真实输入法仍待验收。
 - Dolphin / Nemo 的真实桌面点击、Linux 低图形能力设备、三平台百万条真实归档列表仍待验收。
 - 默认安装包仍关闭 RAR。Release dry-run [41012225195](https://github.com/yuhuotech/rustzip/actions/runs/41012225195) 已验证 macOS arm64 / x86_64、Linux、Windows 四个 RAR 测试包及随包许可证，并通过 Windows 安装 / 关联 / 卸载冒烟；正式签名发布及发行策略仍待确认。
