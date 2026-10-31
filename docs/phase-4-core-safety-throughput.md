@@ -44,6 +44,8 @@
 
 ## 后续仍需完成
 
+- Fuzz workflow API 仍报告 `active`，但 Actions run list 在 2026-10-31 02:13 UTC 仍无 `schedule` 事件（每日 cron 02:07 UTC）。GitHub 官方说明 scheduled runs 在 Actions 高负载时可能延迟或丢弃，详见[workflow troubleshooting](https://docs.github.com/en/actions/how-tos/troubleshoot-workflows#scheduled-workflows-running-at-unexpected-times)；应继续观察后续 cron，不能用手动 push run 替代。
+- 最新修补版 `62d5ccd` 的 CI [41157889872](https://github.com/yuhuotech/rustzip/actions/runs/41157889872)、Release dry-run [41157889524](https://github.com/yuhuotech/rustzip/actions/runs/41157889524) 在运行，Fuzz [41157872841](https://github.com/yuhuotech/rustzip/actions/runs/41157872841) 排队，等待包含 8×8 bounds fix 的远端验收。每日 schedule 在 02:07 UTC 仍未出现 `schedule` run；workflow API 显示 active。
 - `0a5c460` 的 CI [41154082845](https://github.com/yuhuotech/rustzip/actions/runs/41154082845) 七个 job 全部通过，Release dry-run [41154738556](https://github.com/yuhuotech/rustzip/actions/runs/41154738556) 四个平台及 RAR 验证全部通过。该提交的 Fuzz [41154063015](https://github.com/yuhuotech/rustzip/actions/runs/41154063015) 又找到 H.264 8×8 intra 写越界；本地 4×4 / 8×8 bounds fix、Crash seed 定向复放、renderer/helper 回归、全 workspace Clippy / 测试和 30 秒 ASan 已通过，最新版本远端复验待运行。
 - 最新本机修复：run [41149879866](https://github.com/yuhuotech/rustzip/actions/runs/41149879866) 后续提交 `0a5c460` 又暴露 `rust_h264` 8×8 intra-block 越界；vendor 补丁现同时保护 4×4 / 8×8 路径，单测、helper 子进程回归和完整 workspace Clippy / test 均通过。30 秒 ASan 再跑 57,036 次无崩溃。该 vendor 修复与 seed 已推送在 `0a5c460`，远端 Fuzz 复验仍未通过；第二个越界路径现已补齐，当前还有新的 Fuzz run 在跑。
 - ZIP 9.1.3 的 8 MiB 编辑对照基准已运行；仍需多尺寸、多次采样。最新三平台 CI [41086116233](https://github.com/yuhuotech/rustzip/actions/runs/41086116233) 七个 job 全部通过，含三平台 core / GUI、Windows 安装器 smoke 和 benchmark；真实签名 Release 和系统交互验收仍待完成。

@@ -66,6 +66,7 @@ Windows MSVC 构建通过 CI 的 `native-archive-deps` action 安装 `x64-window
 
 ## 2026-10-31 最新验证
 
+- 更新提交 `62d5ccd` 的 Release dry-run [41157889524](https://github.com/yuhuotech/rustzip/actions/runs/41157889524) 正在对包含 H.264 8×8 bounds patch 的最新代码做四平台和 RAR 包验收；publish 仍由 dry-run 条件跳过。
 - Release dry-run [41154738556](https://github.com/yuhuotech/rustzip/actions/runs/41154738556) 对 `0a5c460` 四个平台常规包、四个 RAR 验证包、Windows 安装 smoke、manifest 汇总验签及 artifact 上传全部成功；公开 `publish` 按 dry-run 条件跳过。
 - CI [41154082845](https://github.com/yuhuotech/rustzip/actions/runs/41154082845) 对 `0a5c460` 的七个 job 全部通过。随后该提交的 video Fuzz [41154063015](https://github.com/yuhuotech/rustzip/actions/runs/41154063015) 发现 `rust_h264` 8×8 intra-block 越界；vendor bounds patch 已覆盖该路径并有 helper / renderer 回归，修补版 CI、Fuzz 与 Release dry-run 待重新触发。
 

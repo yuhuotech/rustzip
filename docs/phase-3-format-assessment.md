@@ -69,7 +69,7 @@ WIM、DMG、NSIS 后续 reader 仍必须提供：流式 `Read` / 范围读取；
 - 2026-10-31：Fuzz [41143902645](https://github.com/yuhuotech/rustzip/actions/runs/41143902645) 的 `audio_decoder` 发现一个截断 MPEG 帧内嵌重复 WAV `fmt` chunk 的 panic，发生在 Symphonia 0.6.1 的通道 × 采样位深计算。入口现要求 MPEG 首帧完整，WAV 预检遍历 RIFF 声明范围、拒绝重复格式块并限制每个格式块的通道 / 采样率 / PCM 位深；远端 crash artifact 已加入 corpus 与回归测试。定向复放及本机 nightly ASan 30 秒 fuzz 通过，共 557,618 次变异、峰值 RSS 439 MiB，无崩溃；另用有效的合成 44.1 kHz MP3 验证完整首帧仍可解码。修复后的 Fuzz run [41149879866](https://github.com/yuhuotech/rustzip/actions/runs/41149879866) 已排队，等待结果。
 - 2026-10-31：Fuzz run [41149879866](https://github.com/yuhuotech/rustzip/actions/runs/41149879866) 发现损坏 H.264 slice 让 `rust_h264` 0.5.0 的 intra 4×4 luma 写越过帧尾；随后 run [41154063015](https://github.com/yuhuotech/rustzip/actions/runs/41154063015) 又发现 8×8 重建写越界。RustZIP 将 0.5.0 按 MIT OR Apache-2.0 license vendor，在 4×4 / 8×8 block 写入前验证坐标和 frame plane 范围，越界返回 `InvalidSyntax`。原始 MOV crash 作为 renderer 与 helper 回归；定向复放通过，本机 ASan 30 秒完成 57,036 次、峰值 RSS 457 MiB，无崩溃。修复后的远端复验待完成。
 
-## 2026-10-31 长尾格式 reader 再审
+## 2026-10-31 视频解码与长尾格式复核
 
 - 对 run [41154063015](https://github.com/yuhuotech/rustzip/actions/runs/41154063015) 发现的 H.264 8×8 reconstruction 越界继续修复：局部 vendor 补丁现让 intra 4×4 和 8×8 luma 写入均先验证 frame plane 边界；原视频 crash 在本机 ASan 定向复放通过，完整 corpus fuzz 30 秒运行 57,036 次无崩溃。修复覆盖测试已加入 helper 子进程检查，待新一轮远端复验。
 

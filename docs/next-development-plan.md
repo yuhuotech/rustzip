@@ -6,6 +6,8 @@
 
 ## 1. 结论
 
+2026-10-31 02:12 UTC 远端续验：H.264 修补版提交 `62d5ccd` 的 CI [41157889872](https://github.com/yuhuotech/rustzip/actions/runs/41157889872) 与 Release dry-run [41157889524](https://github.com/yuhuotech/rustzip/actions/runs/41157889524) 正在执行，Fuzz [41157872841](https://github.com/yuhuotech/rustzip/actions/runs/41157872841) 排队。02:07 UTC 定时触发尚无 `schedule` run，workflow API 仍为 active；本次定时验收未通过。
+
 2026-10-31 最新远端/本机续验：CI [41154082845](https://github.com/yuhuotech/rustzip/actions/runs/41154082845) 七个 job 已通过；Release dry-run [41154738556](https://github.com/yuhuotech/rustzip/actions/runs/41154738556) 四个平台、RAR 验证包与汇总验签通过。该提交 `0a5c460` 的视频 Fuzz 在远端发现 H.264 8×8 越界写，本机已修复 4×4 / 8×8 两条路径并通过 crash seed、helper regression、all-features workspace test / Clippy 和 ASan；复验修补版的 CI / Fuzz / Release 仍待推送。每日 Fuzz schedule 最近两次尝试均未观测到 `schedule` run，当前配置为 02:07 UTC 再试。
 
 2026-10-31 最新本机复验：`rust_h264` 0.5.0 的 4×4 与 8×8 intra luma reconstruction 均在写入前验证帧平面范围；损坏输入返回解码错误，由 isolated video helper 转为预览失败。crash seed 定向复放、8 项 renderer 测试、4 项 helper 资源测试、Rust 1.96 全工作区 all-features Clippy / test 均通过；nightly ASan 30 秒运行 57,036 次、峰值 RSS 457 MiB，无崩溃。远端 CI / Fuzz 的最新验证仍在跑。
