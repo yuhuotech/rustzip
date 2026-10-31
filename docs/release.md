@@ -12,7 +12,7 @@
 
 ## 发一个版本
 
-> 主 CI 和 Release workflow 由 Actions 页面手动触发。Release dry-run 可从任意分支运行；正式发布只接受 `v*` tag。Fuzz workflow 当前配置为每日 23:30 UTC 运行 ZIP recovery、CHM、bzip2、RAR、NSIS、PDF、音频和视频八个 target，不构建或发布安装包；可手动启用 `verify_crash_artifact` 对受控 sentinel crash 的 artifact 上传做端到端检查。run [41046064115](https://github.com/yuhuotech/rustzip/actions/runs/41046064115) 已通过 artifact smoke；新的定时配置尚待远端触发验收。
+> 主 CI 和 Release workflow 由 Actions 页面手动触发。Release dry-run 可从任意分支运行；正式发布只接受 `v*` tag。Fuzz workflow 当前配置为每日 01:37 UTC 运行 ZIP recovery、CHM、bzip2、RAR、NSIS、PDF、音频和视频八个 target，不构建或发布安装包；可手动启用 `verify_crash_artifact` 对受控 sentinel crash 的 artifact 上传做端到端检查。run [41046064115](https://github.com/yuhuotech/rustzip/actions/runs/41046064115) 已通过 artifact smoke；新的定时配置尚待远端触发验收。
 
 1. 改根 `Cargo.toml` 里 `[workspace.package] version`,提交。
 2. 先在 `main` 上手动触发 Release workflow，保留默认 `dry_run=true`；它会生成一次性测试密钥、构建四个平台产物、签名并校验平台集合和实际文件，保存名为 `release-dry-run-bundle` 的 14 天 artifact。测试签名不匹配应用公钥，dry-run 包不能用于更新安装。
@@ -78,6 +78,8 @@ macOS 的“打开方式”声明包含已接入的常见只读格式及 LZ4，R
 
 **验证状态**：macOS arm64 `.app` / DMG 的打包、签名校验和启动通过，尚未公证；Finder Sync 扩展在 macOS 27.0.1 的 ad-hoc 测试包中完成右键压缩 / 解压点击验收。Linux x86_64 tarball 已在 Ubuntu 26.04 构建，并通过隔离安装 / 卸载和 Nautilus Scripts 菜单验收。Windows runner 已编译 GUI / Inno 安装器并完成自动安装 / 卸载冒烟；原生 GUI 人工验收和正式 Release 流程仍未完成。当前 GitHub Actions 只允许手动触发 CI；Release 需在 `v*` tag 上手动运行。仓库截至 2026-10-30 尚无公开 GitHub Release。
 
+2026-10-31 仓库 Secrets 核对：当前未配置 Actions Secrets；`RZ_STATS_URL` Variable 已配置。正式签名 Release 需要维护者按本文流程添加 `RZ_UPDATE_KEY`，以及选择性配置 macOS Developer ID / notarization secrets；测试用 disposable key 只用于 dry-run。
+
 - 2026-10-29 Release dry-run [40950855468](https://github.com/yuhuotech/rustzip/actions/runs/40950855468)：Linux、macOS arm64、macOS x86_64 与 Windows x86_64 产物均构建并签名成功；汇总验签 job 在构建 `rz-release` 时因 runner 未安装 `libacl` 开发库而失败，因此未生成验证 bundle，正式发布步骤跳过。已在汇总 job 加入 `native-archive-deps`；修复后的 dry-run 待重新运行。
 - 2026-10-30 修复后的 Release dry-run [40958424663](https://github.com/yuhuotech/rustzip/actions/runs/40958424663) 全部通过：四个平台包均构建并签名，汇总验签成功，上传了 48,267,020 字节的 `release-dry-run-bundle` artifact；下载检查确认 `update.json` 含四个平台及对应包名。公开 Release 的 `publish` job 按 dry-run 条件跳过。该 bundle 可供 14 天检查，不是可安装更新的正式签名包。
 - 2026-10-30 Release dry-run [40969974227](https://github.com/yuhuotech/rustzip/actions/runs/40969974227) 对 `b262828`：macOS arm64 / Linux x86_64 常规包构建成功；macOS arm64、x86_64 和 Linux 的 RAR 测试包均完成验证。Windows 常规包构建成功；RAR 测试包的 GUI 和 Inno Setup 均构建成功，但安装冒烟以退出码 1 失败。根因为脚本指定外部 `dist` 时只创建输出目录，却把 Inno `/LOG` 指向尚不存在的 `$work/install.log`；修复后见下一次 dry-run。
@@ -90,7 +92,8 @@ macOS 的“打开方式”声明包含已接入的常见只读格式及 LZ4，R
 - 提交 `51fffdb` 的 Release dry-run [41064921267](https://github.com/yuhuotech/rustzip/actions/runs/41064921267) 全部通过：四平台 Release 包及 RAR 验证包、各平台构建期 `RZ_STATS_URL` 子进程检查、manifest 汇总验签均成功；`publish` 按 dry-run 规则跳过。Fuzz run [41064921389](https://github.com/yuhuotech/rustzip/actions/runs/41064921389) 的五个 target 和受控 crash artifact 上传 smoke 全部通过。
 - 提交 `6fd8e65` 的 Release dry-run [41079816983](https://github.com/yuhuotech/rustzip/actions/runs/41079816983) 四平台 Release 包 / RAR 验证、Windows RAR 安装冒烟、manifest 汇总验签均成功；`publish` 按 dry-run 规则跳过。Fuzz run [41079856580](https://github.com/yuhuotech/rustzip/actions/runs/41079856580) 的五个 target 和受控 crash artifact smoke 全部通过。定时事件在 13:37 UTC、workflow 重注册后的 16:53 UTC 和 17:35 UTC 均未观测到 run；cron 已恢复为 13:37 UTC，workflow 仍 active。
 - 提交 `9deb72c` 的 Release dry-run [41090713832](https://github.com/yuhuotech/rustzip/actions/runs/41090713832) 四平台常规 / RAR 包、构建期遥测地址、macOS Quick Look 注册、Windows RAR 安装 / 卸载、manifest 汇总验签和两个 bundles 均通过；`publish` 按 dry-run 规则跳过，未创建公开 Release。
-- 2026-10-31：提交 `ec871a0` 的 Release dry-run [41143963144](https://github.com/yuhuotech/rustzip/actions/runs/41143963144) 四个平台常规包 / RAR 验证包、Windows 安装冒烟、manifest 验签及 bundles 全部通过；publish 按 dry-run 条件跳过。提交 `ec871a0` 的 CI [41143963257](https://github.com/yuhuotech/rustzip/actions/runs/41143963257) 发现 Linux install smoke 测试夹具未带新增 reflink-copy MIT 文件；测试夹具已修正。Fuzz [41143902645](https://github.com/yuhuotech/rustzip/actions/runs/41143902645) 发现新的 WAV decoder panic，修复和 crash seed 待推送复验。
+- 2026-10-31：提交 `ec871a0` 的 Release dry-run [41143963144](https://github.com/yuhuotech/rustzip/actions/runs/41143963144) 四个平台常规包 / RAR 验证包、Windows 安装冒烟、manifest 验签及 bundles 全部通过；publish 按 dry-run 条件跳过。提交 `ec871a0` 的 CI [41143963257](https://github.com/yuhuotech/rustzip/actions/runs/41143963257) 发现 Linux install smoke 测试夹具未带新增 reflink-copy MIT 文件；测试夹具已修正。Fuzz [41143902645](https://github.com/yuhuotech/rustzip/actions/runs/41143902645) 发现新的 WAV decoder panic，后续 run [41149879866](https://github.com/yuhuotech/rustzip/actions/runs/41149879866) 又发现 H.264 intra-block 越界；两项均已本地修复并加回归数据，最新代码的远端结果待重新验收。
+- Release dry-run [41151267352](https://github.com/yuhuotech/rustzip/actions/runs/41151267352) 对 `bd59049` 的四平台常规包、RAR 验证包、Windows 安装冒烟、manifest 汇总验签和 bundles 上传全部通过；publish 按 dry-run 条件跳过。该提交早于 `rust_h264` vendor bounds patch；`0a5c460` 的新 Release dry-run [41154738556](https://github.com/yuhuotech/rustzip/actions/runs/41154738556) 正在运行。
 - 本机 Finder Sync ad-hoc 验收包不等同正式签名 Release；签名密钥和公证配置仍未用于公开发布。
 - 2026-10-29 最新 Fuzz 手动 run [40961694769](https://github.com/yuhuotech/rustzip/actions/runs/40961694769) 在提交 `70addea` 上四个 target 均通过并保存 corpus cache：ZIP recovery 743,952 次、CHM 34,172 次、bzip2 8,454 次、RAR 187,945 次，无 crash。每日 schedule 在 03:23 UTC；该次 run 在下次触发时间前结束。
 
