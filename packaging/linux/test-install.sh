@@ -22,6 +22,7 @@ cp "$root"/packaging/licenses/rodio-apache-2.0.txt "$package/rodio-apache-2.0.tx
 cp "$root"/packaging/licenses/cpal-apache-2.0.txt "$package/cpal-apache-2.0.txt"
 cp "$root"/packaging/licenses/symphonia-mpl-2.0.txt "$package/symphonia-mpl-2.0.txt"
 cp "$root"/packaging/licenses/video-preview.txt "$package/video-preview-licenses.txt"
+cp "$root"/packaging/licenses/reflink-copy-mit.txt "$package/reflink-copy-mit.txt"
 cp "$root"/packaging/licenses/mp4-mit.txt "$package/mp4-mit.txt"
 cp "$root"/packaging/licenses/rust-h264-mit.txt "$package/rust-h264-mit.txt"
 cp "$root"/packaging/licenses/rust-h264-apache-2.0.txt "$package/rust-h264-apache-2.0.txt"
@@ -52,6 +53,7 @@ test -f "$prefix/share/doc/rustzip/rodio-apache-2.0.txt"
 test -f "$prefix/share/doc/rustzip/cpal-apache-2.0.txt"
 test -f "$prefix/share/doc/rustzip/symphonia-mpl-2.0.txt"
 test -f "$prefix/share/doc/rustzip/video-preview-licenses.txt"
+test -f "$prefix/share/doc/rustzip/reflink-copy-mit.txt"
 test -f "$prefix/share/doc/rustzip/mp4-mit.txt"
 test -f "$prefix/share/doc/rustzip/rust-h264-mit.txt"
 test -f "$prefix/share/doc/rustzip/rust-h264-apache-2.0.txt"
@@ -67,7 +69,7 @@ for file in audio-playback-licenses.txt rodio-mit.txt rodio-apache-2.0.txt \
             cpal-apache-2.0.txt symphonia-mpl-2.0.txt; do
     test ! -e "$prefix/share/doc/rustzip/$file"
 done
-for file in video-preview-licenses.txt mp4-mit.txt rust-h264-mit.txt rust-h264-apache-2.0.txt; do
+for file in video-preview-licenses.txt reflink-copy-mit.txt mp4-mit.txt rust-h264-mit.txt rust-h264-apache-2.0.txt; do
     test ! -e "$prefix/share/doc/rustzip/$file"
 done
 test ! -e "$xdg/nautilus/scripts/.rustzip/rustzip"
