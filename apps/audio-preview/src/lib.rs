@@ -420,6 +420,15 @@ mod tests {
     }
 
     #[test]
+    fn decodes_a_complete_mpeg_frame() {
+        let bytes = include_bytes!("../../../fuzz/seeds/audio_decoder/valid-synthetic-mp3.mp3");
+        let decoded = decode_audio(Arc::from(bytes.as_slice()), &AtomicBool::new(false)).unwrap();
+        assert_eq!(decoded.channels, 1);
+        assert_eq!(decoded.sample_rate, 44_100);
+        assert!(!decoded.samples.is_empty());
+    }
+
+    #[test]
     fn decodes_valid_wave_to_a_bounded_pcm_buffer() {
         let decoded = decode_audio(Arc::from(wave()), &AtomicBool::new(false)).unwrap();
         assert_eq!(decoded.channels, 1);

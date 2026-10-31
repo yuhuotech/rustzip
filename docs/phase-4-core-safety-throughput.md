@@ -40,7 +40,7 @@
 - 2026-10-30 本轮在锁定 Rust 1.96.0 下完成验证：`cargo fmt --all -- --check`、`cargo clippy --workspace --all-targets --all-features -- -D warnings`、`cargo test --workspace --all-features` 均通过。GUI 编码设置持久化回归、RAR FFI 回调 4 项、RAR 引擎 8 项及全工作区测试通过；4 项真实钥匙串或非 root Unix 用例按环境条件忽略。Clippy 仍提示第三方 `block v0.1.6` future-incompatibility。
 - 2026-10-30 密码本自动尝试接入任务密码失败路径后，再次使用锁定 Rust 1.96.0 执行 `cargo fmt --all -- --check`、`cargo clippy --workspace --all-targets --all-features -- -D warnings` 和 `cargo test --workspace --all-features`，均通过。GUI 全部 65 项 UI 集成用例通过，覆盖加密 ZIP 候选重试和候选不匹配后的手动重试；RAR FFI 4 项及引擎 8 项通过。两项非 root Unix 用例和真实钥匙串用例按环境条件忽略。Clippy 仍提示第三方 `block v0.1.6` future-incompatibility。
 - 2026-10-31 本机切换到明确的 Rust 1.96.0 编译器和隔离 target 后，`cargo fmt --all -- --check`、全工作区 all-features Clippy 和 `cargo test --workspace --all-features` 均通过。视频 renderer 7 项、helper 资源限制 3 项、RAR FFI 4 项和 RAR 引擎 9 项全部通过；按环境条件忽略项由测试输出注明。此前共享 target 混有 Rust 1.99.1 元数据，未清理原缓存，改用独立目录完成验证。Clippy 提示第三方 `block v0.1.6` future-incompatibility。
-- 2026-10-31 MP4 和 WAV Fuzz 修复后再次执行 Rust 1.96.0 全工作区 `cargo fmt --all -- --check`、all-features Clippy 和 `cargo test --workspace --all-features`，全部通过。新增 WAV 两项回归与旧用例共 6 项音频单元测试通过；环境条件忽略项见测试输出。Clippy 仍提示第三方 `block v0.1.6` future-incompatibility。
+- 2026-10-31 MP4 和 WAV Fuzz 修复后再次执行 Rust 1.96.0 全工作区 `cargo fmt --all -- --check`、all-features Clippy 和 `cargo test --workspace --all-features`，全部通过。音频解析回归与合成有效 MP3 解码共 7 项音频单元测试通过；环境条件忽略项见测试输出。Clippy 仍提示第三方 `block v0.1.6` future-incompatibility。
 
 ## 后续仍需完成
 
