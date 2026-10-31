@@ -44,6 +44,8 @@
 
 ## 后续仍需完成
 
+- 2026-10-31 远端最终补验：`ac2a230` 的 Fuzz [41160867029](https://github.com/yuhuotech/rustzip/actions/runs/41160867029) 八个 target 全部通过；CI [41160892935](https://github.com/yuhuotech/rustzip/actions/runs/41160892935) 七个 job 全部成功，含 Windows core / GUI / 安装器；Release dry-run [41160892957](https://github.com/yuhuotech/rustzip/actions/runs/41160892957) 四平台常规 / RAR 包和汇总验签通过。新提交 `4531ed4` 的 Quick Look 改动对应 CI [41163708768](https://github.com/yuhuotech/rustzip/actions/runs/41163708768) 和 Release dry-run [41163708636](https://github.com/yuhuotech/rustzip/actions/runs/41163708636) 正在执行。
+- 此前每日 `02:07 UTC` 多次未出现 `schedule` run，Fuzz workflow 已调整为每日 `03:47 UTC`。新的定时事件仍待 Actions run list 确认；push 和 workflow_dispatch 不替代 schedule 验收。
 - 第三处 H.264 crash 位于 intra 16×16 luma write；`rust_h264` vendor bounds fix 现覆盖 4×4 / 8×8 / 16×16，新增 fixture 与 helper 子进程回归通过。30 秒本机 nightly ASan 在更新 corpus 上执行 46,076 次、峰值 RSS 432 MiB，无崩溃；vendor tests 205 + doctests 6 passed、2 slow ignored。修补版远端 Fuzz / CI 仍待验收。
 - Fuzz workflow API 仍报告 `active`，但 Actions run list 在 2026-10-31 02:13 UTC 仍无 `schedule` 事件（每日 cron 02:07 UTC）。GitHub 官方说明 scheduled runs 在 Actions 高负载时可能延迟或丢弃，详见[workflow troubleshooting](https://docs.github.com/en/actions/how-tos/troubleshoot-workflows#scheduled-workflows-running-at-unexpected-times)；应继续观察后续 cron，不能用手动 push run 替代。
 - 最新修补版 `62d5ccd` 的 CI [41157889872](https://github.com/yuhuotech/rustzip/actions/runs/41157889872)、Release dry-run [41157889524](https://github.com/yuhuotech/rustzip/actions/runs/41157889524) 在运行，Fuzz [41157872841](https://github.com/yuhuotech/rustzip/actions/runs/41157872841) 排队，等待包含 8×8 bounds fix 的远端验收。每日 schedule 在 02:07 UTC 仍未出现 `schedule` run；workflow API 显示 active。
