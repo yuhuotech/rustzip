@@ -86,6 +86,8 @@ macOS 的“打开方式”声明包含已接入的常见只读格式及 LZ4，R
 
 2026-10-31 仓库 Secrets 核对：当前未配置 Actions Secrets；`RZ_STATS_URL` Variable 已配置。正式签名 Release 需要维护者按本文流程添加 `RZ_UPDATE_KEY`，以及选择性配置 macOS Developer ID / notarization secrets；测试用 disposable key 只用于 dry-run。
 
+- 2026-10-31 当前提交 `4531ed4` 的 Release dry-run [41163708636](https://github.com/yuhuotech/rustzip/actions/runs/41163708636) 全部通过：四平台常规包 / RAR 验证包构建、汇总验签和 artifacts 上传成功；`publish` 按 dry-run 条件跳过。
+
 - 2026-10-29 Release dry-run [40950855468](https://github.com/yuhuotech/rustzip/actions/runs/40950855468)：Linux、macOS arm64、macOS x86_64 与 Windows x86_64 产物均构建并签名成功；汇总验签 job 在构建 `rz-release` 时因 runner 未安装 `libacl` 开发库而失败，因此未生成验证 bundle，正式发布步骤跳过。已在汇总 job 加入 `native-archive-deps`；修复后的 dry-run 待重新运行。
 - 2026-10-30 修复后的 Release dry-run [40958424663](https://github.com/yuhuotech/rustzip/actions/runs/40958424663) 全部通过：四个平台包均构建并签名，汇总验签成功，上传了 48,267,020 字节的 `release-dry-run-bundle` artifact；下载检查确认 `update.json` 含四个平台及对应包名。公开 Release 的 `publish` job 按 dry-run 条件跳过。该 bundle 可供 14 天检查，不是可安装更新的正式签名包。
 - 2026-10-30 Release dry-run [40969974227](https://github.com/yuhuotech/rustzip/actions/runs/40969974227) 对 `b262828`：macOS arm64 / Linux x86_64 常规包构建成功；macOS arm64、x86_64 和 Linux 的 RAR 测试包均完成验证。Windows 常规包构建成功；RAR 测试包的 GUI 和 Inno Setup 均构建成功，但安装冒烟以退出码 1 失败。根因为脚本指定外部 `dist` 时只创建输出目录，却把 Inno `/LOG` 指向尚不存在的 `$work/install.log`；修复后见下一次 dry-run。

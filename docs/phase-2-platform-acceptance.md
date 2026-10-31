@@ -54,6 +54,7 @@
 
 ## 最新远端验收
 
+- 2026-10-31 提交 `4531ed4`：CI [41163708768](https://github.com/yuhuotech/rustzip/actions/runs/41163708768) 七个 job 全部通过，包含 macOS Quick Look 安全 smoke、Windows GUI 和安装器冒烟。Release dry-run [41163708636](https://github.com/yuhuotech/rustzip/actions/runs/41163708636) 四个平台常规 / RAR 包、汇总验签和 bundles 上传全部成功；publish 跳过。
 - 2026-10-31 修补版提交 `ac2a230`：Fuzz [41160867029](https://github.com/yuhuotech/rustzip/actions/runs/41160867029) 八个目标全部通过；Release dry-run [41160892957](https://github.com/yuhuotech/rustzip/actions/runs/41160892957) 四平台构建、RAR 包校验和汇总验签通过，publish 跳过。CI [41160892935](https://github.com/yuhuotech/rustzip/actions/runs/41160892935) 的 macOS / Ubuntu、Windows core、benchmark、Windows GUI Clippy / 测试和安装器 smoke 均成功；安装器步骤耗时 14 分 29 秒，GUI job 当时仍在保存 Cargo 缓存。该结果早于本次 Quick Look 原生视图改动。
 - 2026-10-31：`rust_h264` bounds patch 又覆盖 intra 16×16 路径，源代码回归、helper process test、完整 workspace Clippy / tests 及 30 秒 ASan 通过。上游库完整测试 205 项 + 6 项文档测试通过，2 项慢速测试忽略。后续 remote Fuzz / CI / Release run 待提交后验收。
 - 2026-10-31 最新修补版 `62d5ccd`：CI [41157889872](https://github.com/yuhuotech/rustzip/actions/runs/41157889872) 及 Release dry-run [41157889524](https://github.com/yuhuotech/rustzip/actions/runs/41157889524) 仍在进行，Fuzz [41157872841](https://github.com/yuhuotech/rustzip/actions/runs/41157872841) 排队。每日 schedule 02:07 UTC 未观察到事件，workflow 处于 active。
