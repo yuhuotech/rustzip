@@ -35,14 +35,96 @@ fn is_wav(data: &[u8]) -> bool {
     data.get(0..4) == Some(b"RIFF") && data.get(8..12) == Some(b"WAVE")
 }
 
+fn has_complete_mpeg_audio_frame(data: &[u8]) -> bool {
+    let offset = if data.starts_with(b"ID3") {
+        if data.len() < 10 || !(2..=4).contains(&data[3]) {
+            return false;
+        }
+        let size_bytes = &data[6..10];
+        if size_bytes.iter().any(|byte| byte & 0x80 != 0) {
+            return false;
+        }
+        let tag_size = size_bytes
+            .iter()
+            .fold(0usize, |size, byte| (size << 7) | usize::from(*byte));
+        let footer_size = usize::from(data[3] == 4 && data[5] & 0x10 != 0) * 10;
+        match 10usize
+            .checked_add(tag_size)
+            .and_then(|size| size.checked_add(footer_size))
+        {
+            Some(offset) if offset <= data.len() => offset,
+            _ => return false,
+        }
+    } else {
+        0
+    };
+    let Some(header_end) = offset.checked_add(4) else {
+        return false;
+    };
+    let Some(header) = data.get(offset..header_end) else {
+        return false;
+    };
+    if header[0] != 0xff || header[1] & 0xe0 != 0xe0 {
+        return false;
+    }
+
+    let version = (header[1] >> 3) & 0x03;
+    let layer = (header[1] >> 1) & 0x03;
+    let bitrate_index = (header[2] >> 4) as usize;
+    let sample_rate_index = ((header[2] >> 2) & 0x03) as usize;
+    if version == 1
+        || layer == 0
+        || bitrate_index == 0
+        || bitrate_index == 15
+        || sample_rate_index == 3
+    {
+        return false;
+    }
+
+    const MPEG1_LAYER1: [u16; 14] = [
+        32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448,
+    ];
+    const MPEG1_LAYER2: [u16; 14] = [
+        32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384,
+    ];
+    const MPEG1_LAYER3: [u16; 14] = [
+        32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320,
+    ];
+    const MPEG2_LAYER1: [u16; 14] = [
+        32, 48, 56, 64, 80, 96, 112, 128, 144, 160, 176, 192, 224, 256,
+    ];
+    const MPEG2_LAYER23: [u16; 14] = [8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160];
+    const SAMPLE_RATES: [u32; 3] = [44_100, 48_000, 32_000];
+
+    let table = match (version == 3, layer) {
+        (true, 3) => &MPEG1_LAYER1,
+        (true, 2) => &MPEG1_LAYER2,
+        (true, 1) => &MPEG1_LAYER3,
+        (false, 3) => &MPEG2_LAYER1,
+        (false, 1 | 2) => &MPEG2_LAYER23,
+        _ => return false,
+    };
+    let bitrate = u32::from(table[bitrate_index - 1]) * 1_000;
+    let sample_rate = SAMPLE_RATES[sample_rate_index] >> (3 - version);
+    let padding = u32::from((header[2] >> 1) & 1);
+    let frame_length = (if layer == 3 {
+        (12 * bitrate / sample_rate + padding) * 4
+    } else if layer == 1 && version != 3 {
+        72 * bitrate / sample_rate + padding
+    } else {
+        144 * bitrate / sample_rate + padding
+    }) as usize;
+    frame_length >= 4
+        && offset
+            .checked_add(frame_length)
+            .is_some_and(|end| end <= data.len())
+}
+
 fn has_supported_container_header(data: &[u8]) -> bool {
     is_wav(data)
         || data.starts_with(b"fLaC")
         || data.starts_with(b"OggS")
-        || data.starts_with(b"ID3")
-        || data
-            .get(0..2)
-            .is_some_and(|sync| sync[0] == 0xff && sync[1] & 0xe0 == 0xe0)
+        || has_complete_mpeg_audio_frame(data)
         || data.get(4..8) == Some(b"ftyp")
 }
 
@@ -50,10 +132,19 @@ fn validate_wav_header(data: &[u8]) -> Result<(), DecodeError> {
     if !is_wav(data) {
         return Ok(());
     }
+    let riff_size =
+        u32::from_le_bytes(data[4..8].try_into().map_err(|_| DecodeError::Invalid)?) as usize;
+    let riff_end = 8usize.checked_add(riff_size).ok_or(DecodeError::Invalid)?;
+    if riff_end < 12 || riff_end > data.len() {
+        return Err(DecodeError::Invalid);
+    }
+
     let mut offset = 12usize;
-    loop {
+    let mut has_format = false;
+    let mut has_data = false;
+    while offset < riff_end {
         let header_end = offset.checked_add(8).ok_or(DecodeError::Invalid)?;
-        if header_end > data.len() {
+        if header_end > riff_end {
             return Err(DecodeError::Invalid);
         }
         let chunk_id = &data[offset..offset + 4];
@@ -66,13 +157,15 @@ fn validate_wav_header(data: &[u8]) -> Result<(), DecodeError> {
         let end = payload
             .checked_add(chunk_size)
             .ok_or(DecodeError::Invalid)?;
-        if end > data.len() {
+        if end > riff_end {
             return Err(DecodeError::Invalid);
         }
         if chunk_id == b"fmt " {
-            if chunk_size < 16 {
+            if has_format || chunk_size < 16 {
                 return Err(DecodeError::Invalid);
             }
+            has_format = true;
+            let format = u16::from_le_bytes([data[payload], data[payload + 1]]);
             let channels = u16::from_le_bytes([data[payload + 2], data[payload + 3]]) as usize;
             let sample_rate = u32::from_le_bytes(
                 data[payload + 4..payload + 8]
@@ -85,12 +178,26 @@ fn validate_wav_header(data: &[u8]) -> Result<(), DecodeError> {
             if channels > MAX_CHANNELS || sample_rate > MAX_SAMPLE_RATE {
                 return Err(DecodeError::Unsupported);
             }
-            return Ok(());
+            if format == 1 {
+                let bits_per_sample = u16::from_le_bytes([data[payload + 14], data[payload + 15]]);
+                if !matches!(bits_per_sample, 8 | 16 | 24 | 32) {
+                    return Err(DecodeError::Unsupported);
+                }
+            }
+        } else if chunk_id == b"data" {
+            has_data = true;
         }
         offset = end
             .checked_add(chunk_size & 1)
             .ok_or(DecodeError::Invalid)?;
+        if offset > riff_end {
+            return Err(DecodeError::Invalid);
+        }
     }
+    if !has_format || !has_data {
+        return Err(DecodeError::Invalid);
+    }
+    Ok(())
 }
 
 /// Decodes a short audio preview into an interleaved PCM buffer with a hard sample cap.
@@ -246,6 +353,23 @@ mod tests {
         wav
     }
 
+    fn wave_with_duplicate_format_chunk() -> Vec<u8> {
+        let wav = wave();
+        let mut duplicate = wav[..36].to_vec();
+        duplicate.extend_from_slice(b"fmt ");
+        duplicate.extend_from_slice(&16u32.to_le_bytes());
+        duplicate.extend_from_slice(&1u16.to_le_bytes());
+        duplicate.extend_from_slice(&u16::MAX.to_le_bytes());
+        duplicate.extend_from_slice(&8_000u32.to_le_bytes());
+        duplicate.extend_from_slice(&u32::MAX.to_le_bytes());
+        duplicate.extend_from_slice(&u16::MAX.to_le_bytes());
+        duplicate.extend_from_slice(&32u16.to_le_bytes());
+        duplicate.extend_from_slice(&wav[36..]);
+        let riff_size = u32::try_from(duplicate.len() - 8).unwrap();
+        duplicate[4..8].copy_from_slice(&riff_size.to_le_bytes());
+        duplicate
+    }
+
     #[test]
     fn rejects_zero_sample_rate_before_demux() {
         let mut wav = wave();
@@ -272,6 +396,26 @@ mod tests {
         assert!(matches!(
             decode_audio(Arc::from(wav.as_slice()), &AtomicBool::new(false)),
             Err(DecodeError::Invalid)
+        ));
+    }
+
+    #[test]
+    fn rejects_duplicate_wave_format_chunks_before_demux() {
+        assert!(matches!(
+            decode_audio(
+                Arc::from(wave_with_duplicate_format_chunk()),
+                &AtomicBool::new(false)
+            ),
+            Err(DecodeError::Invalid)
+        ));
+    }
+
+    #[test]
+    fn rejects_a_truncated_mpeg_frame_before_demux() {
+        let bytes = include_bytes!("../../../fuzz/seeds/audio_decoder/stacked-mpeg-wav-crash.bin");
+        assert!(matches!(
+            decode_audio(Arc::from(bytes.as_slice()), &AtomicBool::new(false)),
+            Err(DecodeError::Unsupported)
         ));
     }
 
