@@ -1980,7 +1980,7 @@ impl SliceContext<'_> {
                         left_mb_avail,
                         above_left_mb_avail,
                         above_right_mb_avail,
-                    );
+                    )?;
                 }
             } else {
                 // I4x4: existing 4x4 path

@@ -1323,10 +1323,39 @@ impl SliceContext<'_> {
         left_mb_avail: bool,
         above_left_mb_avail: bool,
         above_right_mb_avail: bool,
-    ) {
+    ) -> Result<(), DecodeError> {
+        if i8x8 >= 4 {
+            return Err(DecodeError::InvalidSyntax(
+                "intra 8x8 block index out of range",
+            ));
+        }
         let row_off = (i8x8 / 2) * 8;
         let col_off = (i8x8 % 2) * 8;
-        let px = mb_x + col_off;
+        let Some(px) = mb_x.checked_add(col_off) else {
+            return Err(DecodeError::InvalidSyntax(
+                "intra 8x8 block column exceeds the coded frame",
+            ));
+        };
+        let Some(last_row) = row_off
+            .checked_add(7)
+            .and_then(|row| row.checked_mul(self.ly_stride))
+            .and_then(|row| self.ly_offset.checked_add(row))
+        else {
+            return Err(DecodeError::InvalidSyntax(
+                "intra 8x8 block row exceeds the coded frame",
+            ));
+        };
+        let Some(last_index) = px.checked_add(7).and_then(|col| last_row.checked_add(col)) else {
+            return Err(DecodeError::InvalidSyntax(
+                "intra 8x8 block column exceeds the coded frame",
+            ));
+        };
+        if px.checked_add(8).is_none_or(|end| end > self.stride) || last_index >= self.frame.y.len()
+        {
+            return Err(DecodeError::InvalidSyntax(
+                "intra 8x8 block exceeds the coded frame",
+            ));
+        }
 
         // Above samples (16: 8 above + 8 above-right)
         let above_base = self.ly_offset + row_off * self.ly_stride;
@@ -1403,9 +1432,16 @@ impl SliceContext<'_> {
             for c in 0..8 {
                 let val = (pred[r * 8 + c] as i32 + luma_residual[(row_off + r) * 16 + col_off + c])
                     .clamp(0, 255) as u8;
-                self.frame.y[self.ly_offset + (row_off + r) * self.ly_stride + px + c] = val;
+                let index = self.ly_offset + (row_off + r) * self.ly_stride + px + c;
+                let Some(pixel) = self.frame.y.get_mut(index) else {
+                    return Err(DecodeError::InvalidSyntax(
+                        "intra 8x8 block exceeds the coded frame",
+                    ));
+                };
+                *pixel = val;
             }
         }
+        Ok(())
     }
 
     #[allow(clippy::too_many_arguments)]

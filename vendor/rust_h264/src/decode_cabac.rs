@@ -373,7 +373,7 @@ impl SliceContext<'_> {
                                 left_mb_avail,
                                 above_left_mb_avail,
                                 above_right_mb_avail,
-                            );
+                            )?;
                         }
                     } else {
                         // I4x4 path (existing)
@@ -3554,7 +3554,7 @@ impl SliceContext<'_> {
                         left_mb_avail,
                         above_left_mb_avail,
                         above_right_mb_avail,
-                    );
+                    )?;
                 }
             } else {
                 // I4x4 via CABAC: existing path
