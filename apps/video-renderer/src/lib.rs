@@ -494,6 +494,12 @@ mod tests {
     }
 
     #[test]
+    fn rejects_cabac_motion_vector_overflow_without_panicking() {
+        let malformed = include_bytes!("../tests/fixtures/cabac-mvd-overflow.mp4");
+        assert!(render_first_frame(malformed).is_err());
+    }
+
+    #[test]
     fn rejects_intra_blocks_outside_the_coded_frame_without_panicking() {
         let malformed_8x8 = include_bytes!("../tests/fixtures/intra8x8-out-of-frame.mov");
         assert!(render_first_frame(malformed_8x8).is_err());

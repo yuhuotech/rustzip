@@ -42,6 +42,66 @@ fn write_zip(path: &Path, files: &[(&str, &[u8])]) {
 }
 
 #[test]
+fn new_read_only_formats_work_through_list_test_extract_and_convert() {
+    let fixtures =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../crates/rz-formats/tests/fixtures");
+    let directory = tempfile::tempdir().unwrap();
+    for name in [
+        "wim_stored.wim",
+        "wim_xpress.wim",
+        "dmg_hfs_zlib.dmg",
+        "nsis_deflate.exe",
+        "nsis_lzma.exe",
+        "nsis_deflate_solid.exe",
+        "nsis_lzma_solid.exe",
+    ] {
+        let source = fixtures.join(name);
+        let output = directory.path().join(name);
+        let extracted = output.join("files");
+        fs::create_dir_all(&output).unwrap();
+        let listing = rz(&["l", p(&source)]);
+        assert!(listing.status.success(), "{name}: {}", s(&listing).1);
+        assert!(s(&listing).0.contains("目录/中文.txt"));
+        let tested = rz(&["t", p(&source)]);
+        assert!(tested.status.success(), "{name}: {}", s(&tested).1);
+        let result = rz(&["x", p(&source), "-o", p(&extracted)]);
+        assert!(result.status.success(), "{name}: {}", s(&result).1);
+        assert_eq!(
+            fs::read(extracted.join("目录/中文.txt")).unwrap(),
+            include_bytes!("../../../crates/rz-formats/tests/fixtures/nsis_sources/payload.txt")
+        );
+        assert_eq!(fs::metadata(extracted.join("empty.txt")).unwrap().len(), 0);
+        let zip = output.join("converted.zip");
+        let converted = rz(&["c", p(&source), p(&zip)]);
+        assert!(converted.status.success(), "{name}: {}", s(&converted).1);
+        let roundtrip = output.join("converted");
+        let result = rz(&["x", p(&zip), "-o", p(&roundtrip)]);
+        assert!(result.status.success(), "{name}: {}", s(&result).1);
+        assert_eq!(
+            fs::read(roundtrip.join("目录/中文.txt")).unwrap(),
+            fs::read(extracted.join("目录/中文.txt")).unwrap()
+        );
+    }
+}
+
+#[test]
+fn testing_a_dmg_rejects_a_damaged_udif_master_checksum() {
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../crates/rz-formats/tests/fixtures/dmg_hfs_zlib.dmg");
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("damaged.dmg");
+    let mut bytes = fs::read(fixture).unwrap();
+    let checksum = bytes.len() - 512 + 360;
+    bytes[checksum] ^= 1;
+    fs::write(&path, bytes).unwrap();
+    let output = rz(&["t", p(&path)]);
+    assert!(
+        !output.status.success(),
+        "a damaged UDIF master checksum was accepted"
+    );
+}
+
+#[test]
 fn diff_reports_added_removed_and_content_changed_paths() {
     let tmp = tempfile::tempdir().unwrap();
     let left = tmp.path().join("left.zip");

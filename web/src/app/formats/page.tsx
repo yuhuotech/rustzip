@@ -18,7 +18,7 @@ const groups = [
     summary: "浏览与解压",
     tone: "format-tone-blue",
     formats: ["RAR / RAR5", "ISO", "CAB", "WIM", "DMG", "CPIO", "AR", "RPM", "DEB", "CHM", "NSIS"],
-    note: "RAR 只读，不创建 RAR 压缩包。长尾格式按后端能力提供只读支持。",
+    note: "RAR 仅在启用可选功能的构建中只读。WIM 支持 stored / XPRESS / LZX / LZMS；DMG 支持 raw / zlib 的 HFS+ 和未加密单卷 APFS；NSIS 支持 Copy / Deflate / LZMA / bzip2。APFS 透明压缩等变体会提示不支持。",
   },
   {
     name: "仅识别",

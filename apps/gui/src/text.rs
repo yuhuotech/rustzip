@@ -154,7 +154,7 @@ pub fn tr(language: &str, key: &str) -> &'static str {
         .unwrap_or("?")
 }
 
-/// Unsupported archive-like extensions that still deserve a format-specific hint.
+/// Archive-like extensions that still deserve a format-specific hint.
 const KNOWN_ARCHIVE_EXTENSIONS: [&str; 6] = ["dmg", "wim", "arj", "z", "img", "sit"];
 
 /// Turns a failure to open `path` into a sentence a non-technical user can act on.
@@ -170,7 +170,9 @@ pub fn open_error(language: &str, path: &std::path::Path, error: &rz_core::Error
         _ if path.is_dir() => "open_not_archive",
         Error::UnknownFormat if known_type => "open_unsupported",
         Error::UnknownFormat => "open_not_archive",
-        Error::Unsupported(detail) if detail.contains("NSIS installer detected") => {
+        Error::Unsupported(detail)
+            if detail.contains("NSIS installer detected") || detail.starts_with("NSIS:") =>
+        {
             "open_nsis_unsupported"
         }
         Error::Unsupported(_) => "open_unsupported",
@@ -229,6 +231,14 @@ mod tests {
                 &Error::Unsupported("NSIS installer detected".into())
             ),
             tr("en", "open_nsis_unsupported")
+        );
+        assert_eq!(
+            open_error(
+                "zh-CN",
+                Path::new("installer.exe"),
+                &Error::Unsupported("NSIS: unsupported compression".into())
+            ),
+            tr("zh-CN", "open_nsis_unsupported")
         );
         assert_eq!(
             open_error("en", Path::new("a.zip"), &Error::Corrupt("x".into())),

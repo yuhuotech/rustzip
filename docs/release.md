@@ -12,15 +12,23 @@
 
 ## 发一个版本
 
-> 主 CI 和 Release workflow 由 Actions 页面手动触发。Release dry-run 可从任意分支运行；正式发布只接受 `v*` tag。Fuzz workflow 当前配置为每日 02:07 UTC 运行 ZIP recovery、CHM、bzip2、RAR、NSIS、PDF、音频和视频八个 target，不构建或发布安装包；可手动启用 `verify_crash_artifact` 对受控 sentinel crash 的 artifact 上传做端到端检查。run [41046064115](https://github.com/yuhuotech/rustzip/actions/runs/41046064115) 已通过 artifact smoke；新 schedule 仍待远端触发验收。
+正式发布前可在已设置维护者签名环境的终端运行 `cargo run --release -p rz-release -- check-key`，确认私钥匹配客户端公钥；命令只输出匹配结果，不输出密钥。Release workflow 会提前拒绝缺失 / 格式错误的 `RZ_UPDATE_KEY`，并在正式签名产物前检查公钥匹配。dry-run 的临时密钥不执行这项生产匹配检查。
+
+> 主 CI 由 Actions 页面手动触发；推送 `v*` tag 自动启动正式 Release。Release dry-run 可从任意分支手动运行；正式发布的 tag 必须与版本一致，四个平台均须构建并验签通过，macOS 必须使用 Developer ID 签名并完成公证。Fuzz workflow 不构建或发布安装包；可手动启用 `verify_crash_artifact` 对受控 sentinel crash 的 artifact 上传做端到端检查。
 
 1. 改根 `Cargo.toml` 里 `[workspace.package] version`,提交。
 2. 先在 `main` 上手动触发 Release workflow，保留默认 `dry_run=true`；它会生成一次性测试密钥、构建四个平台产物、签名并校验平台集合和实际文件，保存名为 `release-dry-run-bundle` 的 14 天 artifact。测试签名不匹配应用公钥，dry-run 包不能用于更新安装。
-3. 检查 dry-run artifact 后创建并推送对应的 `v*` tag，再从该 tag 手动触发 Release workflow 并将 `dry_run` 设为 `false`。workflow 会再次检查 tag 与 `Cargo.toml` 版本一致，只有四个平台资产全部存在且客户端公钥验签通过才会发布。
+3. 检查三平台 CI 和 dry-run artifact 后创建并推送对应的 `v*` tag，推送会自动触发正式 Release。也可以从已有 tag 手动触发并将 `dry_run` 设为 `false`；不要同时运行两次。workflow 会再次检查 tag 与 `Cargo.toml` 版本一致，只有四个平台资产全部存在且客户端公钥验签通过才会发布。
 4. 发布后 `.github/workflows/release.yml` 创建 GitHub Release 并上传四个平台安装包和 `update.json`。
 5. 已安装的用户下次启动时,从 `https://github.com/yuhuotech/rustzip/releases/latest/download/update.json` 读到新版本,状态栏出现"新版本 x.y.z · 更新"。
 
 Dry-run 默认不创建 GitHub Release，也不提交 Apple notarization 请求。其一次性私钥只在 1 天有效的单独 workflow artifact 中供 matrix jobs 共享，最终 dry-run bundle 不包含该密钥。正式发布使用已经安全保管的 `RZ_UPDATE_KEY`，并以应用内置公钥验签；生产私钥不会写入仓库或任何 workflow artifact。
+
+需要实际测试 Developer ID 签名及 Apple 公证时，手动选择 `dry_run=true` 和 `validate_macos_notarization=true`。流程要求六项 macOS 签名与公证 Secrets 均存在，分别为两种架构提交 Apple 公证，附加并检查公证票据，不创建 GitHub Release。验证版更新清单仍使用一次性密钥，不能用作正式更新。此流程的 Apple 公证请求会提交构建产物给 Apple。
+
+2026-11-05：新 G2 Developer ID Application 证书已配置到 RustZIP 仓库，Apple 公证凭据认证成功。macOS arm64 本地当前工作区测试包使用该证书签名，Apple 公证请求 `2588837e-816e-4db2-9449-fa5c050e2a6d` 为 Accepted，DMG 已完成 stapler 附加及验证，包含安全时间戳；该测试未创建 Release。新增 GitHub dry-run 公证选项仍须提交到远端后运行，不能将本地结果当作双架构 CI 验收。
+
+用户要求 RustZIP 使用独立的 Apple App 专用密码；上述本地测试曾使用 Linkory 原凭据。现已创建并配置 RustZIP 专用密码，使用新凭据重新提交同一测试包，公证请求 `f3c7e49d-7e95-4ba7-a683-a22ea64cb592` 为 Accepted，票据已附加并验证；Linkory 仓库的凭据保持原样。
 
 ## 更新怎么保证安全
 

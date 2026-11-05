@@ -16,6 +16,7 @@ trap 'status=$?; printf "macOS package failed at line %s: %s (exit %s)\n" "${BAS
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 out="${1:-$root/dist}"
 target="${TARGET:-}"
+build_root="${CARGO_TARGET_DIR:-target}"
 case "${RZ_WITH_RAR:-0}" in
     0|1) ;;
     *) echo "RZ_WITH_RAR must be 0 or 1" >&2; exit 2 ;;
@@ -31,15 +32,15 @@ version="$(awk -F'"' '/^version *=/ {print $2; exit}' "$root/Cargo.toml")"
 cd "$root"
 if [ -n "$target" ]; then
     cargo build --release -p rustzip-gui -p rz-pdf-renderer -p rz-video-renderer --target "$target" "$@"
-    bin="target/$target/release/rustzip"
-    pdf_renderer="target/$target/release/rz-pdf-renderer"
-    video_renderer="target/$target/release/rz-video-renderer"
+    bin="$build_root/$target/release/rustzip"
+    pdf_renderer="$build_root/$target/release/rz-pdf-renderer"
+    video_renderer="$build_root/$target/release/rz-video-renderer"
     arch="${target%%-*}"
 else
     cargo build --release -p rustzip-gui -p rz-pdf-renderer -p rz-video-renderer "$@"
-    bin="target/release/rustzip"
-    pdf_renderer="target/release/rz-pdf-renderer"
-    video_renderer="target/release/rz-video-renderer"
+    bin="$build_root/release/rustzip"
+    pdf_renderer="$build_root/release/rz-pdf-renderer"
+    video_renderer="$build_root/release/rz-video-renderer"
     arch="$(uname -m)"
 fi
 [ "$arch" = "arm64" ] && arch="aarch64"
@@ -56,6 +57,7 @@ cp "$pdf_renderer" "$app/Contents/MacOS/rz-pdf-renderer"
 cp "$video_renderer" "$app/Contents/MacOS/rz-video-renderer"
 cp packaging/icons/RustZIP.icns "$app/Contents/Resources/RustZIP.icns"
 cp packaging/licenses/libchm.txt "$app/Contents/Resources/libchm-license.txt"
+cp packaging/licenses/format-readers.txt "$app/Contents/Resources/format-readers-licenses.txt"
 cp packaging/licenses/pbz2.txt "$app/Contents/Resources/pbz2-license.txt"
 cp packaging/licenses/pbz2-notice.txt "$app/Contents/Resources/pbz2-notice.txt"
 cp packaging/licenses/pdf-renderer.txt "$app/Contents/Resources/pdf-renderer-licenses.txt"

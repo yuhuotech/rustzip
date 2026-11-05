@@ -7,9 +7,10 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 const VIDEO: &[u8] = include_bytes!("../tests/fixtures/small-h264.mp4");
-const OUT_OF_FRAME: [&[u8]; 2] = [
+const MALFORMED: [&[u8]; 3] = [
     include_bytes!("../tests/fixtures/intra8x8-out-of-frame.mov"),
     include_bytes!("../tests/fixtures/intra16x16-out-of-frame.mov"),
+    include_bytes!("../tests/fixtures/cabac-mvd-overflow.mp4"),
 ];
 
 #[test]
@@ -29,8 +30,8 @@ fn helper_renders_one_frame_to_png() {
 }
 
 #[test]
-fn helper_rejects_h264_blocks_outside_the_coded_frame() {
-    for video in OUT_OF_FRAME {
+fn helper_rejects_malformed_h264_without_producing_output() {
+    for video in MALFORMED {
         let mut child = Command::new(env!("CARGO_BIN_EXE_rz-video-renderer"))
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())

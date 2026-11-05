@@ -1079,8 +1079,8 @@ impl SliceContext<'_> {
                                 self.mbaff,
                                 self.mb_field_decoding,
                             );
-                            let mvd_x = cr.decode_mvd_comp(st, 40, amvd_x) as i16;
-                            let mvd_y = cr.decode_mvd_comp(st, 47, amvd_y) as i16;
+                            let mvd_x = cr.decode_mvd_comp(st, 40, amvd_x)? as i16;
+                            let mvd_y = cr.decode_mvd_comp(st, 47, amvd_y)? as i16;
                             let (mvp_x, mvp_y) = predict_mv_sub(
                                 self.mv_store_l0,
                                 self.ref_idx_store_l0,
@@ -1310,8 +1310,8 @@ impl SliceContext<'_> {
                             self.mbaff,
                             self.mb_field_decoding,
                         );
-                        let mvd_x = cr.decode_mvd_comp(st, 40, amvd_x) as i16;
-                        let mvd_y = cr.decode_mvd_comp(st, 47, amvd_y) as i16;
+                        let mvd_x = cr.decode_mvd_comp(st, 40, amvd_x)? as i16;
+                        let mvd_y = cr.decode_mvd_comp(st, 47, amvd_y)? as i16;
                         let (mvp_x, mvp_y) = predict_mv(
                             self.mv_store_l0,
                             self.ref_idx_store_l0,
@@ -1925,8 +1925,8 @@ impl SliceContext<'_> {
                             self.mbaff,
                             self.mb_field_decoding,
                         );
-                        let mvd_x = cr.decode_mvd_comp(st, 40, amvd_x) as i16;
-                        let mvd_y = cr.decode_mvd_comp(st, 47, amvd_y) as i16;
+                        let mvd_x = cr.decode_mvd_comp(st, 40, amvd_x)? as i16;
+                        let mvd_y = cr.decode_mvd_comp(st, 47, amvd_y)? as i16;
                         let (mvp_x, mvp_y) = predict_mv(
                             self.mv_store_l0,
                             self.ref_idx_store_l0,
@@ -1975,8 +1975,8 @@ impl SliceContext<'_> {
                             self.mbaff,
                             self.mb_field_decoding,
                         );
-                        let mvd_x = cr.decode_mvd_comp(st, 40, amvd_x) as i16;
-                        let mvd_y = cr.decode_mvd_comp(st, 47, amvd_y) as i16;
+                        let mvd_x = cr.decode_mvd_comp(st, 40, amvd_x)? as i16;
+                        let mvd_y = cr.decode_mvd_comp(st, 47, amvd_y)? as i16;
                         let (mvp_x, mvp_y) = predict_mv(
                             self.mv_store_l1,
                             self.ref_idx_store_l1,
@@ -2151,8 +2151,8 @@ impl SliceContext<'_> {
                                 self.mbaff,
                                 self.mb_field_decoding,
                             );
-                            let mvd_x = cr.decode_mvd_comp(st, 40, amvd_x) as i16;
-                            let mvd_y = cr.decode_mvd_comp(st, 47, amvd_y) as i16;
+                            let mvd_x = cr.decode_mvd_comp(st, 40, amvd_x)? as i16;
+                            let mvd_y = cr.decode_mvd_comp(st, 47, amvd_y)? as i16;
                             let (mvp_x, mvp_y) = predict_mv(
                                 self.mv_store_l0,
                                 self.ref_idx_store_l0,
@@ -2234,8 +2234,8 @@ impl SliceContext<'_> {
                                 self.mbaff,
                                 self.mb_field_decoding,
                             );
-                            let mvd_x = cr.decode_mvd_comp(st, 40, amvd_x) as i16;
-                            let mvd_y = cr.decode_mvd_comp(st, 47, amvd_y) as i16;
+                            let mvd_x = cr.decode_mvd_comp(st, 40, amvd_x)? as i16;
+                            let mvd_y = cr.decode_mvd_comp(st, 47, amvd_y)? as i16;
                             let (mvp_x, mvp_y) = predict_mv(
                                 self.mv_store_l1,
                                 self.ref_idx_store_l1,
@@ -2534,8 +2534,8 @@ impl SliceContext<'_> {
                                 self.mbaff,
                                 self.mb_field_decoding,
                             );
-                            let mvd_x = cr.decode_mvd_comp(st, 40, amvd_x) as i16;
-                            let mvd_y = cr.decode_mvd_comp(st, 47, amvd_y) as i16;
+                            let mvd_x = cr.decode_mvd_comp(st, 40, amvd_x)? as i16;
+                            let mvd_y = cr.decode_mvd_comp(st, 47, amvd_y)? as i16;
                             let (mvp_x, mvp_y) = predict_mv_sub(
                                 self.mv_store_l0,
                                 self.ref_idx_store_l0,
@@ -2615,8 +2615,8 @@ impl SliceContext<'_> {
                                 self.mbaff,
                                 self.mb_field_decoding,
                             );
-                            let mvd_x = cr.decode_mvd_comp(st, 40, amvd_x) as i16;
-                            let mvd_y = cr.decode_mvd_comp(st, 47, amvd_y) as i16;
+                            let mvd_x = cr.decode_mvd_comp(st, 40, amvd_x)? as i16;
+                            let mvd_y = cr.decode_mvd_comp(st, 47, amvd_y)? as i16;
                             let (mvp_x, mvp_y) = predict_mv_sub(
                                 self.mv_store_l1,
                                 self.ref_idx_store_l1,

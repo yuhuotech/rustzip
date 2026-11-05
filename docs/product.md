@@ -61,7 +61,9 @@ ZIP / 7z 分卷首版使用标准 `.z01 … .zip` 和 `.7z.001 …` 卷名；创
 - **重复文件检测**:压缩前按内容哈希提示相同文件；最多检查 100,000 个普通文件，超过上限时允许继续但说明未完成检查。用户确认后保留全部输入。自动去重作为独立选项后续评估。
 - 深色模式、多语言(简体中文、English、西班牙语、法语、德语、日语、韩语、阿拉伯语、葡萄牙语、俄语)、无障碍。
 
-当前只读长尾格式包括 ISO 9660、CAB、CPIO、AR、LHA / LZH、RPM、XAR 和 CHM；CHM 支持浏览、完整性测试和安全提取，使用纯 Rust LZX 解码，并限制条目元数据、压缩块及单次读取。RPM 使用内置解析的 RPM 包头 / 压缩流与 CPIO reader，DEB 包使用 AR 容器读取。WIM、DMG 可按内容识别并给出不支持提示；NSIS 通过 PE overlay 中经过验证的 FirstHeader 签名识别，并明确提示暂不支持读取，不按通用 `.exe` 扩展名推断。候选和安全边界见[第三阶段记录](phase-3-format-assessment.md)。libarchive 后端通过隔离的 `rz-ffi` 注册显式验收过的格式，不注册 RAR。
+当前只读长尾格式包括 ISO 9660、CAB、CPIO、AR、LHA / LZH、RPM、XAR、CHM、WIM、DMG 和 NSIS。WIM 支持单卷 stored、XPRESS、LZX、LZMS 及有界 LZMS solid ESD；DMG 支持 XML UDIF raw / zlib 上的 HFS+ / HFSX 和单个未加密 APFS 卷，APFS 支持常见 decmpfs zlib、LZVN、LZFSE 与未压缩数据；NSIS 支持现代 Copy / Deflate / 标准 LZMA / 自定义 bzip2 的非固实及有界固实流。APFS 其他透明压缩类型、加密和多卷、WIM 分卷及 reparse / ADS、NSIS 旧布局等仍不支持。NSIS 不执行安装脚本，也不按通用 `.exe` 扩展名关联；固实流使用最多 512 MiB 的匿名临时文件。具体边界见 D54–D65 和[验收记录](release-readiness-2026-11-01.md)。
+
+DMG 检查 UDIF 主校验和、GPT 和 zlib 数据流校验值；完整性测试额外核验存在的 UDIF 分区及 data fork CRC-32。未提供校验值的区域只能检查可读性，其他校验算法会提示不支持。
 
 当前侧栏增强能力已实现：常用位置、密码本管理、八种目标归档格式的流式转换，以及 ZIP / 7z 尽力恢复。恢复按可读条目另存新包，严重损坏的头部、固实块，以及中央目录丢失后的加密 / 数据描述符 / ZIP64 条目可能无法恢复；结果明确报告。转换暂不保留符号链接，遇到时拒绝；修复会报告跳过。具体边界和验证记录见 `sidebar-implementation.md`。
 

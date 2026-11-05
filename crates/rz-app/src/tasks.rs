@@ -885,8 +885,9 @@ fn run(
             if let Some(pw) = password {
                 reader.set_password(pw)?;
             }
+            reader.set_read_control(token.clone(), 1 << 40);
             let total = reader
-                .entries()?
+                .entries_with_progress(token, &mut sink)?
                 .iter()
                 .fold(0u64, |total, entry| total.saturating_add(entry.size));
             reader.set_read_control(token.clone(), total);
@@ -919,6 +920,7 @@ fn run(
                 files += 1;
                 Ok(())
             })?;
+            reader.verify_integrity(token, &mut sink, 1 << 40)?;
             Ok(Summary {
                 files,
                 bytes,

@@ -57,7 +57,7 @@ fn windows_open_with_and_extract_support_the_same_archive_extensions() {
     assert_eq!(open, extract);
     assert_eq!(rar_entries, 3);
     for extension in [
-        "zip", "7z", "rar", "lz4", "iso", "cab", "cpio", "deb", "rpm", "chm",
+        "zip", "7z", "rar", "lz4", "iso", "cab", "cpio", "deb", "rpm", "chm", "wim", "dmg",
     ] {
         assert!(open.contains(extension), "{extension} is missing");
     }
@@ -222,6 +222,7 @@ fn windows_installer_includes_the_pdf_renderer_and_all_reader_licenses() {
             .is_file()
     );
     for name in [
+        "format-readers.txt",
         "audio-playback.txt",
         "rodio-mit.txt",
         "rodio-apache-2.0.txt",
@@ -297,10 +298,14 @@ fn linux_packaging_keeps_rar_features_and_descriptors_in_sync() {
         &root.join("packaging/licenses"),
     );
     fs::write(root.join("Cargo.toml"), "version = \"0.1.0\"\n").unwrap();
-    fs::create_dir_all(root.join("target/release")).unwrap();
-    fs::write(root.join("target/release/rustzip"), "fixture").unwrap();
-    fs::write(root.join("target/release/rz-pdf-renderer"), "fixture").unwrap();
-    fs::write(root.join("target/release/rz-video-renderer"), "fixture").unwrap();
+    fs::create_dir_all(root.join("build-output/release")).unwrap();
+    fs::write(root.join("build-output/release/rustzip"), "fixture").unwrap();
+    fs::write(root.join("build-output/release/rz-pdf-renderer"), "fixture").unwrap();
+    fs::write(
+        root.join("build-output/release/rz-video-renderer"),
+        "fixture",
+    )
+    .unwrap();
     fs::create_dir_all(root.join("fake-bin")).unwrap();
     let cargo = root.join("fake-bin/cargo");
     fs::write(
@@ -332,6 +337,7 @@ fn linux_packaging_keeps_rar_features_and_descriptors_in_sync() {
             .arg(&output)
             .env("PATH", &path)
             .env("RZ_FAKE_CARGO_ARGS", &args)
+            .env("CARGO_TARGET_DIR", root.join("build-output"))
             .env("RZ_WITH_RAR", if enabled { "1" } else { "0" })
             .output()
             .unwrap();

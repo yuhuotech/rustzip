@@ -55,6 +55,8 @@
                 <string>lzh</string>
                 <string>xar</string>
                 <string>chm</string>
+                <string>wim</string>
+                <string>dmg</string>
             </array>
         </dict>
     </array>

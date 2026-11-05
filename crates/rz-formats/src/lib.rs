@@ -1,9 +1,12 @@
 //! Format backends for read/write ZIP, 7z, tar and single-file streams, plus
-//! read-only RAR, NSIS identification, ISO 9660, CAB, CPIO, AR, LHA, RPM and XAR readers.
+//! read-only RAR, ISO, CAB, CPIO, AR, LHA, RPM, XAR, CHM and bounded subsets of WIM,
+//! DMG and NSIS.
 
 mod chm_fmt;
 mod codec;
+mod dmg_fmt;
 mod libarchive_fmt;
+mod nsis_fmt;
 mod parallel_bzip2;
 mod parallel_deflate;
 #[cfg(feature = "rar")]
@@ -15,6 +18,7 @@ mod sniff;
 mod tar_fmt;
 mod timeutil;
 pub mod volumes;
+mod wim_fmt;
 pub mod zip_edit;
 mod zip_fmt;
 mod zip_out;
@@ -126,17 +130,10 @@ pub fn open(path: &Path) -> Result<Box<dyn ArchiveReader>> {
         Format::Rar => Err(Error::Unsupported(
             "rar (this build has no RAR support)".into(),
         )),
-        Format::Dmg => Err(Error::Unsupported(
-            "DMG disk images (read-only support is not available yet)".into(),
-        )),
-        Format::Nsis => Err(Error::Unsupported(
-            "NSIS installer detected (read-only browsing and extraction are not available yet)"
-                .into(),
-        )),
+        Format::Dmg => Ok(Box::new(dmg_fmt::DmgReader::new(path))),
+        Format::Nsis => Ok(Box::new(nsis_fmt::NsisReader::new(path))),
         Format::Chm => Ok(Box::new(chm_fmt::ChmReader::new(path)?)),
-        Format::Wim => Err(Error::Unsupported(
-            "WIM images (read-only support is not available yet)".into(),
-        )),
+        Format::Wim => Ok(Box::new(wim_fmt::WimReader::new(path))),
         Format::Ar => Ok(Box::new(libarchive_fmt::LibarchiveReader::new(
             path,
             rz_ffi::libarchive::Format::Ar,

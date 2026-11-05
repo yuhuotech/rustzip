@@ -281,7 +281,7 @@ fn scan_nsis_overlay<R: Read + Seek>(r: &mut R, start: u64, length: u64) -> Resu
     Ok(false)
 }
 
-fn is_nsis_first_header(header: &[u8]) -> bool {
+pub(crate) fn is_nsis_first_header(header: &[u8]) -> bool {
     if header.len() < NSIS_FIRST_HEADER_SIZE {
         return false;
     }
@@ -482,14 +482,13 @@ mod tests {
 
     #[test]
     #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-    fn detected_nsis_is_reported_as_known_but_unsupported() {
+    fn detected_nsis_without_valid_metadata_cannot_be_listed() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("installer.exe");
         std::fs::write(&path, minimal_nsis_pe(0, false)).unwrap();
 
-        assert!(matches!(
-            crate::open(&path),
-            Err(Error::Unsupported(message)) if message.contains("NSIS installer detected")
-        ));
+        let mut reader = crate::open(&path).unwrap();
+        assert_eq!(reader.format_name(), "nsis");
+        assert!(reader.entries().is_err());
     }
 }

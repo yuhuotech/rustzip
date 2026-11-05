@@ -1,2 +1,4 @@
 crates/rz-formats/tests/fixtures/chm_basic_sources/*.htm text eol=lf
 crates/rz-formats/tests/fixtures/chm_basic_sources/*.css text eol=lf
+crates/rz-formats/tests/fixtures/nsis_sources/*.txt text eol=lf
+crates/rz-formats/tests/fixtures/nsis_sources/*.nsi text eol=lf

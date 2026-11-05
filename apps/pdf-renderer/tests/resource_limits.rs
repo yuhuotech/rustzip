@@ -125,7 +125,8 @@ fn helper_stops_waiting_when_its_input_pipe_stays_open() {
         .unwrap();
     let _open_input = child.stdin.take().unwrap();
 
-    let deadline = Instant::now() + Duration::from_secs(12);
+    // Leave scheduling headroom around the helper's independent 10-second watchdog.
+    let deadline = Instant::now() + Duration::from_secs(16);
     loop {
         if let Some(status) = child.try_wait().unwrap() {
             assert!(!status.success());

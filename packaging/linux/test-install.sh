@@ -13,6 +13,7 @@ cp "$root"/packaging/linux/*.desktop \
     "$root"/packaging/linux/*.nemo_action \
     "$root"/packaging/linux/rustzip-nautilus-* "$package/"
 cp "$root"/packaging/licenses/libchm.txt "$package/libchm-license.txt"
+cp "$root"/packaging/licenses/format-readers.txt "$package/format-readers-licenses.txt"
 cp "$root"/packaging/licenses/pbz2.txt "$package/pbz2-license.txt"
 cp "$root"/packaging/licenses/pbz2-notice.txt "$package/pbz2-notice.txt"
 cp "$root"/packaging/licenses/pdf-renderer.txt "$package/pdf-renderer-licenses.txt"
@@ -54,6 +55,7 @@ test -f "$prefix/share/doc/rustzip/cpal-apache-2.0.txt"
 test -f "$prefix/share/doc/rustzip/symphonia-mpl-2.0.txt"
 test -f "$prefix/share/doc/rustzip/video-preview-licenses.txt"
 test -f "$prefix/share/doc/rustzip/reflink-copy-mit.txt"
+test -f "$prefix/share/doc/rustzip/format-readers-licenses.txt"
 test -f "$prefix/share/doc/rustzip/mp4-mit.txt"
 test -f "$prefix/share/doc/rustzip/rust-h264-mit.txt"
 test -f "$prefix/share/doc/rustzip/rust-h264-apache-2.0.txt"
@@ -63,6 +65,7 @@ for path in "${installed[@]}"; do
     test ! -e "$path" || { printf 'menu remained after uninstall: %s\n' "$path" >&2; exit 1; }
 done
 test ! -e "$prefix/bin/rustzip"
+test ! -e "$prefix/share/doc/rustzip/format-readers-licenses.txt"
 test ! -e "$prefix/bin/rz-pdf-renderer"
 test ! -e "$prefix/bin/rz-video-renderer"
 for file in audio-playback-licenses.txt rodio-mit.txt rodio-apache-2.0.txt \

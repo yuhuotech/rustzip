@@ -12,6 +12,45 @@ use std::time::{Duration, Instant};
 
 const WAIT: Duration = Duration::from_secs(30);
 
+#[test]
+fn dmg_integrity_task_rejects_a_damaged_udif_master_checksum() {
+    let fixture =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../rz-formats/tests/fixtures/dmg_hfs_zlib.dmg");
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("damaged.dmg");
+    let mut bytes = fs::read(fixture).unwrap();
+    let checksum = bytes.len() - 512 + 360;
+    bytes[checksum] ^= 1;
+    fs::write(&path, bytes).unwrap();
+    let manager = TaskManager::new(1);
+    let id = manager.submit(JobSpec::Test {
+        archive: path,
+        password: None,
+        encoding: None,
+    });
+    assert_eq!(manager.wait_for(id, WAIT).unwrap().state, TaskState::Failed);
+}
+
+#[test]
+fn dmg_integrity_task_reads_checksummed_partitions_outside_the_file_tree() {
+    let fixture =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../rz-formats/tests/fixtures/dmg_hfs_zlib.dmg");
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("damaged-boot-block.dmg");
+    let mut bytes = fs::read(fixture).unwrap();
+    // The MBR zlib block is not used to enumerate or extract the HFS+ files.
+    bytes[5553 + 10] ^= 1;
+    fs::write(&path, bytes).unwrap();
+    assert!(rz_formats::open(&path).unwrap().entries().is_ok());
+    let manager = TaskManager::new(1);
+    let id = manager.submit(JobSpec::Test {
+        archive: path,
+        password: None,
+        encoding: None,
+    });
+    assert_eq!(manager.wait_for(id, WAIT).unwrap().state, TaskState::Failed);
+}
+
 /// True when no RustZIP temporary file for `output_name` sits in `dir`.
 fn no_temp_files(dir: &Path, output_name: &str) -> bool {
     fs::read_dir(dir).unwrap().filter_map(|e| e.ok()).all(|e| {

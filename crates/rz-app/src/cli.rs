@@ -189,6 +189,11 @@ pub fn test_archive(
         entries_done = entries_done.saturating_add(1);
         Ok(())
     })?;
+    reader.verify_integrity(
+        cancel,
+        progress,
+        Settings::default().extract_options(None).max_total,
+    )?;
     progress.update(Progress {
         files_done: entries_done,
         files_total: total_entries,

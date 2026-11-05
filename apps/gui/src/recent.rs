@@ -189,7 +189,7 @@ pub fn looks_like_archive(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
     let standard = [
         ".zip", ".7z", ".rar", ".tar", ".tgz", ".txz", ".tzst", ".tbz2", ".tbz", ".gz", ".xz",
-        ".zst", ".zstd", ".bz2", ".lz4", ".jar", ".apk", ".cbz", ".chm",
+        ".zst", ".zstd", ".bz2", ".lz4", ".jar", ".apk", ".cbz", ".chm", ".wim", ".dmg",
     ]
     .iter()
     .any(|e| lower.ends_with(e));

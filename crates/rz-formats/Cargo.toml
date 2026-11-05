@@ -25,9 +25,24 @@ libchm = { path = "../../vendor/libchm" }
 zeroize.workspace = true
 pbz2.workspace = true
 crc32fast.workspace = true
+sha1 = "0.11.0"
+quick-xml = "0.41.0"
+base64 = "0.22.1"
+xpress-huffman = { path = "../../vendor/xpress-huffman" }
+lzma-rust2 = { version = "0.23.0", default-features = false, features = ["std"] }
+apfs-core = { path = "../../vendor/apfs-core" }
+lzvn = { package = "lzvn-core", version = "0.1.3" }
+lzfse_rust = "0.2.1"
+lzxd = { path = "../../vendor/lzxd" }
+rustzip-nsis-bzip2 = { path = "../../vendor/nsis-bzip2" }
+rustzip-lzms = { path = "../../vendor/lzms" }
 
 [dev-dependencies]
 tempfile = "3"
+
+[[bench]]
+name = "apfs_compressed"
+harness = false
 
 [lints]
 workspace = true

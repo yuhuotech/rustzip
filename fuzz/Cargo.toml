@@ -21,6 +21,7 @@ rz-audio-preview = { path = "../apps/audio-preview" }
 rz-video-renderer = { path = "../apps/video-renderer" }
 hayro = { version = "0.7.1", default-features = false }
 tempfile = "3"
+crc32fast = "1"
 
 [[bin]]
 name = "zip_recovery"
@@ -75,6 +76,27 @@ bench = false
 [[bin]]
 name = "video_decoder"
 path = "fuzz_targets/video_decoder.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "wim"
+path = "fuzz_targets/wim.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "dmg"
+path = "fuzz_targets/dmg.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "apfs_compressed"
+path = "fuzz_targets/apfs_compressed.rs"
 test = false
 doc = false
 bench = false

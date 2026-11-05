@@ -22,6 +22,9 @@ on:
       - "vendor/libchm/**"
       - "vendor/pbz2/**"
       - "vendor/rust_h264/**"
+      - "vendor/xpress-huffman/**"
+      - "vendor/lzxd/**"
+      - "vendor/nsis-bzip2/**"
   workflow_dispatch:
     inputs:
       verify_crash_artifact:
@@ -43,7 +46,7 @@ jobs:
   fuzz:
     name: fuzz / ${{ matrix.target }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       max-parallel: 2
@@ -64,6 +67,15 @@ jobs:
           - target: nsis
             features: ""
             max_len: 16777216
+          - target: wim
+            features: ""
+            max_len: 16777216
+          - target: dmg
+            features: ""
+            max_len: 16777216
+          - target: apfs_compressed
+            features: ""
+            max_len: 4096
           - target: pdf_parser
             features: ""
             max_len: 16777216
@@ -102,6 +114,19 @@ jobs:
         run: |
           if [[ "$FUZZ_TARGET" == "nsis" ]]; then
             python3 fuzz/make_nsis_seed.py "fuzz/corpus/$FUZZ_TARGET/synthetic-pe-overlay"
+            cp crates/rz-formats/tests/fixtures/nsis_deflate.exe "fuzz/corpus/$FUZZ_TARGET/"
+            cp crates/rz-formats/tests/fixtures/nsis_lzma.exe "fuzz/corpus/$FUZZ_TARGET/"
+            cp crates/rz-formats/tests/fixtures/nsis_deflate_solid.exe crates/rz-formats/tests/fixtures/nsis_lzma_solid.exe "fuzz/corpus/$FUZZ_TARGET/"
+            cp crates/rz-formats/tests/fixtures/nsis_bzip2.exe crates/rz-formats/tests/fixtures/nsis_bzip2_solid.exe "fuzz/corpus/$FUZZ_TARGET/"
+          elif [[ "$FUZZ_TARGET" == "wim" ]]; then
+            cp crates/rz-formats/tests/fixtures/wim_stored.wim crates/rz-formats/tests/fixtures/wim_xpress.wim "fuzz/corpus/$FUZZ_TARGET/"
+            cp crates/rz-formats/tests/fixtures/wim_lzx.wim "fuzz/corpus/$FUZZ_TARGET/"
+          elif [[ "$FUZZ_TARGET" == "dmg" ]]; then
+            cp crates/rz-formats/tests/fixtures/dmg_hfs_zlib.dmg "fuzz/corpus/$FUZZ_TARGET/"
+            cp crates/rz-formats/tests/fixtures/dmg_apfs_zlib.dmg "fuzz/corpus/$FUZZ_TARGET/"
+            python3 fuzz/make_apfs_dmg_seed.py "fuzz/corpus/$FUZZ_TARGET/apfs-compressed.dmg"
+          elif [[ "$FUZZ_TARGET" == "apfs_compressed" ]]; then
+            printf '\0' > "fuzz/corpus/$FUZZ_TARGET/single-byte"
           elif [[ "$FUZZ_TARGET" == "pdf_parser" ]]; then
             python3 fuzz/make_pdf_seed.py "fuzz/corpus/$FUZZ_TARGET/minimal.pdf"
           elif [[ "$FUZZ_TARGET" == "audio_decoder" ]]; then
@@ -115,6 +140,7 @@ jobs:
               apps/video-renderer/tests/fixtures/extended-box-size.mp4 \
               apps/video-renderer/tests/fixtures/intra8x8-out-of-frame.mov \
               apps/video-renderer/tests/fixtures/intra16x16-out-of-frame.mov \
+              apps/video-renderer/tests/fixtures/cabac-mvd-overflow.mp4 \
               "fuzz/corpus/$FUZZ_TARGET/"
           else
             cp -R "fuzz/seeds/$FUZZ_TARGET/." "fuzz/corpus/$FUZZ_TARGET/"

@@ -130,6 +130,16 @@ pub trait ArchiveReader: Send {
         Ok(())
     }
 
+    /// Verifies container-level checksums that are not associated with a single entry.
+    fn verify_integrity(
+        &mut self,
+        cancel: &CancelToken,
+        _progress: &mut dyn ProgressSink,
+        _max_bytes: u64,
+    ) -> Result<()> {
+        cancel.check()
+    }
+
     /// Visits selected entries in archive order where the format can skip the others safely.
     /// The default keeps every entry in the underlying stream and suppresses unselected visits.
     fn for_each_selected(

@@ -49,7 +49,7 @@ rustzip/
 1. **纯 Rust 原生,读写**:zip、tar 系、gz、xz、zst、bz2、lz4、7z。基于 `zip`、`tar`、`flate2`(zlib-rs 后端)、`zstd`、`liblzma`、`lz4_flex`、`sevenz-rust2` 等 crate；LZ4 单文件流和 tar.lz4 容器使用标准 LZ4 Frame 格式。性能关键路径(7z 固实块、多线程 LZMA2)自己做调度,不直接套用单线程接口。
 2. **绑定成熟 C 库,只读**:RAR 用可选 `rar` feature 下的 UnRAR；逐块回调由 `rz-ffi` 封装并按操作预算限量写出。ISO 9660、CAB、CPIO、AR、LHA/LZH、XAR 和 RPM 用 libarchive。只注册实际验收的格式及必要的内置滤镜，不启用 libarchive 的 RAR、ZIP 或 7z 解码器，也不调用外部解压命令。
 3. **纯 Rust 专用只读后端**:CHM 通过 MIT `libchm` 的本地补丁版读取；`rz-formats::chm_fmt` 用 64 KiB caller buffer 流式读取，并在 LZX block 边界检查取消。目录元数据、reset table 和压缩 block 都有硬上限，详情见[第三阶段评估](phase-3-format-assessment.md)。
-4. **格式嗅探**:按魔数识别,不按扩展名;支持嵌套识别。WIM、DMG 目前仅识别签名并返回“不支持”；NSIS 仅在 PE overlay 中找到有效 FirstHeader 时识别，普通 PE / `.exe` 不作推断，读取仍明确不支持。新增 reader 必须先通过许可证、流式读取、取消、资源上限与独立样本验收。
+4. **格式嗅探**:按魔数识别,不按扩展名;支持嵌套识别。WIM、DMG 和 NSIS 接入受限只读 reader；NSIS 仅在 PE overlay 中找到有效 FirstHeader 时识别，普通 PE / `.exe` 不作推断。新增 reader 必须先通过许可证、流式读取、取消、资源上限与独立样本验收。
 
 统一接口(草案):
 
@@ -86,6 +86,10 @@ trait ArchiveWriter { /* add / finish / 增量更新 */ }
 - **基准**:`benches/` 对标 7-Zip、`tar | zstd`,CI 里做性能回归检测。
 
 ## 5. 安全设计
+
+WIM / DMG / NSIS 的原生 reader 位于 `rz-formats`，GUI / CLI 仍只经应用层使用。WIM 按资源分块读取并验证 SHA-1；DMG 按 UDIF 块和 HFS / APFS 元数据读取；NSIS 固实流使用有硬磁盘配额的匿名暂存文件，非固实条目直接流式解码。三者都有元数据、路径、取消和输出预算，不调用安装器或挂载镜像；支持边界见 D54–D64。
+
+APFS 的 decmpfs 数据按原文 64 KiB 分块读取和解码，目录、extent 与扩展属性集合由本地 `apfs-core` 补丁限额；支持类型和样本验证范围见 D65。
 
 - **防 Zip Slip**:禁止 `../`、绝对路径、盘符、符号链接逃逸;规范化 Windows 保留名。
 - **防压缩炸弹**:限制压缩比、总解压大小、嵌套深度,超限时提示用户。

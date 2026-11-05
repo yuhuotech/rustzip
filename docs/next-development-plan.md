@@ -1,5 +1,38 @@
 # RustZIP 下一步开发盘点与计划
 
+## 2026-11-03：本批收尾顺序
+
+按用户要求，先集中完成正式版代码及测试素材，再统一进行代码检查；三平台集成测试与正式签名另行执行。补充真实 macOS APFS 压缩分区的 UDIF 封装样本、损坏与预算回归、持续 Fuzz 种子和 APFS 专项基准。虚拟磁盘挂载、云端按需解压、WASM 插件、SFX 仍按用户决定留在远期计划。下方旧条目属于历史快照，以本段及最新评估为准。
+
+本批代码收尾及本机验证完成：`cargo test --workspace --all-features`、全工作区 all-targets/all-features Clippy、格式和 diff 检查通过；真实 APFS 透明压缩分区通过合成 UDIF 容器测试，损坏资源分叉被拒绝。独立 APFS 资源分叉 Fuzz 接入 CI，nightly ASan 31 秒执行 10,686 次无崩溃；专用基准已建立。两项非 root 权限测试及真实系统钥匙串测试按环境忽略。未运行三平台集成、正式签名与发布。
+
+## 2026-11-02：补齐 APFS、WIM 与 NSIS 编码
+
+用户明确要求完成 DMG 的 APFS、WIM 的 LZX / LZMS 和 NSIS 自定义 bzip2；继续沿用 D37 的许可证、资源限制、取消、路径安全与独立样本要求。保留当前工作区既有修改。
+
+1. NSIS：接入可分块取消、内存和临时文件有上限的 bzip2，覆盖固实与非固实样本。
+2. WIM：接入许可证合规的 LZX / LZMS 分块解码和 solid ESD 所需的资源映射，以实际工具生成样本验证。
+3. DMG：接入有界 APFS catalog、数据及常见透明压缩，实测读取 RustZIP 自身 APFS 安装 DMG。
+4. 完成功能后统一运行默认和 all-features 测试、格式 / Clippy、各格式 CLI 互通、安全 Fuzz、性能基准和安装包验收；三平台与正式签名未实际验证前不得标记通过。
+
+2026-11-03 代码进展：NSIS 自定义 bzip2 固实 / 非固实、WIM LZX / LZMS（包括 solid ESD）和未加密单卷 APFS 已接入。APFS 增加 decmpfs 内联与资源分叉读取，覆盖类型 1、3、4、7–12（类型 5、6 和其他类型仍拒绝）；按块限制输出、检查取消和压缩比。真实 macOS APFS 样本的 LZVN 资源分叉完成扫描及内容比对，zlib 和 LZFSE 等另有合成样本；尚需更多独立编码样本及三平台集成验收。APFS 元数据集合在本地 vendor 补丁中预先限制大小。固实 WIM 按共享流整体压缩比检查。
+
+## 2026-11-01 开发与统一验收批次
+
+本批先完成开发，再统一集成、编译和功能测试；缺少签名凭据或原生桌面的验收不计为完成。保留原有未提交修改。
+
+| 顺序 | 交付内容 | 当前状态 | 验收条件 |
+|---|---|---|---|
+| 1 | H.264 CABAC 溢出修复与回归样本 | 已开发，本机回归和 ASan 通过；待远端复验 | 原始 crash 已复现并修复，保留 renderer / helper / Fuzz 样本 |
+| 2 | WIM / DMG / NSIS 读取 | 首批 reader 已实现并完成本机集成；部分变体未完成 | WIM stored / XPRESS；DMG HFS+ / HFSX raw / zlib；NSIS 非固实及有界固实 Copy / Deflate / LZMA，具体限制见 D54–D60 |
+| 3 | 发布准备、系统集成与现有功能收尾 | 代码和本机安装冒烟已完成，正式发布及其他平台验收待完成 | 关联、许可证、更新私钥匹配检查已接入；正式签名 / 公证需要真实凭据 |
+| 4 | 挂载、云读取、WASM 插件、SFX | 用户确认保留远期计划，本批不开发 | 后续独立立项 |
+| 5 | 统一集成与验收 | 本机主要验证通过，三平台和正式发布待验收 | 证据、忽略项、依赖审计、Fuzz 和单机基准范围见[本批验收记录](release-readiness-2026-11-01.md) |
+
+本批最新实现与逐项验证以[正式版验收记录](release-readiness-2026-11-01.md)为准。下面保留历史执行证据；其中仅识别 WIM / DMG / NSIS 的描述已被本批有限范围的读取能力取代。未支持的格式变体仍是实际限制，不计为完成。
+
+最新远端事实已复核：CI [41170859027](https://github.com/yuhuotech/rustzip/actions/runs/41170859027) attempt 2 七项全部成功；每日 Fuzz [41193338692](https://github.com/yuhuotech/rustzip/actions/runs/41193338692) 已实际触发，七个 target 成功，`video_decoder` 在 `rust_h264/src/cabac.rs:955` 整数加法溢出失败。此前“schedule 未触发”“Windows CI 仍在重跑”的记录为历史快照。
+
 2026-10-28 的五阶段执行顺序、第一阶段验收和性能记录见 [开发计划与第一阶段验收](phase-1-stabilization.md)；跨平台实测进展与未完成项见 [第二阶段验收](phase-2-platform-acceptance.md)；RAR、并行 bzip2 / gzip 和 ZIP 安全升级见[第四阶段记录](phase-4-core-safety-throughput.md)。本文保留 2026-10-27 的功能盘点快照。
 
 历史盘点日期：2026-10-27。下表记录当时的代码和验收基线；其后 RAR 硬输出上限与预览、bzip2 并行解压、gzip 分块 Deflate、ZIP 9.1.3 升级和 ZIP 大条目并行 Deflate 已完成，最新执行证据见[第四阶段记录](phase-4-core-safety-throughput.md)。
@@ -50,13 +83,13 @@ RustZIP 的主要归档与桌面主流程已实现。2026-10-30 增加 macOS Fin
 | P0 | 基础压缩、解压、浏览、加密、任务队列和 CLI | 主路径已完成；CLI 提供 `a / l / x / t / c / r / h`，长操作均支持 Ctrl+C 与进度 | 保持现有安全契约，继续做平台验收与性能验收 |
 | P0 | 分卷压缩与多卷解压 | ZIP / 7z 容量设置、缺卷诊断和无覆盖发布已接入；往返、取消、现有卷保护和发布竞态回滚测试通过。Linux arm64 上与 p7zip 26.02 双向互通；Ubuntu 26.04 x86_64 上与 p7zip 26.00 双向互通，Info-ZIP 3.0 创建的 split ZIP 可由 RustZIP 测试和解压 | 扩大到 Windows / macOS 官方 7-Zip、WinZip 等常用工具版本；Info-ZIP `unzip` 不支持本测试的 split ZIP，不能作为读取验收 |
 | P0 | LZ4 与 tar.lz4 | 标准 LZ4 Frame 读写、魔数识别、CLI、编辑、转换和 GUI tar.lz4 入口已接入；格式及引擎往返通过，外部 `lz4 -t` 和 `tar -tf` 通过；8 MiB 基准已记录 | 扩大外部样本和性能采样，保留 Frame 格式边界 |
-| P0 | ISO、CAB、WIM、DMG、CPIO、AR、LHA、XAR、RPM、DEB、CHM、NSIS 等只读格式 | ISO 9660、CAB、CPIO、AR、LHA/LZH、XAR、RPM 已通过隔离的 libarchive 后端接入；CHM 经独立样本验证，使用纯 Rust reader 支持只读浏览 / 测试 / 提取；WIM、DMG 仅按内容识别并返回不支持；NSIS 现按 PE overlay 的 FirstHeader 签名识别但仍不读取；DEB 按 AR 容器读取。候选审查和限制见[第三阶段记录](phase-3-format-assessment.md) | 为 WIM / DMG / NSIS 继续评估具备流式、取消、硬资源上限和独立样本的后端；NSIS 识别不等于安装器读取；保持 RAR 只读边界 |
+| P0 | 长尾只读格式 | ISO、CAB、CPIO、AR、LHA/LZH、XAR、RPM、CHM 已接入；新增 WIM stored / XPRESS、DMG raw / zlib HFS+、NSIS 非固实及有界固实 Copy / Deflate / LZMA。支持边界见 D54–D59 | 本批统一验证；LZX / LZMS、APFS、NSIS bzip2 等变体仍未支持 |
 | P0 | 压缩参数 | ZIP 压缩级别 / 线程与 7z 字典大小 / 固实块大小已接入 CLI / GUI；7z 并行工作集受内存预算估算限制；自动字典下调、超预算拒绝及固实块结构用例通过 | 无；ZIP 的 deflate 字典不适用 |
 | P0 | 7z 多块并行解压 | 多个独立固实块按块调度，支持选择性解压、AES 和取消；按 LZMA2 字典估算并行内存，遇到其他编码或预算不足回退顺序解码。加密、错误密码、损坏块、取消、选择和低预算回退的本机用例通过 | 验证外部工具样本、更多字典与分卷组合，并在三平台和大数据集上对比性能 |
 | P0 | bzip2 多线程 | 单文件和 tar.bz2 按块并行压缩；读取通过 `pbz2` 并行解码单流和串接 member，按线程 / 内存预算估算限 worker；压缩与解压均有顺序回退，系统 bzip2 互通用例通过 | 扩大外部样本、损坏 / 取消边界和三平台验收 |
 | P0 | 大文件 Deflate | `.gz` / `.tar.gz` 在多线程模式下以最多 900,000 字节块压成有序标准 gzip members；未加密 ZIP 大条目已分块并行 Deflate，通过 Info-ZIP `unzip -t`、引擎往返、取消清理和 BLAKE3 校验。40 / 64 / 128 MiB 每种三轮的中位数见[基准记录](benchmarks/2026-10-29-zip-large-deflate.md) | Windows / macOS 7-Zip、WinZip 外部互通与其他数据类型性能样本；ZIP 加密继续顺序编码 |
 | P0 | 校验和 | `rz-app` 流式 SHA-256 / BLAKE3、CLI `rz h` 和最近文件 / 常用位置的 GUI 入口已接入；标准向量、分块进度、取消、非普通文件拒绝及 workspace 回归通过 | 无；保留与归档 CRC 校验的语义区分 |
-| P1 | 预览 | 图片 / UTF-8 文本保持原有限制；PDF 使用满足 D30 的隔离 helper；音频支持 MP3 / FLAC / Vorbis / WAV / M4A，限制 8 MiB 输入、72 MB PCM 和 3 分钟；视频支持不超过 16 MiB 的 MP4 / M4V / MOV H.264 首帧。macOS ZIP Quick Look 原生列表已通过 Finder 空格键实测；MP4、WAV 和 H.264 decoder 的远端 Fuzz 崩溃均已加入回归数据并在本机修复 | 最新 H.264 crash seed 的远端 Fuzz 复验，PDF / 视频 helper 的三平台安装运行和 Windows PDF helper 安装器；其他视频格式继续评估 |
+| P1 | 预览 | 图片 / UTF-8 文本保持原有限制；PDF 使用满足 D30 的隔离 helper；音频支持 MP3 / FLAC / Vorbis / WAV / M4A，限制 8 MiB 输入、72 MB PCM 和 3 分钟；视频支持不超过 16 MiB 的 MP4 / M4V / MOV H.264 首帧。macOS ZIP Quick Look 原生列表已通过 Finder 实测；MP4、WAV 和 H.264 crash seeds 的远端 Fuzz 已通过，详见 [41167248109](https://github.com/yuhuotech/rustzip/actions/runs/41167248109) | PDF / 视频 helper 在正式安装包中的安装运行、Windows 安装器和屏幕阅读器实测；其他视频格式继续评估 |
 | P1 | 压缩包内编辑 | 添加、删除、重命名已实现；可用系统程序编辑条目并自动写回。符合条件的 ZIP 编辑优先在 reflink 暂存副本中写入变更条目并重建中央目录，未改动条目复用原 local records；不支持 COW 时回退 raw-copy。自解压前缀、非 UTF-8 名称、加密、分卷及其他操作回退完整重打包；完成后校验并原子替换，见 D53 | macOS reflink 卷 8 / 40 / 128 MiB × 3 轮基准已记录；Linux / Windows 外部工具与性能验收仍待做，原文件原地改写受 D11 约束 |
 | P1 | 完成后动作与通知 | 设置可控解压完成后显示目录；历史记录为本次运行内成功任务提供本次运行结果定位，不持久化结果路径；可选系统通知只发通用成功 / 失败信息，默认关闭。Ubuntu GNOME 开启时实际投递、关闭时静默均已通过 | 验收 macOS / Windows 通知实际投递与设置切换；关机等高影响动作暂不纳入 |
 | P1 | 压缩预设 | 极速 / 均衡 / 最小体积、邮件分享（20 MiB 默认分卷）和跨平台兼容预设已接入；自定义分卷、权限规范化用例与 8 MiB 基准通过 | 无；用户指定的分卷大小会直接覆盖预设值 |
@@ -65,8 +98,8 @@ RustZIP 的主要归档与桌面主流程已实现。2026-10-30 增加 macOS Fin
 | P1 | 多语言和无障碍 | 十种语言的 381 个界面资源键已实现；八种新增语言各有完整词条包，覆盖及占位符测试通过。十种菜单选项逐项切换测试通过；设置和窗口顶栏共用语言下拉菜单，系统首选语言读取可用，侧栏使用简短本地化标签并保留省略保护 | Windows 原生语言设置、真实屏幕阅读器、阿拉伯语 RTL 整页布局仍待平台验收 |
 | P1 | ZIP 文件名编码 | 核心自动识别及 CLI 手动指定已实现；GUI 全局设置可选自动、UTF-8、GBK、Shift-JIS、EUC-KR、Big5、Windows-1252，关闭并重新打开压缩包后生效。十种语言资源均已更新；macOS GUI 设置持久化回归及 Rust 1.96 全工作区 all-features 测试通过 | 本轮三平台 CI 通过后关闭此项平台验证 |
 | P1 | 文件关联与系统菜单 | macOS Finder Sync 右键扩展已打入 `.app` 并在 macOS 27.0.1 实际点击验收；ZIP Quick Look 原生列表已用 Finder 空格键实测。用户需启用 Finder Sync 扩展，Developer ID / 公证包仍待验收。PlugInKit 注册 smoke 已由 Release dry-run [41043955928](https://github.com/yuhuotech/rustzip/actions/runs/41043955928) 的 macOS arm64 / x86_64 runner 通过。Nautilus 50.2.2 Scripts 菜单在 Ubuntu 26.04 / Xvfb 已点击验收；Dolphin / Nemo 和 Windows 注册表菜单的原生点击仍待验收 | 验收正式签名包；验收 Plasma Dolphin、Nemo 和 Windows 菜单 |
-| P1 | 持续 fuzz | nightly ASan 工作流覆盖 ZIP recovery、CHM、bzip2、RAR、NSIS、PDF parser、audio decoder 和 video decoder。Fuzz [41164213431](https://github.com/yuhuotech/rustzip/actions/runs/41164213431) 与 [41167248109](https://github.com/yuhuotech/rustzip/actions/runs/41167248109) 八个 target 均通过，包含 H.264 bounds 回归 seed。本机 MP4 / WAV / H.264 crash seed 复放及 ASan 均通过 | 03:47 与 04:37 UTC 两次 schedule 尝试均未出现事件，workflow active；继续观察下一次每日触发，push / 手动 run 不计为 schedule 通过 |
-| P1 | 跨平台桌面与打包 | macOS `.app` / DMG arm64 ad-hoc 签名与启动通过，尚未公证。Ubuntu 26.04.1 x86_64 的 all-features 测试与 Clippy、Linux tarball 安装 / 卸载和 Nautilus 点击通过。CI [41163708768](https://github.com/yuhuotech/rustzip/actions/runs/41163708768) 七个 job 全部通过，含 macOS Quick Look smoke、Windows GUI 和安装器冒烟。Release dry-run [41163708636](https://github.com/yuhuotech/rustzip/actions/runs/41163708636) 四平台常规 / RAR 包和汇总验签通过，publish 跳过 | Windows 原生输入法 / 渲染 / 钥匙串 / 通知、macOS 公证 / 通知、Dolphin / Nemo 点击、屏幕阅读器、正式三平台发布流程仍需验收 |
+| P1 | 持续 fuzz | 已增加 WIM / DMG，合计十个目标；每日触发已由 41193338692 证实，七项成功、视频发现 CABAC 溢出。本批已修复并保留原始回归 seed | 本批本机 ASan 与新代码远端验证；旧八目标通过记录不代表新增 reader 或 CABAC 修复已通过 |
+| P1 | 跨平台桌面与打包 | 既有 CI 41170859027 attempt 2 七项全部通过；本批新增 reader / 关联 / 许可证和自定义 Cargo target 打包修复，正在统一验收 | 新代码三平台 CI / 安装包；Windows 原生交互、macOS 公证 / 通知、Dolphin / Nemo、屏幕阅读器仍需对应环境 |
 | P1 | 自动更新与 Release | 有安装包签名校验、更新发现和下载后交给系统安装器的流程；自动化用例覆盖验签后才启动、篡改内容拒绝启动及启动失败提示。Release dry-run [41163708636](https://github.com/yuhuotech/rustzip/actions/runs/41163708636) 四平台常规 / RAR 包、Windows 安装 smoke、manifest 汇总验签和验证 bundle 全部通过；publish 跳过 | 正式签名 Release 尚未执行；当前仓库没有 Actions Secrets，未配置 `RZ_UPDATE_KEY` 和 Apple 签名 / 公证密钥 |
 | P2 | 压缩包对比 | 已接入 GUI 已打开标签对比和 CLI `rz diff`；按路径 / 类型识别新增、删除和类型变化，同路径同大小普通文件流式计算 BLAKE3；遵守取消、进度、总输出和压缩比限制。ZIP、加密 7z（可分别输入密码）、RAR、CHM、ISO 9660、LHA/LZH、RPM、XAR 与 tar.gz 对比回归通过；单包最多 1,000,000 条目，符号链接目标标记未比较 | 扩展真实外部工具样本、大归档性能采样和跨平台验收 |
 | P2 | 虚拟磁盘挂载、云端按需解压、WASM 插件、自解压包 | 尚未实现，仍属远期需求 | 分别评估平台成本、威胁模型与许可后再立项 |

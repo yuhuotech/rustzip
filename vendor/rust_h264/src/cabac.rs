@@ -923,7 +923,12 @@ impl CabacReader<'_> {
     /// Decode motion vector difference component (spec 9.3.3.1.1.7).
     /// `ctx_base`: 40 for X, 47 for Y.
     /// `amvd`: sum of absolute MVD values from left and top neighbors.
-    pub fn decode_mvd_comp(&mut self, state: &mut [u8; 1024], ctx_base: usize, amvd: u32) -> i32 {
+    pub fn decode_mvd_comp(
+        &mut self,
+        state: &mut [u8; 1024],
+        ctx_base: usize,
+        amvd: u32,
+    ) -> Result<i32, crate::error::DecodeError> {
         // Context selection based on sum of neighbor MVDs
         let ctx_offset = if amvd < 3 {
             0
@@ -935,7 +940,7 @@ impl CabacReader<'_> {
         let ctx = ctx_base + ctx_offset;
 
         if self.get_cabac(&mut state[ctx]) == 0 {
-            return 0;
+            return Ok(0);
         }
 
         // Unary coding for magnitude 1-8
@@ -952,6 +957,13 @@ impl CabacReader<'_> {
         if abs_mvd >= 9 {
             let mut k = 3u32;
             while self.get_cabac_bypass() != 0 {
+                // MVD components must fit the signed 16-bit motion-vector domain.
+                // Truncated CABAC input can otherwise supply an unbounded prefix.
+                if k >= 15 {
+                    return Err(crate::error::DecodeError::InvalidSyntax(
+                        "CABAC motion vector difference out of range",
+                    ));
+                }
                 abs_mvd += 1 << k;
                 k += 1;
             }
@@ -962,7 +974,13 @@ impl CabacReader<'_> {
         }
 
         // Sign via bypass
-        self.get_cabac_bypass_sign(-(abs_mvd as i32))
+        let value = self.get_cabac_bypass_sign(-(abs_mvd as i32));
+        if i16::try_from(value).is_err() {
+            return Err(crate::error::DecodeError::InvalidSyntax(
+                "CABAC motion vector difference out of range",
+            ));
+        }
+        Ok(value)
     }
 
     /// Decode QP delta (spec 9.3.3.1.1.5).

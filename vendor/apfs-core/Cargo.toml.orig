@@ -1,0 +1,47 @@
+[package]
+name = "apfs-core"
+version = "0.2.6"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Pure-Rust from-scratch APFS (Apple File System) reader — container/volume superblocks, object map, B-trees, file-system records, file extents, snapshots, and transparent decmpfs decompression over any Read + Seek source"
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/apfs-core"
+readme.workspace = true
+authors.workspace = true
+keywords = ["forensics", "apfs", "filesystem", "dfir", "macos"]
+categories.workspace = true
+
+# Import path is `apfs_core` (not `apfs`) — the bare `apfs` crate name is taken
+# on crates.io by an unrelated read-only parser, so we keep the `_core` import
+# exactly as ntfs-core does for Colin Finck's `ntfs`.
+[lib]
+name = "apfs_core"
+path = "src/lib.rs"
+
+[dependencies]
+forensicnomicon = { workspace = true }   # magics / type codes / decmpfs map (KNOWLEDGE)
+thiserror = { workspace = true }
+bitflags = { workspace = true }
+chrono = { workspace = true }
+# decmpfs codec stack (REUSE — validated against macOS in hfsplus-forensic)
+flate2 = { workspace = true }
+lzfse_rust = { workspace = true }
+lzvn = { workspace = true }
+# forensic-vfs (KNOWLEDGE leaf) — the read-only FileSystem navigation contract.
+# Optional so a bare reader stays dependency-light; the `vfs` feature turns on
+# the `impl FileSystem for ApfsFs` adapter so an APFS volume composes as
+# `Arc<dyn FileSystem>` (mirrors ntfs-core's `vfs` feature).
+forensic-vfs = { version = "0.7", optional = true }
+
+[features]
+# Adapt `ApfsFs` to the forensic-vfs `FileSystem` trait (see `src/vfs.rs`).
+vfs = ["dep:forensic-vfs"]
+
+[dev-dependencies]
+# SHA-256 to reconcile assembled file bytes against the macOS `cp` oracle.
+sha2 = { workspace = true }
+
+[lints]
+workspace = true

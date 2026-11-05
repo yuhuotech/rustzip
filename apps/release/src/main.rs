@@ -27,6 +27,7 @@ fn main() -> ExitCode {
         .as_slice()
     {
         ["keygen", out] => keygen(out),
+        ["check-key"] => check_key(),
         ["sign", version, platform, file, url] => sign(version, platform, file, url),
         ["manifest", version, notes, assets @ ..] if !assets.is_empty() => {
             manifest(version, notes, assets)
@@ -38,7 +39,7 @@ fn main() -> ExitCode {
             verify_manifest_file(manifest_file, asset_dir, Some(public_key))
         }
         _ => Err(
-            "usage: rz-release keygen <file> | sign <version> <platform> <file> <url> | \
+            "usage: rz-release keygen <file> | check-key | sign <version> <platform> <file> <url> | \
                   manifest <version> <notes-file> <asset.json>... | \
                   verify <update.json> <asset-dir> [test-public-key-hex]"
                 .to_string(),
@@ -108,6 +109,17 @@ fn signing_key() -> Result<SigningKey, String> {
 
 fn sign(version: &str, platform: &str, file: &str, url: &str) -> Result<String, String> {
     sign_with(&signing_key()?, version, platform, file, url)
+}
+
+fn check_key() -> Result<String, String> {
+    validate_signing_key(&signing_key()?, &APP_UPDATE_PUBLIC_KEY)
+}
+
+fn validate_signing_key(key: &SigningKey, expected: &[u8; 32]) -> Result<String, String> {
+    if key.verifying_key().to_bytes() != *expected {
+        return Err("RZ_UPDATE_KEY does not match the public key embedded in RustZIP".into());
+    }
+    Ok("Update signing key matches the client public key".into())
 }
 
 fn sign_with(
@@ -221,6 +233,14 @@ mod tests {
         fn get(&self, _: &str, _: u64) -> rz_core::Result<Vec<u8>> {
             Ok(self.0.clone())
         }
+    }
+
+    #[test]
+    fn release_key_check_rejects_a_key_the_client_cannot_verify() {
+        let key = SigningKey::from_bytes(&[19; 32]);
+        assert!(validate_signing_key(&key, &key.verifying_key().to_bytes()).is_ok());
+        let other = SigningKey::from_bytes(&[20; 32]);
+        assert!(validate_signing_key(&key, &other.verifying_key().to_bytes()).is_err());
     }
 
     #[test]

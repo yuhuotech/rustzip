@@ -393,3 +393,69 @@
 - 完成后仍验证暂存归档，再原子替换原路径。reflink 或 append 处理不适用时回退既有 raw-copy 路径；不支持 ZIP 快路径的操作仍完整解压重打包。D11 的旧包保全边界不变。
 - 这项优化减少支持 COW 的文件系统上对未改动数据的复制，不是原文件原地改写。若将来要直接改写原文件，必须先设计并验证恢复日志，再另行新增决策。
 - `reflink-copy` 0.1.30 使用 MIT OR Apache-2.0；它只提供 Linux、macOS 和 Windows 的文件级克隆封装。MIT 文本随三平台安装包附带；任何平台或文件系统克隆失败都会回到 RustZIP 的 staged raw-copy 路径。
+
+## D54 NSIS 首批有界流式只读后端
+
+- 更新 D37 / D47 的仅识别状态：首批支持标准现代 NSIS 2 / 3 的非固实 Copy / Deflate 数据；不执行安装器或脚本，不加载其中的 DLL。固实、LZMA、NSIS 自定义 bzip2、旧版和其他布局明确返回不支持，不宣称全版本覆盖。
+- 读取最多 8 MiB 的 stub / FirstHeader 搜索前缀；解压头和目录记录各受 16 MiB 元数据预算约束，最多 100,000 条文件指令，名称最多 8 KiB 编码字节。文件数据按最多 64 KiB 块测量和读取，不整体缓冲安装器或条目；使用现有 flate2、encoding_rs 和 crc32fast，不新增依赖。
+- FirstHeader 声明长度、表范围、数据范围和目录路径先检查；开启 NSIS CRC 时先验证从 512 字节到 CRC 字段前的覆盖区。安装目录变量只映射为归档内相对路径；保留插件目录为符号名称，不执行变量表达式。拒绝绝对路径、盘符和 `..`，提取仍统一通过引擎路径检查。
+- 目录测量、CRC 和文件读取检查取消；测量与读取受操作总输出 / 压缩比预算约束。独立 fixture 由 makensis 3.13 根据仓库内 `.nsi` 和纯文本生成，不使用 7-Zip 源码。
+
+## D55 WIM 首批 stored 资源只读后端
+
+- 支持 WIM 1.13 单卷、未压缩资源的文件浏览 / 提取；压缩资源、跨卷、reparse point 和 ADS 明确返回不支持。多镜像按序号分目录；不宣称完整 Windows 安装镜像解码。
+- 独立实现资源表和目录遍历，不引入 GPL / LGPL 实现，不复制 7-Zip 源码。资源表和单份目录元数据分别最多 16 MiB，记录最多 100,000，目录深度最多 128；拒绝循环和越界。文件流式读取，检查取消、累计输出和 SHA-1 摘要。
+- 使用已在依赖树中的 `sha1` 0.11.0（MIT OR Apache-2.0）验证 WIM 固有摘要；仅用于格式完整性，不代替更新签名算法。
+
+## D56 DMG 首批 HFS+ 流式只读后端
+
+- 支持 XML UDIF 的零块、原始块和 zlib 块，读取 HFS+ / HFSX 普通文件和目录；不挂载镜像，不执行镜像中的程序。APFS、加密、多段镜像、其他块 codec 和需要 extents overflow 的文件明确不支持。
+- XML 最多 4 MiB、嵌套最多 32 层、XML 事件和块记录最多 100,000；压缩块输入 / 输出各最多 8 MiB，只缓存一个解码块。HFS catalog 按节点读取，节点最多 64 KiB，记录 / 遍历节点最多 100,000，总目录记录最多 16 MiB，路径深度最多 128；检测循环、重叠块和越界 extent。
+- 新增 `quick-xml` 0.41（MIT）和 `base64` 0.22（MIT OR Apache-2.0）解析有界的 XML / blkx；复用现有 flate2。依赖只处理容器元数据，文件数据仍流式读取并受取消、压缩比和总输出约束。0.41 避开 0.39 的 RUSTSEC-2026-0194 / 0195。
+
+## D57 WIM XPRESS-Huffman 分块读取
+
+- 在 D55 的 stored 后端上增加标准 32 KiB XPRESS-Huffman chunks。按需读取 chunk offset table，最多缓存一个 32 KiB 解码块；压缩输入最多 64 KiB，不缓存整个文件或整个资源表。每块检查取消，整体仍验证 SHA-1 并应用压缩比和输出限额。
+- `xpress-huffman` 0.1.3 为 Apache-2.0，纯 Rust / forbid unsafe，按 MS-XCA 规范独立实现；不依赖 LGPL 的 WIM 框架。用外部 wimlib 工具独立生成 fixture，不把该工具或其源码加入项目。
+- LZX / LZMS、solid ESD、split WIM、reparse / ADS 仍明确不支持，避免把 XPRESS 接入误称为所有 WIM 变体完成。
+
+## D58 NSIS 非固实 LZMA
+
+- D54 的流式 reader 增加 NSIS 标准 properties `0x5d` 的 LZMA，字典最多 16 MiB。复用已在依赖树中的 Apache-2.0 `lzma-rust2` 0.23，按已知头部长度或条目 EOS 解码，仍按块取消和限制输出；不缓冲整个条目。
+- 固实安装器、自定义 bzip2 及其他 properties 仍不在本次已支持范围；错误不会触发安装器执行。
+
+## D59 NSIS 固实 Deflate / LZMA
+
+- D58 扩展到标准固实 Deflate / LZMA：外层流按最多 64 KiB 块写入匿名临时文件，验证 framed header 后按偏移读取条目；不整体缓冲文件，不执行安装器。总临时空间最多 512 MiB，并进一步受操作总输出加 16 MiB 元数据和长度前缀开销限制；达到限制返回明确错误。
+- 解码、临时写入、条目读取均支持取消和进度；同时检查外层压缩比。临时文件随 reader 生命周期清理。自定义 bzip2、旧版布局和其他 LZMA properties 仍明确不支持。
+
+## D60 DMG 容器完整性校验
+
+- 更新 D56：打开 DMG 时验证存在的 UDIF 主 CRC-32，完整性测试再流式验证有声明的各分区和 data fork CRC-32。分区中 ignore 块不参与 CRC，zero、raw 和解码块按顺序参与；算法类型未知时明确报不支持。未提供 CRC 的区域不能宣称校验过。
+- 容器级校验通过 `ArchiveReader::verify_integrity` 默认方法接入 CLI 和 GUI 任务；读取按块取消，报告进度并受 1 TiB 检查预算限制。GUI 测试任务在枚举前设置取消 token，避免固实 NSIS 扫描期间无法取消。
+
+## D61 APFS 受限只读后端
+
+- 更新 D56：评估接入 `apfs-core` 0.2.6（Apache-2.0，MSRV 1.85）以读取未加密 APFS。容器读写适配器限制单次读取、累计解析 I/O、seek 次数并检查取消；拒绝超过元数据、深度或条目预算的目录与 extent。文件通过 extent 范围读取，不调用上游整体文件缓冲 API；透明压缩须另行实现有界读取，否则明确拒绝。
+- 不挂载磁盘或执行镜像内容；符号链接沿引擎既有策略跳过。保留 Fletcher-64、GPT 和 UDIF 校验；真实 APFS 安装镜像、恶意输入及独立 fixture 验证后才计入对应范围。
+
+## D62 WIM LZX 分块解码
+
+- 更新 D57：以 `lzxd` 0.2.7（MIT OR Apache-2.0）的独立实现为基础，增加 WIM chunk 的块头、独立状态和 x86 E8 恢复；保留上游许可和补丁记录，不采用 LGPL 解码源码。压缩和输出按 32 KiB 块有界，块之间可取消，资源结束验证 SHA-1。
+- 提供 wimlib 独立生成的 LZX 样本，覆盖多块、损坏和路径边界；在恶意输入 Fuzz 和跨平台验收之前不将全部 WIM 变体标记为完成。
+
+## D63 NSIS bzip2 流式解码
+
+- 更新 D59：使用 `nsis-rs` 0.6.0 的 Apache-2.0 NSIS bzip2 解码器源码作为基础，按 block 解码并适配受限 `Read` / 取消；源项目说明其 bzip2 算法来源，分发时同时保留 Apache-2.0 和 bzip2 授权文本。输入不再整包加载，工作块和输出有硬上限，固实输出仍使用既有有界临时文件。
+- 以 makensis 编译的固实 / 非固实独立样本测试，保留未改动的外层 NSIS CRC。损坏输入必须被拒绝；仅当前已支持的 NSIS 头部和 opcode 范围不变。
+
+## D64 WIM LZMS 分块解码
+
+- 更新 D57：引入 QLIC 的安全 Rust LZMS decoder，QLIC Rust 部分为 Apache-2.0，原始清洁实现为 Deployment Theory 的 MIT；源码与两份许可证随包保留，不使用 wimlib / 7-Zip 解码源码或静态链接 LGPL 依赖。
+- 普通 WIM LZMS chunk 限制为 128 KiB；solid ESD 的 LZMS chunk 按声明限制至 64 MiB。读取前检查 chunk 表和输入，逐块解码并核验 SHA-1；solid ESD 中按文件偏移读取共用资源。
+
+## D65 APFS 透明压缩和元数据预算
+
+- 扩展 D61：支持 decmpfs 类型 1、3、4、7–12，资源分叉按 64 KiB 原文块读取；单块输入有限额，检查输出长度、取消、总输出和压缩比。未知类型明确拒绝，不使用上游整体文件解码接口。
+- 将 Apache-2.0 的 `apfs-core` 0.2.6 本地化，限制目录、文件 extent 与扩展属性在集合期间的记录数量和内存；`lzvn-core` 为 Apache-2.0，`lzfse_rust` 为 MIT OR Apache-2.0，均为已有传递依赖，现作为直接依赖以提供受限块解码。
+- 使用上游公开的 macOS 生成 APFS 切片验证 type 8 的真实资源分叉；zlib 和 LZFSE 合成样本不能替代所有真实格式和三平台集成验收。

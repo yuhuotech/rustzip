@@ -1,5 +1,27 @@
 # 第三阶段：长尾格式候选审查与 CHM 接入
 
+## 2026-11-02 增量实现
+
+WIM 已增加 LZX、LZMS 和 LZMS solid ESD；NSIS 增加自定义 bzip2 的固实与非固实读取；DMG 增加单个未加密 APFS 卷读取。2026-11-03 增加 decmpfs 类型 1、3、4、7–12，按块解码并限制输出；真实 macOS 样本覆盖 LZVN 资源分叉，其他编码还需要独立文件系统样本。加密、多 APFS 卷、其他 decmpfs 类型以及此前列出的其他变体仍未支持。
+
+同日补充：将真实 APFS 分区封装为可重复生成的合成 GPT / raw UDIF，完成 DMG 层真实资源分叉读取及损坏回归；新增资源分叉专项 Fuzz 并加入 CI，本机 nightly ASan 31 秒 10,686 次无崩溃。LZFSE / zlib 内联及资源分叉有合成块测试。
+
+macOS 上 Rust 1.96 的全工作区默认 / all-features 测试和 all-features Clippy、格式检查通过，真实钥匙串及依赖非 root 环境的测试有忽略项。六个新 fixture 经 CLI `rz t` 完整性测试和 `rz x` 提取通过；APFS 中文文件与源文件逐字节一致，三种 WIM 提取结果的哈希一致，两种 NSIS bzip2 提取结果的哈希一致。三个格式使用独立 fixture 分别进行约 20 秒 ASan Fuzz，均正常结束；这是短时抽样，不代表三平台或长期安全验收。吞吐基准已运行并验证输出，但与其他任务并发，不能据此判断性能回归。三平台 CI、安装包与正式签名验收尚未针对本次代码执行。
+
+## 2026-11-01 原生 reader 更新
+
+此前仅识别的三种格式已有首批读取实现，见 D54–D59 和[本批验收记录](release-readiness-2026-11-01.md)。本页后续候选评估为历史记录，不代表当前代码仍只识别。
+
+| 格式 | 本批接入 | 尚不支持 |
+|---|---|---|
+| WIM | 1.13 单卷 stored / 32 KiB XPRESS-Huffman；多镜像按序号分目录；资源 SHA-1 | LZX / LZMS、solid ESD、split、reparse / ADS |
+| DMG | XML UDIF 的零块 / raw / zlib，GPT / APM、HFS+ / HFSX、inline extents | APFS、加密、多段、其他 codec、extent overflow / hardlink；符号链接由引擎跳过 |
+| NSIS | 标准现代 Copy / Deflate / properties 0x5d 的 LZMA，非固实及最多 512 MiB 固实流 | 自定义 bzip2、旧布局、其他 properties |
+
+WIM、DMG、NSIS 使用各自工具生成的独立 fixture；不引用或执行 7-Zip 源码。XPRESS 候选的原始实现会提前停止 buffered bits，且回溯没有输出硬限制；本批采用 Apache-2.0 vendor 副本并补齐这两项问题，补丁和上游来源在 `vendor/xpress-huffman/PATCHES.md`。本批没有接入已审查的 GPL / LGPL 框架。
+
+2026-11-01 再复核 MIT 的 `apfs` 0.4.1：它可打开 APFS，普通文件有 extent reader，但目录 / 遍历 API 返回 `Vec`，透明压缩文件读取会整体缓冲，扩展属性也按输入声明大小构造缓冲，未向调用者提供统一元数据 / 解压上限或取消控制。它尚不能直接满足 D37，因此没有为通过自家 APFS 安装镜像而绕过安全门槛。后续需补受限遍历、压缩数据流式读取与恶意样本 / Fuzz，再进行 GUI 和三平台验收。
+
 首次评估日期：2026-10-29。RustZIP 基线为 `01e84d8`。本阶段按许可证、流式读取、取消、内存 / 磁盘上限和独立样本审查 WIM、DMG、CHM、NSIS；接入满足安全门槛的 reader，其余格式明确保持不支持。2026-10-30 复查 WIM / NSIS / PDF 新候选，结论记录在本文末尾。
 
 ## 结果

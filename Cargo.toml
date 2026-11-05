@@ -17,7 +17,7 @@ members = [
     "apps/preview-budget",
     "apps/video-renderer",
 ]
-exclude = ["vendor/libchm", "vendor/pbz2", "vendor/rust_h264"]
+exclude = ["vendor/libchm", "vendor/pbz2", "vendor/rust_h264", "vendor/xpress-huffman", "vendor/lzxd", "vendor/nsis-bzip2", "vendor/lzms", "vendor/apfs-core"]
 
 [workspace.package]
 version = "0.1.0"

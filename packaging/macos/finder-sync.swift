@@ -47,7 +47,7 @@ final class FinderSync: FIFinderSync {
         var extensions: Set<String> = [
             "zip", "7z", "tar", "gz", "tgz", "xz", "txz", "zst", "tzst",
             "bz2", "tbz2", "lz4", "iso", "cab", "cpio", "ar", "deb", "rpm",
-            "lha", "lzh", "xar", "chm"
+            "lha", "lzh", "xar", "chm", "wim", "dmg"
         ]
         #if RUSTZIP_WITH_RAR
         extensions.insert("rar")

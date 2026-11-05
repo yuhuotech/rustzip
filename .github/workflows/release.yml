@@ -1,6 +1,6 @@
 name: Release
 
-# Run a dry-run from any branch, or dispatch a v* tag with dry_run=false to publish.
+# Run a dry-run from any branch; push a v* tag or dispatch it to publish.
 # One-time setup (see docs/release.md):
 #   - repository secret RZ_UPDATE_KEY: the update signing key (64 hex characters)
 #   - optional repository variable RZ_STATS_URL: https address that receives install reports
@@ -19,9 +19,13 @@ on:
         required: true
         type: boolean
         default: false
-  # Automatic tag builds and releases are paused until the project is ready.
-  # push:
-  #   tags: ["v*"]
+      validate_macos_notarization:
+        description: Submit signed macOS dry-run packages for notarization without publishing.
+        required: true
+        type: boolean
+        default: false
+  push:
+    tags: ["v*"]
 
 permissions:
   contents: read
@@ -48,7 +52,25 @@ jobs:
             exit 1
           fi
       - uses: actions/checkout@v4
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+      - name: Verify release tag matches the workspace version
+        if: ${{ startsWith(github.ref, 'refs/tags/v') && !inputs.dry_run }}
+        shell: bash
+        run: |
+          version="$(awk -F'"' '/^version *=/ {print $2; exit}' Cargo.toml)"
+          if [[ "${GITHUB_REF_NAME#v}" != "$version" ]]; then
+            echo "Release tag does not match the workspace version." >&2
+            exit 1
+          fi
+      - name: Check production update-signing configuration
+        if: ${{ !inputs.dry_run }}
+        env:
+          RZ_UPDATE_KEY: ${{ secrets.RZ_UPDATE_KEY }}
+        shell: bash
+        run: |
+          if [[ ! "$RZ_UPDATE_KEY" =~ ^[0-9a-fA-F]{64}$ ]]; then
+            echo "Configure RZ_UPDATE_KEY with the 64-character update signing key before publishing." >&2
+            exit 1
+          fi
       - uses: dtolnay/rust-toolchain@stable
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
       - uses: Swatinem/rust-cache@v2
@@ -81,17 +103,15 @@ jobs:
     name: Build ${{ matrix.platform }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
-    continue-on-error: ${{ matrix.experimental }}
     strategy:
       fail-fast: false
       matrix:
         include:
           # rust-toolchain.toml overrides the action's stable toolchain; build each macOS architecture on its native runner.
-          - { os: macos-15, platform: macos-aarch64, target: aarch64-apple-darwin, experimental: false }
-          - { os: macos-15-intel, platform: macos-x86_64, target: x86_64-apple-darwin, experimental: false }
-          - { os: windows-latest, platform: windows-x86_64, target: x86_64-pc-windows-msvc, experimental: false }
-          # The Linux desktop build has not been verified on real hardware yet.
-          - { os: ubuntu-22.04, platform: linux-x86_64, target: x86_64-unknown-linux-gnu, experimental: true }
+          - { os: macos-15, platform: macos-aarch64, target: aarch64-apple-darwin }
+          - { os: macos-15-intel, platform: macos-x86_64, target: x86_64-apple-darwin }
+          - { os: windows-latest, platform: windows-x86_64, target: x86_64-pc-windows-msvc }
+          - { os: ubuntu-22.04, platform: linux-x86_64, target: x86_64-unknown-linux-gnu }
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -132,7 +152,25 @@ jobs:
         env:
           MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
           MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          VALIDATE_NOTARY: ${{ inputs.validate_macos_notarization }}
+          DRY_RUN: ${{ inputs.dry_run }}
         run: |
+          if [[ "$VALIDATE_NOTARY" == "true" || "$DRY_RUN" != "true" ]]; then
+            for name in MACOS_CERT_P12 MACOS_CERT_PASSWORD MACOS_SIGN_IDENTITY APPLE_ID APPLE_TEAM_ID APPLE_APP_PASSWORD; do
+              if [[ -z "${!name}" ]]; then
+                echo "Missing required secret: $name" >&2
+                exit 1
+              fi
+            done
+            if [[ "$MACOS_SIGN_IDENTITY" == "-" ]]; then
+              echo "Notarization requires a Developer ID identity." >&2
+              exit 1
+            fi
+          fi
           # Without a certificate the app is ad-hoc signed by the packaging script.
           if [ -n "$MACOS_CERT_P12" ]; then
             echo "$MACOS_CERT_P12" | base64 --decode > cert.p12
@@ -149,13 +187,21 @@ jobs:
         env:
           TARGET: ${{ matrix.target }}
           MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          VALIDATE_NOTARY: ${{ inputs.validate_macos_notarization }}
         run: |
-          if [[ "${{ inputs.dry_run }}" != "true" && -n "${{ secrets.APPLE_ID }}" ]]; then
-            xcrun notarytool store-credentials ci --apple-id "${{ secrets.APPLE_ID }}" \
-              --team-id "${{ secrets.APPLE_TEAM_ID }}" --password "${{ secrets.APPLE_APP_PASSWORD }}"
+          if [[ "$VALIDATE_NOTARY" == "true" || "$DRY_RUN" != "true" ]]; then
+            xcrun notarytool store-credentials ci --apple-id "$APPLE_ID" \
+              --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD"
             export NOTARY_PROFILE=ci
           fi
           packaging/macos/build-app.sh dist
+          if [[ "$VALIDATE_NOTARY" == "true" || "$DRY_RUN" != "true" ]]; then
+            xcrun stapler validate dist/RustZIP-*.dmg
+          fi
 
       - name: Verify Quick Look provider registration (macOS)
         if: runner.os == 'macOS'
@@ -213,6 +259,9 @@ jobs:
           name="$(basename "$file")"
           url="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/$name"
           bin=target/release/rz-release
+          if [[ "$DRY_RUN" != "true" ]]; then
+            "$bin" check-key
+          fi
           "$bin" sign "${{ steps.v.outputs.version }}" "${{ matrix.platform }}" "$file" "$url" > "dist/${{ matrix.platform }}.asset.json"
 
       - uses: actions/upload-artifact@v4
@@ -334,7 +383,7 @@ jobs:
     needs: [build, dry-run-signing-key]
     runs-on: ubuntu-22.04
     timeout-minutes: 20
-    if: ${{ !cancelled() && (inputs.dry_run || startsWith(github.ref, 'refs/tags/v')) }}
+    if: ${{ success() && (inputs.dry_run || startsWith(github.ref, 'refs/tags/v')) }}
     permissions:
       contents: read
     steps:
@@ -409,4 +458,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" --title "RustZIP ${GITHUB_REF_NAME#v}" --generate-notes \
+            --notes "macOS packages are Developer ID signed and notarized. The Windows installer is not code-signed and may trigger SmartScreen. RAR support is not included in the default packages." \
             artifacts/RustZIP-* artifacts/update.json
