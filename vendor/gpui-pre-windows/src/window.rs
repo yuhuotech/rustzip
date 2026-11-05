@@ -229,10 +229,12 @@ mod external_drag_tests {
         // SAFETY: The buffer has path_length + 1 writable UTF-16 code units.
         let copied = unsafe { DragQueryFileW(hdrop, 0, Some(&mut path_utf16)) } as usize;
         assert_eq!(copied, path_length);
+        let dragged_path = PathBuf::from(String::from_utf16(&path_utf16[..path_length]).unwrap());
         assert_eq!(
-            PathBuf::from(String::from_utf16(&path_utf16[..path_length]).unwrap()),
-            file
+            std::fs::canonicalize(&dragged_path).unwrap(),
+            std::fs::canonicalize(&file).unwrap()
         );
+        assert_eq!(std::fs::read(dragged_path).unwrap(), b"OLE file drag");
         // SAFETY: `medium` was initialized by GetData and has not been released yet.
         unsafe { ReleaseStgMedium(&mut medium) };
         let _ = std::fs::remove_file(file);
