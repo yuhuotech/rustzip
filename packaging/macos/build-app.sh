@@ -150,6 +150,21 @@ if [ "$identity" != "-" ] && { [ -n "${NOTARY_PROFILE:-}" ] || [ "${NOTARY_DIREC
     else
         xcrun notarytool submit "$dmg" --keychain-profile "$NOTARY_PROFILE" --wait
     fi
-    xcrun stapler staple "$dmg"
+    stapled=0
+    for attempt in 1 2 3 4 5; do
+        if xcrun stapler staple "$dmg"; then
+            stapled=1
+            break
+        fi
+        if [ "$attempt" -lt 5 ]; then
+            echo "Notarization ticket delivery failed (attempt $attempt); retrying." >&2
+            sleep 10
+        fi
+    done
+    if [ "$stapled" != 1 ]; then
+        echo "Could not attach the notarization ticket after five attempts." >&2
+        exit 1
+    fi
+    xcrun stapler validate "$dmg"
 fi
 echo "$dmg"
