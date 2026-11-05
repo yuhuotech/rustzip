@@ -175,11 +175,20 @@ jobs:
           if [ -n "$MACOS_CERT_P12" ]; then
             echo "$MACOS_CERT_P12" | base64 --decode > cert.p12
             security create-keychain -p ci build.keychain
+            security list-keychains -d user -s build.keychain
             security default-keychain -s build.keychain
             security unlock-keychain -p ci build.keychain
+            security set-keychain-settings -lut 7200 build.keychain
+            curl --fail --silent --show-error --location https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer -o "$RUNNER_TEMP/DeveloperIDG2CA.cer"
+            echo "f16cd3c54c7f83cea4bf1a3e6a0819c8aaa8e4a1528fd144715f350643d2df3a  $RUNNER_TEMP/DeveloperIDG2CA.cer" | shasum -a 256 -c -
+            security import "$RUNNER_TEMP/DeveloperIDG2CA.cer" -k build.keychain
             security import cert.p12 -k build.keychain -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
             security set-key-partition-list -S apple-tool:,apple: -s -k ci build.keychain
             rm cert.p12
+            security find-identity -v -p codesigning build.keychain | grep -Fq "$MACOS_SIGN_IDENTITY"
+            cp /usr/bin/true "$RUNNER_TEMP/rustzip-signing-probe"
+            python3 -c 'import os,subprocess; subprocess.run(["codesign","--force","--options","runtime","--timestamp","--sign",os.environ["MACOS_SIGN_IDENTITY"],os.path.join(os.environ["RUNNER_TEMP"],"rustzip-signing-probe")],check=True,timeout=120)'
+            codesign --verify --strict "$RUNNER_TEMP/rustzip-signing-probe"
           fi
 
       - name: Package (macOS)
