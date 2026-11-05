@@ -460,6 +460,7 @@ jobs:
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           gh release create "$GITHUB_REF_NAME" --title "RustZIP ${GITHUB_REF_NAME#v}" --generate-notes \
             --notes "macOS packages are Developer ID signed and notarized. The Windows installer is not code-signed and may trigger SmartScreen. RAR support is not included in the default packages." \
