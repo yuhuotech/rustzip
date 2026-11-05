@@ -66,11 +66,46 @@ impl Drop for OwnedShellPidl {
 fn shell_file_drag(hwnd: HWND, payload: &ExternalDragPayload) -> bool {
     use std::os::windows::ffi::OsStrExt;
     let ExternalDragPayload::Files(paths) = payload;
-    if paths.entries().is_empty() {
+    let Some((first_path, _)) = paths.entries().first() else {
+        return false;
+    };
+    let Some(parent_path) = first_path.parent() else {
+        return false;
+    };
+    if paths
+        .entries()
+        .iter()
+        .any(|(path, _)| path.parent() != Some(parent_path))
+    {
         return false;
     }
 
+    let parent_wide: Vec<u16> = parent_path
+        .as_os_str()
+        .encode_wide()
+        .chain(Some(0))
+        .collect();
+    let mut parent_pidl = std::ptr::null_mut();
+    // SAFETY: `parent_wide` is NUL-terminated and `parent_pidl` is writable output storage.
+    if unsafe {
+        SHParseDisplayName(
+            PCWSTR(parent_wide.as_ptr()),
+            None,
+            &mut parent_pidl,
+            0,
+            None,
+        )
+    }
+    .is_err()
+        || parent_pidl.is_null()
+    {
+        return false;
+    }
+    let owned_parent = OwnedShellPidl(parent_pidl);
+
     let mut owned_pidls = Vec::with_capacity(paths.entries().len());
+    let mut folders: Vec<IShellFolder> = Vec::with_capacity(paths.entries().len());
+    let mut child_pidls = Vec::with_capacity(paths.entries().len());
     for (path, _) in paths.entries() {
         let wide: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
         let mut pidl = std::ptr::null_mut();
@@ -80,17 +115,34 @@ fn shell_file_drag(hwnd: HWND, payload: &ExternalDragPayload) -> bool {
         {
             return false;
         }
+        let mut child = std::ptr::null_mut();
+        // SAFETY: `pidl` is a live absolute PIDL and `child` is writable output storage.
+        let Ok(folder) = (unsafe { SHBindToParent(pidl.cast_const(), Some(&mut child)) }) else {
+            // SAFETY: `pidl` was allocated by SHParseDisplayName.
+            unsafe { CoTaskMemFree(Some(pidl.cast())) };
+            return false;
+        };
+        if child.is_null() {
+            // SAFETY: `pidl` was allocated by SHParseDisplayName.
+            unsafe { CoTaskMemFree(Some(pidl.cast())) };
+            return false;
+        }
+        folders.push(folder);
+        child_pidls.push(child.cast_const());
         owned_pidls.push(OwnedShellPidl(pidl));
     }
-    let pidls: Vec<*const windows::Win32::UI::Shell::Common::ITEMIDLIST> =
-        owned_pidls.iter().map(|pidl| pidl.0.cast_const()).collect();
-    // SAFETY: the PIDLs remain alive until SHDoDragDrop returns; Shell creates the IDataObject
-    // used for the native CF_HDROP operation from this absolute item list.
-    let data: windows::core::Result<IDataObject> =
-        unsafe { SHCreateDataObject(None, Some(&pidls), None::<&IDataObject>) };
+    // SAFETY: the parent and child PIDLs remain alive while Shell copies them into its data object.
+    let data: windows::core::Result<IDataObject> = unsafe {
+        SHCreateDataObject(
+            Some(owned_parent.0.cast_const()),
+            Some(&child_pidls),
+            None::<&IDataObject>,
+        )
+    };
     let Ok(data) = data else {
         return false;
     };
+    let _keep_parent_folders_alive = folders;
     let source: IDropSource = ShellFileDropSource.into();
     // SAFETY: `data` and `source` are valid COM objects and the window handle belongs to this
     // WindowsWindow. SHDoDragDrop runs the native OLE drag loop on the UI thread.
