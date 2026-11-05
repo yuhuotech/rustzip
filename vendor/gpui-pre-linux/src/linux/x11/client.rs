@@ -3501,7 +3501,7 @@ mod tests {
         for window in [owner, requestor] {
             connection
                 .create_window(
-                    xproto::COPY_FROM_PARENT as u8,
+                    x11rb::COPY_FROM_PARENT as u8,
                     window,
                     screen.root,
                     0,

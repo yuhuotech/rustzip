@@ -36,7 +36,7 @@ use gpui::*;
 struct ShellFileDropSource;
 
 #[allow(non_snake_case)]
-impl IDropSource_Impl for ShellFileDropSource {
+impl IDropSource_Impl for ShellFileDropSource_Impl {
     fn QueryContinueDrag(&self, escape_pressed: BOOL, key_state: MODIFIERKEYS_FLAGS) -> HRESULT {
         if escape_pressed.as_bool() {
             HRESULT(0x0004_0101) // DRAGDROP_S_CANCEL
@@ -86,7 +86,9 @@ fn shell_file_drag(hwnd: HWND, payload: &ExternalDragPayload) -> bool {
         owned_pidls.iter().map(|pidl| pidl.0.cast_const()).collect();
     // SAFETY: the PIDLs remain alive until SHDoDragDrop returns; Shell creates the IDataObject
     // used for the native CF_HDROP operation from this absolute item list.
-    let Ok(data) = (unsafe { SHCreateDataObject(None, Some(&pidls), None::<&IDataObject>) }) else {
+    let data: windows::core::Result<IDataObject> =
+        unsafe { SHCreateDataObject(None, Some(&pidls), None::<&IDataObject>) };
+    let Ok(data) = data else {
         return false;
     };
     let source: IDropSource = ShellFileDropSource.into();
@@ -97,7 +99,18 @@ fn shell_file_drag(hwnd: HWND, payload: &ExternalDragPayload) -> bool {
 
 #[cfg(test)]
 mod external_drag_tests {
-    use super::*;
+    use super::OwnedShellPidl;
+    use std::path::PathBuf;
+    use windows::Win32::{
+        System::{
+            Com::{DVASPECT_CONTENT, FORMATETC, IDataObject, TYMED_HGLOBAL},
+            Ole::{CF_HDROP, OleInitialize, OleUninitialize, ReleaseStgMedium},
+        },
+        UI::Shell::{DragQueryFileW, HDROP, SHCreateDataObject, SHParseDisplayName},
+    };
+    use windows::core::PCWSTR;
+
+    const DRAGDROP_GET_FILES_COUNT: u32 = u32::MAX;
 
     struct OleApartment;
 
@@ -120,10 +133,6 @@ mod external_drag_tests {
     #[test]
     fn shell_data_object_exposes_cf_hdrop_for_an_external_file() {
         use std::os::windows::ffi::OsStrExt;
-        use windows::Win32::{
-            System::Com::{DVASPECT_CONTENT, FORMATETC, ReleaseStgMedium, TYMED_HGLOBAL},
-            UI::Shell::{CF_HDROP, DRAGDROP_GET_FILES_COUNT, DragQueryFileW, HDROP},
-        };
 
         let _ole = OleApartment::initialize().unwrap();
         let file =
@@ -143,7 +152,7 @@ mod external_drag_tests {
             ptd: std::ptr::null_mut(),
             dwAspect: DVASPECT_CONTENT.0,
             lindex: -1,
-            tymed: TYMED_HGLOBAL.0,
+            tymed: TYMED_HGLOBAL.0 as _,
         };
         // SAFETY: `format` requests CF_HDROP with a valid content aspect.
         assert!(unsafe { data.QueryGetData(&format) }.is_ok());

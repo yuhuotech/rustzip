@@ -91,7 +91,7 @@ jobs:
         if: runner.os == 'Linux'
         env:
           CARGO_TARGET_DIR: ${{ github.workspace }}/target
-        run: xvfb-run -a cargo test --manifest-path vendor/gpui-pre-linux/Cargo.toml --lib xdnd --no-default-features --features x11
+        run: xvfb-run -a cargo test --manifest-path vendor/gpui-pre-linux/Cargo.toml --lib xdnd --no-default-features --features x11,test-support
       - name: Test GUI
         if: runner.os != 'Linux'
         run: cargo test -p rustzip-gui --all-features
@@ -99,7 +99,7 @@ jobs:
         if: runner.os == 'Windows'
         env:
           CARGO_TARGET_DIR: ${{ github.workspace }}/target
-        run: cargo test --manifest-path vendor/gpui-pre-windows/Cargo.toml --lib shell_data_object_exposes_cf_hdrop
+        run: cargo test --manifest-path vendor/gpui-pre-windows/Cargo.toml --lib shell_data_object_exposes_cf_hdrop --features test-support
       - name: Quick Look ZIP safety smoke (macOS)
         if: runner.os == 'macOS'
         run: packaging/macos/test-quicklook.sh
