@@ -9,6 +9,7 @@
 #                          Without it the app is ad-hoc signed: it runs on this Mac, and
 #                          other Macs ask the user to approve it in System Settings.
 #   NOTARY_PROFILE         a `xcrun notarytool store-credentials` profile; notarizes the dmg
+#   NOTARY_DIRECT          set to 1 to use APPLE_ID, APPLE_TEAM_ID and APPLE_APP_PASSWORD
 #   RZ_WITH_RAR            set to 1 for an opt-in RAR build and association
 set -euo pipefail
 trap 'status=$?; printf "macOS package failed at line %s: %s (exit %s)\n" "${BASH_LINENO[0]:-$LINENO}" "$BASH_COMMAND" "$status" >&2; exit "$status"' ERR
@@ -141,8 +142,14 @@ rm -f "$dmg"
 hdiutil create -quiet -volname "RustZIP" -srcfolder "$stage" -ov -format UDZO "$dmg"
 rm -rf "$stage"
 
-if [ -n "${NOTARY_PROFILE:-}" ] && [ "$identity" != "-" ]; then
-    xcrun notarytool submit "$dmg" --keychain-profile "$NOTARY_PROFILE" --wait
+if [ "$identity" != "-" ] && { [ -n "${NOTARY_PROFILE:-}" ] || [ "${NOTARY_DIRECT:-0}" = "1" ]; }; then
+    if [ "${NOTARY_DIRECT:-0}" = "1" ]; then
+        : "${APPLE_ID:?}" "${APPLE_TEAM_ID:?}" "${APPLE_APP_PASSWORD:?}"
+        xcrun notarytool submit "$dmg" --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait
+    else
+        xcrun notarytool submit "$dmg" --keychain-profile "$NOTARY_PROFILE" --wait
+    fi
     xcrun stapler staple "$dmg"
 fi
 echo "$dmg"

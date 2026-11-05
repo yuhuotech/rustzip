@@ -194,9 +194,7 @@ jobs:
           VALIDATE_NOTARY: ${{ inputs.validate_macos_notarization }}
         run: |
           if [[ "$VALIDATE_NOTARY" == "true" || "$DRY_RUN" != "true" ]]; then
-            xcrun notarytool store-credentials ci --apple-id "$APPLE_ID" \
-              --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD"
-            export NOTARY_PROFILE=ci
+            export NOTARY_DIRECT=1
           fi
           packaging/macos/build-app.sh dist
           if [[ "$VALIDATE_NOTARY" == "true" || "$DRY_RUN" != "true" ]]; then

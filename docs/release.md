@@ -26,6 +26,8 @@ Dry-run 默认不创建 GitHub Release，也不提交 Apple notarization 请求�
 
 需要实际测试 Developer ID 签名及 Apple 公证时，手动选择 `dry_run=true` 和 `validate_macos_notarization=true`。流程要求六项 macOS 签名与公证 Secrets 均存在，分别为两种架构提交 Apple 公证，附加并检查公证票据，不创建 GitHub Release。验证版更新清单仍使用一次性密钥，不能用作正式更新。此流程的 Apple 公证请求会提交构建产物给 Apple。
 
+GitHub macOS runner 上 `notarytool store-credentials` 可能异常退出，CI 使用 `NOTARY_DIRECT=1` 直接向 `notarytool submit` 传入 Actions Secrets，不持久化公证 profile；本机已有的 `NOTARY_PROFILE` 仍可使用。
+
 2026-11-05：新 G2 Developer ID Application 证书已配置到 RustZIP 仓库，Apple 公证凭据认证成功。macOS arm64 本地当前工作区测试包使用该证书签名，Apple 公证请求 `2588837e-816e-4db2-9449-fa5c050e2a6d` 为 Accepted，DMG 已完成 stapler 附加及验证，包含安全时间戳；该测试未创建 Release。新增 GitHub dry-run 公证选项仍须提交到远端后运行，不能将本地结果当作双架构 CI 验收。
 
 用户要求 RustZIP 使用独立的 Apple App 专用密码；上述本地测试曾使用 Linkory 原凭据。现已创建并配置 RustZIP 专用密码，使用新凭据重新提交同一测试包，公证请求 `f3c7e49d-7e95-4ba7-a683-a22ea64cb592` 为 Accepted，票据已附加并验证；Linkory 仓库的凭据保持原样。
