@@ -11,7 +11,7 @@ use gpui_kit::component::{ActiveTheme, Icon, IconName, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 use rz_app::browse::{ArchiveTree, Badge, Row, RowKind, SortKey, badge, badge_label, format_size};
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
 pub const COL_NAME: usize = 0;
@@ -36,6 +36,7 @@ pub struct FileRows {
     language: String,
     /// The format the archive really is, to say why it cannot be changed.
     format: String,
+    external_drag_paths: HashMap<String, std::path::PathBuf>,
 }
 
 impl Default for FileRows {
@@ -56,6 +57,7 @@ impl Default for FileRows {
             stem: String::new(),
             language: "auto".into(),
             format: String::new(),
+            external_drag_paths: HashMap::new(),
             columns: vec![
                 Column::new("name", "Name").width(px(340.)).sortable(),
                 size,
@@ -73,7 +75,23 @@ impl FileRows {
         self.cwd = cwd.to_string();
         self.filter = filter.to_string();
         self.marked.clear();
+        self.external_drag_paths.clear();
         self.reload();
+    }
+
+    pub fn set_external_drag_path(&mut self, entry: &str, path: std::path::PathBuf) {
+        self.external_drag_paths.clear();
+        self.external_drag_paths.insert(entry.to_string(), path);
+    }
+
+    pub fn clear_external_drag_paths(&mut self) {
+        self.external_drag_paths.clear();
+    }
+
+    pub fn external_drag_path(&self, entry: &str) -> Option<&std::path::Path> {
+        self.external_drag_paths
+            .get(entry)
+            .map(std::path::PathBuf::as_path)
     }
 
     /// What the right-click menu needs to know about the archive.
@@ -389,10 +407,14 @@ impl TableDelegate for FileRows {
         cx: &mut Context<TableState<Self>>,
     ) -> Stateful<Div> {
         let p = palette(cx);
-        let picked = self
-            .row(row_ix)
-            .is_some_and(|r| self.marked.contains(&r.path));
-        div()
+        let row = self.row(row_ix).cloned();
+        let picked = row.as_ref().is_some_and(|r| self.marked.contains(&r.path));
+        let external_path = row.as_ref().and_then(|r| {
+            (r.kind == RowKind::File)
+                .then(|| self.external_drag_paths.get(&r.path).cloned())
+                .flatten()
+        });
+        let mut element = div()
             .id(("row", row_ix))
             .when(picked, |d| d.bg(p.accent_soft))
             .on_click(cx.listener(move |state, ev: &ClickEvent, _, cx| {
@@ -406,7 +428,20 @@ impl TableDelegate for FileRows {
                     return;
                 }
                 cx.notify();
-            }))
+            }));
+        if let (Some(row), Some(drag_path)) =
+            (row.filter(|row| row.kind == RowKind::File), external_path)
+        {
+            element = element
+                .on_drag(row.path, |_, _, _, cx| cx.new(|_| Empty))
+                .external_drag_payload(move |_: &String, _, _| {
+                    Some(ExternalDragPayload::Files(FileDragPaths::new([(
+                        drag_path.clone(),
+                        false,
+                    )])))
+                });
+        }
+        element
     }
 
     fn perform_sort(

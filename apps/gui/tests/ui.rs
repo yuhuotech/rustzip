@@ -1750,26 +1750,151 @@ fn the_password_field_is_ignored_for_formats_that_cannot_encrypt(cx: &mut TestAp
 }
 
 #[gpui_kit::test]
-fn dropping_files_opens_archives_and_offers_to_compress_the_rest(cx: &mut TestAppContext) {
+fn dropping_archives_opens_them(cx: &mut TestAppContext) {
     let tmp = tempfile::tempdir().unwrap();
     let archive = make_archive(tmp.path(), "a.zip", None);
-    let plain = tmp.path().join("notes.txt");
-    fs::write(&plain, "hi").unwrap();
+    let second = make_archive(tmp.path(), "b.zip", None);
     let (handle, view) = open_window(cx, None);
 
     with_view(cx, handle, &view, |v, window, cx| {
         v.handle_drop(vec![archive.clone()], window, cx);
     });
-    cx.run_until_parked();
+    wait_until(cx, handle, |test_cx| {
+        test_cx.update(|cx| view.read(cx).archives.len() == 1)
+    });
     cx.update(|cx| assert_eq!(view.read(cx).archives.len(), 1));
 
     with_view(cx, handle, &view, |v, window, cx| {
+        v.handle_drop(vec![second], window, cx);
+    });
+    wait_until(cx, handle, |test_cx| {
+        test_cx.update(|cx| view.read(cx).archives.len() == 2)
+    });
+}
+
+#[gpui_kit::test]
+fn dropping_files_without_an_open_archive_offers_to_compress_them(cx: &mut TestAppContext) {
+    let tmp = tempfile::tempdir().unwrap();
+    let plain = tmp.path().join("notes.txt");
+    fs::write(&plain, "hi").unwrap();
+    let (handle, view) = open_window(cx, None);
+    with_view(cx, handle, &view, |v, window, cx| {
         v.handle_drop(vec![plain.clone()], window, cx);
     });
+    wait_until(cx, handle, |test_cx| {
+        test_cx.update(|cx| view.read(cx).overlay.is_some())
+    });
     cx.update(|cx| match &view.read(cx).overlay {
-        Some(Overlay::Compress(f)) => assert_eq!(f.sources, vec![plain.clone()]),
+        Some(Overlay::Compress(form)) => assert_eq!(form.sources, vec![plain.clone()]),
         _ => panic!("expected the compress form"),
     });
+}
+
+#[gpui_kit::test]
+fn dropping_a_file_on_an_open_archive_adds_and_saves_it(cx: &mut TestAppContext) {
+    let tmp = tempfile::tempdir().unwrap();
+    let archive = make_archive(tmp.path(), "current.zip", None);
+    let dropped = tmp.path().join("dropped.txt");
+    fs::write(&dropped, "added from outside").unwrap();
+    let (handle, view) = open_window(cx, None);
+    open_sync(cx, handle, &view, &archive, None);
+
+    with_view(cx, handle, &view, |v, window, cx| {
+        v.handle_drop(vec![dropped], window, cx);
+    });
+    wait_until(cx, handle, |test_cx| {
+        test_cx.update(|cx| {
+            view.read(cx)
+                .tasks
+                .snapshot()
+                .iter()
+                .any(|task| task.kind == rz_app::tasks::JobKind::Edit)
+        })
+    });
+    wait_for_tasks(cx, handle, &view);
+    wait_until(cx, handle, |test_cx| {
+        test_cx.update(|cx| {
+            view.read(cx)
+                .current()
+                .is_some_and(|opened| opened.tree.find("dropped.txt").is_some())
+        })
+    });
+
+    cx.update(|cx| {
+        let view = view.read(cx);
+        assert_eq!(view.archives.len(), 1);
+        assert_eq!(view.current().unwrap().path, archive);
+        assert!(view.overlay.is_none());
+        assert!(
+            view.current().unwrap().tree.find("dropped.txt").is_some(),
+            "tasks: {:?}; notice: {:?}",
+            view.task_view,
+            view.notice
+        );
+    });
+    let mut reader = rz_formats::open(&archive).unwrap();
+    let entry = reader
+        .entries()
+        .unwrap()
+        .into_iter()
+        .find(|entry| entry.path == "dropped.txt")
+        .unwrap();
+    let mut contents = String::new();
+    let mut stream = reader.open(&entry).unwrap();
+    std::io::Read::read_to_string(&mut stream, &mut contents).unwrap();
+    assert_eq!(contents, "added from outside");
+}
+
+#[gpui_kit::test]
+fn selecting_an_archive_file_stages_a_native_drag_source(cx: &mut TestAppContext) {
+    let tmp = tempfile::tempdir().unwrap();
+    let archive = make_archive(tmp.path(), "drag-source.zip", None);
+    let (handle, view) = open_window(cx, None);
+    open_sync(cx, handle, &view, &archive, None);
+    with_view(cx, handle, &view, |v, _, cx| v.navigate("proj", cx));
+
+    let (table, row_ix) = cx.update(|cx| {
+        let table = view.read(cx).table.clone();
+        let row_ix = table
+            .read(cx)
+            .delegate()
+            .position_of("proj/readme.txt")
+            .unwrap();
+        (table, row_ix)
+    });
+    cx.update_window(handle.into(), |_, _, cx| {
+        table.update(cx, |_, cx| cx.emit(TableEvent::SelectRow(row_ix)));
+    })
+    .unwrap();
+    wait_until(cx, handle, |test_cx| {
+        test_cx.update(|cx| {
+            view.read(cx)
+                .table
+                .read(cx)
+                .delegate()
+                .external_drag_path("proj/readme.txt")
+                .is_some()
+        })
+    });
+
+    let staged_path = cx.update(|cx| {
+        let table = view.read(cx).table.clone();
+        let path = table
+            .read(cx)
+            .delegate()
+            .external_drag_path("proj/readme.txt")
+            .unwrap()
+            .to_path_buf();
+        assert!(path.is_file());
+        assert_eq!(path.file_name().unwrap(), "readme.txt");
+        assert_eq!(fs::read_to_string(&path).unwrap(), "hello rustzip");
+        path
+    });
+    with_view(cx, handle, &view, |v, _, cx| v.clear_pick(cx));
+    assert!(
+        !staged_path.exists(),
+        "changing the selection removes the staged drag file"
+    );
 }
 
 #[gpui_kit::test]

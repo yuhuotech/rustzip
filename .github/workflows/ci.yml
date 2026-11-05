@@ -64,6 +64,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: ./.github/actions/native-archive-deps
         id: native-deps
+      - name: Check vendored GPUI formatting
+        run: |
+          cargo fmt --manifest-path vendor/gpui-pre-windows/Cargo.toml -- --check
+          cargo fmt --manifest-path vendor/gpui-pre-linux/Cargo.toml -- --check
       - name: Install Linux GUI dependencies
         if: runner.os == 'Linux'
         run: |
@@ -83,9 +87,19 @@ jobs:
       - name: Test GUI under Xvfb (Linux)
         if: runner.os == 'Linux'
         run: xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 cargo test -p rustzip-gui --all-features
+      - name: Test the native X11 file drag source
+        if: runner.os == 'Linux'
+        env:
+          CARGO_TARGET_DIR: ${{ github.workspace }}/target
+        run: xvfb-run -a cargo test --manifest-path vendor/gpui-pre-linux/Cargo.toml --lib xdnd --no-default-features --features x11
       - name: Test GUI
         if: runner.os != 'Linux'
         run: cargo test -p rustzip-gui --all-features
+      - name: Test the native Windows Shell file drag source
+        if: runner.os == 'Windows'
+        env:
+          CARGO_TARGET_DIR: ${{ github.workspace }}/target
+        run: cargo test --manifest-path vendor/gpui-pre-windows/Cargo.toml --lib shell_data_object_exposes_cf_hdrop
       - name: Quick Look ZIP safety smoke (macOS)
         if: runner.os == 'macOS'
         run: packaging/macos/test-quicklook.sh
