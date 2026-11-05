@@ -980,7 +980,7 @@ impl X11Client {
         let mut latest_time = x11rb::CURRENT_TIME;
         let mut pending_position = None;
         let mut wants_position = true;
-        let mut acceptance_rectangle = None;
+        let mut acceptance_rectangle: Option<XdndRectangle> = None;
         let mut accepted = false;
         let mut status_applies_to_current = false;
         let mut released = None;
