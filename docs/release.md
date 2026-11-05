@@ -1,5 +1,9 @@
 # 发布、更新与统计
 
+## 2026-11-05：v0.1.0 发布
+
+`v0.1.0` 指向提交 `4bfdca7`。三平台 CI 运行 41961692634 和四平台签名、公证 dry-run 41967554628（第 2 次尝试）通过；正式构建 41974947299 的四个构建及 manifest 汇总验签通过。首次发布 job 因未指定 GitHub 仓库而失败，已在后续提交修复；维护者从该正式构建下载 `release-bundle`，验签及验证两个 DMG 公证票据后创建公开 Release。再次从公开 Release 下载的四个包与 `update.json` 均通过客户端公钥验签，两个 DMG 的公证票据验证通过。Windows 安装器尚未代码签名，默认安装包不包含 RAR。
+
 ## 一次性准备
 
 1. **更新签名密钥**。公钥已写进 `crates/rz-services/src/update_key.in`,私钥由 `rz-release keygen` 生成,在维护者本机 `~/.rustzip-release/update-signing.key`(权限 600)。
