@@ -926,8 +926,7 @@ impl X11Client {
         source_window: xproto::Window,
         payload: &gpui::ExternalDragPayload,
     ) -> bool {
-        let gpui::ExternalDragPayload::Files(paths) = payload;
-        let uris = xdnd_uri_list(paths);
+        let uris = xdnd_uri_list(payload);
         if uris.is_empty() {
             return false;
         }
@@ -950,34 +949,35 @@ impl X11Client {
                 EventMask::POINTER_MOTION | EventMask::BUTTON_RELEASE,
                 xproto::GrabMode::ASYNC,
                 xproto::GrabMode::ASYNC,
-                xproto::NONE,
-                xproto::NONE,
-                xproto::CURRENT_TIME,
+                x11rb::NONE,
+                x11rb::NONE,
+                x11rb::CURRENT_TIME,
             )
-            .and_then(|cookie| cookie.reply());
-        if !matches!(grab, Ok(reply) if reply.status == xproto::GrabStatus::SUCCESS) {
+            .ok()
+            .and_then(|cookie| cookie.reply().ok());
+        if !matches!(grab, Some(reply) if reply.status == xproto::GrabStatus::SUCCESS) {
             return false;
         }
-        if connection
-            .set_selection_owner(source_window, atoms.XdndSelection, xproto::CURRENT_TIME)
-            .and_then(|cookie| cookie.check())
-            .is_err()
+        if !connection
+            .set_selection_owner(source_window, atoms.XdndSelection, x11rb::CURRENT_TIME)
+            .is_ok_and(|cookie| cookie.check().is_ok())
         {
-            let _ = connection.ungrab_pointer(xproto::CURRENT_TIME);
+            let _ = connection.ungrab_pointer(x11rb::CURRENT_TIME);
             return false;
         }
         if !connection
             .get_selection_owner(atoms.XdndSelection)
-            .and_then(|cookie| cookie.reply())
-            .is_ok_and(|reply| reply.owner == source_window)
+            .ok()
+            .and_then(|cookie| cookie.reply().ok())
+            .is_some_and(|reply| reply.owner == source_window)
         {
-            let _ = connection.ungrab_pointer(xproto::CURRENT_TIME);
+            let _ = connection.ungrab_pointer(x11rb::CURRENT_TIME);
             return false;
         }
 
         let mut target = None;
         let mut latest_position = query_root_pointer(&connection, root).unwrap_or_default();
-        let mut latest_time = xproto::CURRENT_TIME;
+        let mut latest_time = x11rb::CURRENT_TIME;
         let mut pending_position = None;
         let mut wants_position = true;
         let mut acceptance_rectangle = None;
@@ -999,7 +999,7 @@ impl X11Client {
                     source_window,
                     window,
                     latest_position,
-                    xproto::CURRENT_TIME,
+                    x11rb::CURRENT_TIME,
                     &mut pending_position,
                 ) {
                     send_xdnd_leave(&connection, &atoms, source_window, window);
@@ -1237,16 +1237,17 @@ impl X11Client {
         if selection_acquired
             && connection
                 .get_selection_owner(atoms.XdndSelection)
-                .and_then(|cookie| cookie.reply())
-                .is_ok_and(|reply| reply.owner == source_window)
+                .ok()
+                .and_then(|cookie| cookie.reply().ok())
+                .is_some_and(|reply| reply.owner == source_window)
         {
             let _ = connection.set_selection_owner(
-                xproto::NONE,
+                x11rb::NONE,
                 atoms.XdndSelection,
-                xproto::CURRENT_TIME,
+                x11rb::CURRENT_TIME,
             );
         }
-        let _ = connection.ungrab_pointer(xproto::CURRENT_TIME);
+        let _ = connection.ungrab_pointer(x11rb::CURRENT_TIME);
         let _ = connection.flush();
         true
     }
@@ -2761,7 +2762,7 @@ fn xdnd_target_under_pointer(
 ) -> Option<(xproto::Window, u32)> {
     let pointer = connection.query_pointer(root).ok()?.reply().ok()?;
     let mut window = pointer.child;
-    while window != xproto::NONE && window != root {
+    while window != x11rb::NONE && window != root {
         if let Some(reply) = connection
             .get_property(false, window, atoms.XdndAware, AtomEnum::ATOM, 0, 1)
             .ok()?
@@ -2807,8 +2808,7 @@ fn send_xdnd_enter(
     );
     connection
         .send_event(false, target, EventMask::NO_EVENT, message)
-        .and_then(|cookie| cookie.check())
-        .is_ok()
+        .is_ok_and(|cookie| cookie.check().is_ok())
 }
 
 fn send_xdnd_leave(
@@ -2823,9 +2823,9 @@ fn send_xdnd_leave(
         atoms.XdndLeave,
         ClientMessageData::from([source, 0, 0, 0, 0]),
     );
-    let _ = connection
-        .send_event(false, target, EventMask::NO_EVENT, message)
-        .and_then(|cookie| cookie.check());
+    if let Ok(cookie) = connection.send_event(false, target, EventMask::NO_EVENT, message) {
+        let _ = cookie.check();
+    }
 }
 
 fn pack_xdnd_root_position(position: (i16, i16)) -> u32 {
@@ -2849,8 +2849,7 @@ fn send_xdnd_position(
     );
     connection
         .send_event(false, target, EventMask::NO_EVENT, message)
-        .and_then(|cookie| cookie.check())
-        .is_ok()
+        .is_ok_and(|cookie| cookie.check().is_ok())
 }
 
 fn send_xdnd_position_and_track(
@@ -2885,8 +2884,7 @@ fn send_xdnd_drop(
     );
     connection
         .send_event(false, target, EventMask::NO_EVENT, message)
-        .and_then(|cookie| cookie.check())
-        .is_ok()
+        .is_ok_and(|cookie| cookie.check().is_ok())
 }
 
 fn serve_xdnd_selection(
@@ -2895,7 +2893,7 @@ fn serve_xdnd_selection(
     request: xproto::SelectionRequestEvent,
     uris: &[u8],
 ) -> bool {
-    let property = if request.property == xproto::NONE {
+    let property = if request.property == x11rb::NONE {
         request.target
     } else {
         request.property
@@ -2909,8 +2907,7 @@ fn serve_xdnd_selection(
                 atoms.XA_ATOM,
                 &[atoms.TARGETS, atoms.TextUriList],
             )
-            .and_then(|cookie| cookie.check())
-            .is_ok()
+            .is_ok_and(|cookie| cookie.check().is_ok())
     } else if request.target == atoms.TextUriList {
         connection
             .change_property8(
@@ -2920,8 +2917,7 @@ fn serve_xdnd_selection(
                 atoms.TextUriList,
                 uris,
             )
-            .and_then(|cookie| cookie.check())
-            .is_ok()
+            .is_ok_and(|cookie| cookie.check().is_ok())
     } else {
         false
     };
@@ -2932,12 +2928,11 @@ fn serve_xdnd_selection(
         requestor: request.requestor,
         selection: request.selection,
         target: request.target,
-        property: if success { property } else { xproto::NONE },
+        property: if success { property } else { x11rb::NONE },
     };
     let notified = connection
         .send_event(false, request.requestor, EventMask::NO_EVENT, notification)
-        .and_then(|cookie| cookie.check())
-        .is_ok();
+        .is_ok_and(|cookie| cookie.check().is_ok());
     success && notified
 }
 
@@ -3538,7 +3533,7 @@ mod tests {
         let request = xproto::SelectionRequestEvent {
             response_type: xproto::SELECTION_REQUEST_EVENT,
             sequence: 0,
-            time: xproto::CURRENT_TIME,
+            time: x11rb::CURRENT_TIME,
             owner,
             requestor,
             selection: atoms.XdndSelection,
@@ -3554,13 +3549,13 @@ mod tests {
         assert_eq!(notify.requestor, requestor);
         assert_eq!(notify.selection, atoms.XdndSelection);
         assert_eq!(notify.target, unsupported);
-        assert_eq!(notify.property, xproto::NONE);
+        assert_eq!(notify.property, x11rb::NONE);
 
         let uri_list = b"file:///tmp/RustZIP%20file.txt\r\n";
         let request = xproto::SelectionRequestEvent {
             response_type: xproto::SELECTION_REQUEST_EVENT,
             sequence: 0,
-            time: xproto::CURRENT_TIME,
+            time: x11rb::CURRENT_TIME,
             owner,
             requestor,
             selection: atoms.XdndSelection,
@@ -3584,7 +3579,7 @@ mod tests {
         let request = xproto::SelectionRequestEvent {
             response_type: xproto::SELECTION_REQUEST_EVENT,
             sequence: 0,
-            time: xproto::CURRENT_TIME,
+            time: x11rb::CURRENT_TIME,
             owner,
             requestor,
             selection: atoms.XdndSelection,
