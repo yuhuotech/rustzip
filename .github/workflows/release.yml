@@ -206,9 +206,6 @@ jobs:
             export NOTARY_DIRECT=1
           fi
           packaging/macos/build-app.sh dist
-          if [[ "$VALIDATE_NOTARY" == "true" || "$DRY_RUN" != "true" ]]; then
-            xcrun stapler validate dist/RustZIP-*.dmg
-          fi
 
       - name: Verify Quick Look provider registration (macOS)
         if: runner.os == 'macOS'

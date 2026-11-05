@@ -165,6 +165,20 @@ if [ "$identity" != "-" ] && { [ -n "${NOTARY_PROFILE:-}" ] || [ "${NOTARY_DIREC
         echo "Could not attach the notarization ticket after five attempts." >&2
         exit 1
     fi
-    xcrun stapler validate "$dmg"
+    validated=0
+    for attempt in 1 2 3 4 5; do
+        if xcrun stapler validate "$dmg"; then
+            validated=1
+            break
+        fi
+        if [ "$attempt" -lt 5 ]; then
+            echo "Notarization ticket validation failed (attempt $attempt); retrying." >&2
+            sleep 10
+        fi
+    done
+    if [ "$validated" != 1 ]; then
+        echo "Could not validate the notarization ticket after five attempts." >&2
+        exit 1
+    fi
 fi
 echo "$dmg"
