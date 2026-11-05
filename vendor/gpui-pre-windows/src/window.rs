@@ -63,21 +63,27 @@ impl Drop for OwnedShellPidl {
     }
 }
 
-fn shell_file_drag(hwnd: HWND, payload: &ExternalDragPayload) -> bool {
+struct ShellFileDataObject {
+    data: IDataObject,
+    _parent: OwnedShellPidl,
+    _items: Vec<OwnedShellPidl>,
+    _folders: Vec<IShellFolder>,
+}
+
+fn shell_file_data_object(paths: &FileDragPaths) -> Option<ShellFileDataObject> {
     use std::os::windows::ffi::OsStrExt;
-    let ExternalDragPayload::Files(paths) = payload;
     let Some((first_path, _)) = paths.entries().first() else {
-        return false;
+        return None;
     };
     let Some(parent_path) = first_path.parent() else {
-        return false;
+        return None;
     };
     if paths
         .entries()
         .iter()
         .any(|(path, _)| path.parent() != Some(parent_path))
     {
-        return false;
+        return None;
     }
 
     let parent_wide: Vec<u16> = parent_path
@@ -99,7 +105,7 @@ fn shell_file_drag(hwnd: HWND, payload: &ExternalDragPayload) -> bool {
     .is_err()
         || parent_pidl.is_null()
     {
-        return false;
+        return None;
     }
     let owned_parent = OwnedShellPidl(parent_pidl);
 
@@ -110,57 +116,67 @@ fn shell_file_drag(hwnd: HWND, payload: &ExternalDragPayload) -> bool {
         let wide: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
         let mut pidl = std::ptr::null_mut();
         // SAFETY: `wide` is NUL-terminated and `pidl` points to writable storage for the returned PIDL.
-        if unsafe { SHParseDisplayName(PCWSTR(wide.as_ptr()), None, &mut pidl, 0, None) }.is_err()
-            || pidl.is_null()
-        {
-            return false;
+        if unsafe { SHParseDisplayName(PCWSTR(wide.as_ptr()), None, &mut pidl, 0, None) }.is_err() {
+            if !pidl.is_null() {
+                // SAFETY: A non-null PIDL returned with an error still uses the COM task allocator.
+                unsafe { CoTaskMemFree(Some(pidl.cast())) };
+            }
+            return None;
         }
+        if pidl.is_null() {
+            return None;
+        }
+        let owned = OwnedShellPidl(pidl);
         let mut child = std::ptr::null_mut();
         // SAFETY: `pidl` is a live absolute PIDL and `child` is writable output storage.
-        let Ok(folder) = (unsafe { SHBindToParent(pidl.cast_const(), Some(&mut child)) }) else {
-            // SAFETY: `pidl` was allocated by SHParseDisplayName.
-            unsafe { CoTaskMemFree(Some(pidl.cast())) };
-            return false;
-        };
+        let folder = unsafe { SHBindToParent(owned.0.cast_const(), Some(&mut child)) }.ok()?;
         if child.is_null() {
-            // SAFETY: `pidl` was allocated by SHParseDisplayName.
-            unsafe { CoTaskMemFree(Some(pidl.cast())) };
-            return false;
+            return None;
         }
         folders.push(folder);
         child_pidls.push(child.cast_const());
-        owned_pidls.push(OwnedShellPidl(pidl));
+        owned_pidls.push(owned);
     }
-    // SAFETY: the parent and child PIDLs remain alive while Shell copies them into its data object.
-    let data: windows::core::Result<IDataObject> = unsafe {
+    // SAFETY: The parent and child PIDLs remain alive for the data object's full drag lifetime.
+    let data = unsafe {
         SHCreateDataObject(
             Some(owned_parent.0.cast_const()),
             Some(&child_pidls),
             None::<&IDataObject>,
         )
-    };
-    let Ok(data) = data else {
+    }
+    .ok()?;
+    Some(ShellFileDataObject {
+        data,
+        _parent: owned_parent,
+        _items: owned_pidls,
+        _folders: folders,
+    })
+}
+
+fn shell_file_drag(hwnd: HWND, payload: &ExternalDragPayload) -> bool {
+    let ExternalDragPayload::Files(paths) = payload;
+    let Some(shell_data) = shell_file_data_object(paths) else {
         return false;
     };
-    let _keep_parent_folders_alive = folders;
     let source: IDropSource = ShellFileDropSource.into();
     // SAFETY: `data` and `source` are valid COM objects and the window handle belongs to this
     // WindowsWindow. SHDoDragDrop runs the native OLE drag loop on the UI thread.
-    unsafe { SHDoDragDrop(Some(hwnd), &data, &source, DROPEFFECT_COPY).is_ok() }
+    unsafe { SHDoDragDrop(Some(hwnd), &shell_data.data, &source, DROPEFFECT_COPY).is_ok() }
 }
 
 #[cfg(test)]
 mod external_drag_tests {
-    use super::OwnedShellPidl;
+    use super::shell_file_data_object;
+    use gpui::FileDragPaths;
     use std::path::PathBuf;
     use windows::Win32::{
         System::{
             Com::{DVASPECT_CONTENT, FORMATETC, IDataObject, TYMED_HGLOBAL},
             Ole::{CF_HDROP, OleInitialize, OleUninitialize, ReleaseStgMedium},
         },
-        UI::Shell::{DragQueryFileW, HDROP, SHCreateDataObject, SHParseDisplayName},
+        UI::Shell::{DragQueryFileW, HDROP},
     };
-    use windows::core::PCWSTR;
 
     const DRAGDROP_GET_FILES_COUNT: u32 = u32::MAX;
 
@@ -184,21 +200,13 @@ mod external_drag_tests {
 
     #[test]
     fn shell_data_object_exposes_cf_hdrop_for_an_external_file() {
-        use std::os::windows::ffi::OsStrExt;
-
         let _ole = OleApartment::initialize().unwrap();
         let file =
             std::env::temp_dir().join(format!("rustzip-ole-drag-test-{}.txt", std::process::id()));
         std::fs::write(&file, b"OLE file drag").unwrap();
-        let wide: Vec<u16> = file.as_os_str().encode_wide().chain(Some(0)).collect();
-        let mut pidl = std::ptr::null_mut();
-        // SAFETY: `wide` is a valid NUL-terminated path and `pidl` is writable output storage.
-        unsafe { SHParseDisplayName(PCWSTR(wide.as_ptr()), None, &mut pidl, 0, None).unwrap() };
-        let owned = OwnedShellPidl(pidl);
-        let pidls = [owned.0.cast_const()];
-        // SAFETY: The absolute PIDL remains valid for the data object's entire use in this test.
-        let data: IDataObject =
-            unsafe { SHCreateDataObject(None, Some(&pidls), None::<&IDataObject>).unwrap() };
+        let paths = FileDragPaths::new([(file.clone(), false)]);
+        let shell_data = shell_file_data_object(&paths).unwrap();
+        let data: &IDataObject = &shell_data.data;
         let format = FORMATETC {
             cfFormat: CF_HDROP.0,
             ptd: std::ptr::null_mut(),
