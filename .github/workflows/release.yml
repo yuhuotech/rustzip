@@ -207,6 +207,10 @@ jobs:
           fi
           packaging/macos/build-app.sh dist
 
+      - name: Verify self-contained macOS libraries
+        if: runner.os == 'macOS'
+        run: packaging/macos/verify-portable-libraries.sh dist/RustZIP.app
+
       - name: Verify Quick Look provider registration (macOS)
         if: runner.os == 'macOS'
         run: bash packaging/macos/verify-quicklook-registration.sh dist/RustZIP.app

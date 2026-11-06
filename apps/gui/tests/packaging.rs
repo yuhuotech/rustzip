@@ -9,6 +9,12 @@ const LINUX_DOLPHIN: &str = include_str!("../../../packaging/linux/rustzip-servi
 const WINDOWS_INSTALLER: &str = include_str!("../../../packaging/windows/rustzip.iss");
 const MACOS_INFO: &str = include_str!("../../../packaging/macos/Info.plist.in");
 const MACOS_BUILD: &str = include_str!("../../../packaging/macos/build-app.sh");
+const MACOS_BUNDLE_LIBRARIES: &str =
+    include_str!("../../../packaging/macos/bundle-homebrew-libraries.sh");
+const MACOS_VERIFY_LIBRARIES: &str =
+    include_str!("../../../packaging/macos/verify-portable-libraries.sh");
+const MACOS_LIBRARY_BUNDLE_TEST: &str =
+    include_str!("../../../packaging/macos/test-homebrew-library-bundling.sh");
 const MACOS_CI: &str = include_str!("../../../.github/workflows/ci.yml");
 const MACOS_FINDER_EXTENSION: &str = include_str!("../../../packaging/macos/finder-sync.swift");
 const MACOS_FINDER_INFO: &str = include_str!("../../../packaging/macos/finder-sync-Info.plist.in");
@@ -111,6 +117,22 @@ fn macos_finder_actions_are_packaged_and_routed_through_the_app() {
     assert!(MACOS_FINDER_EXTENSION.contains("finder.extractHere"));
     assert!(MACOS_FINDER_EXTENSION.contains("#if RUSTZIP_WITH_RAR"));
     assert!(MACOS_FINDER_EXTENSION.contains("controller.selectedItemURLs()"));
+}
+
+#[test]
+fn macos_homebrew_libraries_are_bundled_rewritten_and_resigned() {
+    assert!(MACOS_BUILD.contains("bundle-homebrew-libraries.sh"));
+    assert!(MACOS_BUILD.contains("verify-portable-libraries.sh"));
+    assert!(MACOS_BUNDLE_LIBRARIES.contains("install_name_tool -change"));
+    assert!(MACOS_BUNDLE_LIBRARIES.contains("@rpath/$name"));
+    assert!(MACOS_BUNDLE_LIBRARIES.contains("libb2-license.txt"));
+    assert!(MACOS_BUNDLE_LIBRARIES.contains("lz4-license.txt"));
+    assert!(MACOS_BUNDLE_LIBRARIES.contains("codesign --force"));
+    assert!(MACOS_VERIFY_LIBRARIES.contains("Non-portable absolute library dependency"));
+    assert!(MACOS_VERIFY_LIBRARIES.contains("TeamIdentifier"));
+    assert!(MACOS_CI.contains("test-homebrew-library-bundling.sh"));
+    assert!(MACOS_LIBRARY_BUNDLE_TEST.contains("Contents/MacOS/probe"));
+    assert!(MACOS_LIBRARY_BUNDLE_TEST.contains("verify-portable-libraries.sh"));
 }
 
 #[test]

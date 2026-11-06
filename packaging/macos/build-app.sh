@@ -50,7 +50,7 @@ app="$out/RustZIP.app"
 rm -rf "$app"
 finder_extension="$app/Contents/PlugIns/RustZIPFinderSync.appex"
 quicklook_extension="$app/Contents/PlugIns/RustZIPQuickLook.appex"
-mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources" \
+mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources" "$app/Contents/Frameworks" \
     "$finder_extension/Contents/MacOS" "$finder_extension/Contents/Resources" \
     "$quicklook_extension/Contents/MacOS" "$quicklook_extension/Contents/Resources"
 cp "$bin" "$app/Contents/MacOS/rustzip"
@@ -109,6 +109,7 @@ xcrun swiftc -application-extension -parse-as-library -O \
     packaging/macos/quicklook-preview.swift
 
 identity="${MACOS_SIGN_IDENTITY:--}"
+bash packaging/macos/bundle-homebrew-libraries.sh "$app" "$identity"
 if [ "$identity" = "-" ]; then
     codesign --force --sign - "$app/Contents/MacOS/rz-pdf-renderer"
     codesign --force --sign - "$app/Contents/MacOS/rz-video-renderer"
@@ -133,6 +134,7 @@ fi
 codesign --verify --deep --strict "$finder_extension"
 codesign --verify --deep --strict "$quicklook_extension"
 codesign --verify --deep --strict "$app"
+bash packaging/macos/verify-portable-libraries.sh "$app"
 
 dmg="$out/RustZIP-$version-macos-$arch.dmg"
 stage="$(mktemp -d)"

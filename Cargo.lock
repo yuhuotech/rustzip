@@ -3540,7 +3540,7 @@ checksum = "4b0d73e1bc02eef886a5947f41b8512708792e9e5d3053d181843311a487f96f"
 
 [[package]]
 name = "gpui-probe"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "gpui-kit",
 ]
@@ -7011,7 +7011,7 @@ dependencies = [
 
 [[package]]
 name = "rustzip-gui"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "chrono",
  "ed25519-dalek",
@@ -7051,7 +7051,7 @@ checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
 
 [[package]]
 name = "rz"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "ctrlc",
  "rpassword",
@@ -7064,7 +7064,7 @@ dependencies = [
 
 [[package]]
 name = "rz-app"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "blake3",
  "ed25519-dalek",
@@ -7084,21 +7084,21 @@ dependencies = [
 
 [[package]]
 name = "rz-audio-preview"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "symphonia",
 ]
 
 [[package]]
 name = "rz-core"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "thiserror 2.0.21",
 ]
 
 [[package]]
 name = "rz-engine"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "blake3",
  "rz-core",
@@ -7113,7 +7113,7 @@ dependencies = [
 
 [[package]]
 name = "rz-ffi"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "libarchive2-sys",
  "tempfile",
@@ -7124,7 +7124,7 @@ dependencies = [
 
 [[package]]
 name = "rz-formats"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "apfs-core",
  "base64 0.22.1",
@@ -7159,7 +7159,7 @@ dependencies = [
 
 [[package]]
 name = "rz-pdf-renderer"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "flate2",
  "hayro",
@@ -7168,7 +7168,7 @@ dependencies = [
 
 [[package]]
 name = "rz-platform"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "dirs 6.0.0",
  "reflink-copy",
@@ -7177,11 +7177,11 @@ dependencies = [
 
 [[package]]
 name = "rz-preview-budget"
-version = "0.1.1"
+version = "0.1.2"
 
 [[package]]
 name = "rz-release"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "ed25519-dalek",
  "getrandom 0.4.3",
@@ -7194,7 +7194,7 @@ dependencies = [
 
 [[package]]
 name = "rz-services"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "keyring",
  "rz-app",
@@ -7207,7 +7207,7 @@ dependencies = [
 
 [[package]]
 name = "rz-video-renderer"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "image",
  "mp4",

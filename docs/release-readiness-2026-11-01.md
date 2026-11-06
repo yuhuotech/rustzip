@@ -4,6 +4,8 @@
 
 2026-11-03 补充：下文为 11 月 1 日验收快照；后续已实现 WIM LZX / LZMS、NSIS bzip2、未加密单卷 APFS 和常见 APFS 透明压缩。三平台集成与正式签名仍需单独验收，具体支持边界见[第三阶段增量记录](phase-3-format-assessment.md)和[开发计划](next-development-plan.md)。
 
+2026-11-06 macOS 发布包复查：用户提供的 0.1.0 崩溃报告指向 Homebrew `libb2` Team ID 不匹配；对已安装 Mach-O 的依赖检查也发现 Homebrew `liblz4`。`packaging/macos/build-app.sh` 现将两项 dylib 和许可证复制到 app bundle,改用 `@rpath`,以 app 的签名身份重签,并验证所有 Mach-O 不引用外部 Homebrew / MacPorts 路径。macOS CI 另以真实 `libb2` / `lz4` C probe 验证打包后可启动。下文其余内容仍是 11 月 1 日快照。
+
 ## 开发内容
 
 - 视频：复现每日 Fuzz 41193338692 的 CABAC MVD 溢出，前缀有界解码、非法运动向量返回错误，原始样本进入 renderer、helper 和 Fuzz 回归。

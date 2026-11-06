@@ -108,7 +108,7 @@ APFS 的 decmpfs 数据按原文 64 KiB 分块读取和解码，目录、extent 
 ## 7. 平台集成
 
 - **Windows**:Win11 新式右键菜单用 `IExplorerCommand`(COM,MSIX 签名),并兼容旧菜单;MSI 或 MSIX 安装。长路径使用 `\\?\` 前缀。
-- **macOS**:Finder Sync 扩展通过本地 `rustzip://` 动作 URL 调用宿主 GUI;Quick Look ZIP 目录扩展通过原生 `NSTableView` 只读有限中央目录并限制元数据;签名和公证;拖到 Dock 图标压缩。
+- **macOS**:Finder Sync 扩展通过本地 `rustzip://` 动作 URL 调用宿主 GUI;Quick Look ZIP 目录扩展通过原生 `NSTableView` 只读有限中央目录并限制元数据;安装包把非系统 dylib 放入 `Contents/Frameworks` 并以宿主 Developer ID 签名,发布校验拒绝 Homebrew / MacPorts 的绝对加载路径;签名和公证;拖到 Dock 图标压缩。
 - **Linux**:Nautilus 用户级 Scripts 子菜单、Dolphin ServiceMenu、Nemo actions、`.desktop` MIME 关联;分发用 AppImage、Flatpak、deb / rpm。
 - 文件名编码、路径分隔符、大小写敏感性统一在 `rz-platform` 处理。
 

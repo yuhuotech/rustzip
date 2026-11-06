@@ -27,6 +27,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: ./.github/actions/native-archive-deps
         id: native-deps
+      - name: Test self-contained macOS archive libraries
+        if: runner.os == 'macOS'
+        run: packaging/macos/test-homebrew-library-bundling.sh
       - name: Smoke test Linux desktop integration installer
         if: runner.os == 'Linux'
         run: bash packaging/linux/test-install.sh
