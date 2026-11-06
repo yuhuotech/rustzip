@@ -62,6 +62,7 @@ open_archive_tooltip	Abrir arquivo compactado
 encrypted_badge	Criptografado
 archive_read_only	Arquivos {format} são somente leitura. Não é possível adicionar, renomear ou excluir itens.
 toolbar_extract	Extrair para…
+toolbar_extract_current	Extrair para a pasta atual
 toolbar_add	Adicionar
 toolbar_test	Testar
 toolbar_rename	Renomear

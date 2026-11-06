@@ -62,6 +62,7 @@ open_archive_tooltip	فتح أرشيف
 encrypted_badge	مشفّر
 archive_read_only	أرشيفات {format} للقراءة فقط. لا يمكنك إضافة العناصر أو إعادة تسميتها أو حذفها.
 toolbar_extract	استخراج إلى…
+toolbar_extract_current	استخراج إلى المجلد الحالي
 toolbar_add	إضافة
 toolbar_test	اختبار
 toolbar_rename	إعادة تسمية

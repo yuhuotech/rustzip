@@ -62,6 +62,7 @@ open_archive_tooltip	Открыть архив
 encrypted_badge	Зашифрован
 archive_read_only	Архивы {format} доступны только для чтения. Нельзя добавлять, переименовывать и удалять элементы.
 toolbar_extract	Распаковать в…
+toolbar_extract_current	Распаковать в текущую папку
 toolbar_add	Добавить
 toolbar_test	Проверить
 toolbar_rename	Переименовать

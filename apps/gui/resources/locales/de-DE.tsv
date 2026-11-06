@@ -62,6 +62,7 @@ open_archive_tooltip	Archiv öffnen
 encrypted_badge	Verschlüsselt
 archive_read_only	{format}-Archive sind schreibgeschützt. Du kannst keine Elemente hinzufügen, umbenennen oder löschen.
 toolbar_extract	Entpacken nach…
+toolbar_extract_current	In aktuellen Ordner entpacken
 toolbar_add	Hinzufügen
 toolbar_test	Prüfen
 toolbar_rename	Umbenennen

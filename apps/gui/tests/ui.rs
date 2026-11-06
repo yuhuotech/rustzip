@@ -1094,6 +1094,52 @@ fn extracting_runs_a_task_and_reports_the_result(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn toolbar_quick_extracts_the_whole_archive_to_a_sibling_named_folder(cx: &mut TestAppContext) {
+    let tmp = tempfile::tempdir().unwrap();
+    let archive = make_archive(tmp.path(), "quick.zip", None);
+    let expected = tmp.path().join("quick/proj/readme.txt");
+    let (handle, view) = open_window(cx, None);
+    open_sync(cx, handle, &view, &archive, None);
+    with_view(cx, handle, &view, |v, _, _| {
+        v.settings.open_folder_when_done = false;
+    });
+
+    cx.update_window(handle.into(), |_, window, cx| {
+        assert!(window.find("extract-current-folder").visible());
+        window.click("extract-current-folder", cx);
+    })
+    .unwrap();
+    wait_for_tasks(cx, handle, &view);
+
+    assert_eq!(fs::read_to_string(expected).unwrap(), "hello rustzip");
+    assert!(tmp.path().join("quick/proj/src/main.rs").is_file());
+}
+
+#[gpui_kit::test]
+fn toolbar_quick_extract_preserves_selected_subdirectory_paths(cx: &mut TestAppContext) {
+    let tmp = tempfile::tempdir().unwrap();
+    let archive = make_archive(tmp.path(), "picked.zip", None);
+    let expected = tmp.path().join("picked/proj/src/main.rs");
+    let (handle, view) = open_window(cx, None);
+    open_sync(cx, handle, &view, &archive, None);
+    with_view(cx, handle, &view, |v, _, cx| {
+        v.settings.open_folder_when_done = false;
+        v.table.update(cx, |table, _| {
+            table.delegate_mut().mark_only("proj/src/main.rs")
+        });
+    });
+
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.click("extract-current-folder", cx);
+    })
+    .unwrap();
+    wait_for_tasks(cx, handle, &view);
+
+    assert_eq!(fs::read_to_string(expected).unwrap(), "fn main() {}");
+    assert!(!tmp.path().join("picked/proj/readme.txt").exists());
+}
+
+#[gpui_kit::test]
 fn open_archives_can_be_compared_from_the_toolbar_and_history(cx: &mut TestAppContext) {
     let tmp = tempfile::tempdir().unwrap();
     let left = make_archive(tmp.path(), "left.zip", None);

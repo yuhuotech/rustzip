@@ -62,6 +62,7 @@ open_archive_tooltip	Ouvrir une archive
 encrypted_badge	Chiffré
 archive_read_only	Les archives {format} sont en lecture seule. Vous ne pouvez ni ajouter, ni renommer, ni supprimer d’éléments.
 toolbar_extract	Extraire vers…
+toolbar_extract_current	Extraire dans le dossier actuel
 toolbar_add	Ajouter
 toolbar_test	Tester
 toolbar_rename	Renommer

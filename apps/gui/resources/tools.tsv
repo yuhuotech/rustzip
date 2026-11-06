@@ -61,6 +61,7 @@ open_archive_tooltip	打开压缩包	Open archive
 encrypted_badge	已加密	Encrypted
 archive_read_only	{format} 压缩包只读，不能添加、重命名或删除	{format} archives are read-only. You cannot add, rename or delete items.
 toolbar_extract	解压到…	Extract to…
+toolbar_extract_current	解压到当前目录	Extract to current folder
 toolbar_add	添加	Add
 toolbar_test	测试	Test
 toolbar_rename	重命名	Rename

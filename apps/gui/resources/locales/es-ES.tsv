@@ -62,6 +62,7 @@ open_archive_tooltip	Abrir archivo comprimido
 encrypted_badge	Cifrado
 archive_read_only	Los archivos {format} son de solo lectura. No puedes añadir, cambiar el nombre ni eliminar elementos.
 toolbar_extract	Extraer en…
+toolbar_extract_current	Extraer en la carpeta actual
 toolbar_add	Añadir
 toolbar_test	Verificar
 toolbar_rename	Cambiar nombre

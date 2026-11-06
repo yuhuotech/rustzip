@@ -245,6 +245,14 @@ pub fn archive_stem_for_language(path: &Path, language: &str) -> String {
     }
 }
 
+/// The sibling folder used by quick extraction, named after the archive.
+pub fn archive_named_folder(path: &Path, language: &str) -> Option<PathBuf> {
+    Some(
+        path.parent()?
+            .join(archive_stem_for_language(path, language)),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -342,5 +350,13 @@ mod tests {
         );
         assert!(looks_like_archive("photos.7z.001"));
         assert!(looks_like_archive("backup.z01"));
+    }
+
+    #[test]
+    fn quick_extract_folder_sits_beside_the_archive_and_drops_compound_suffixes() {
+        assert_eq!(
+            archive_named_folder(Path::new("/archives/data.tar.gz"), "en-US"),
+            Some(PathBuf::from("/archives/data"))
+        );
     }
 }

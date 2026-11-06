@@ -1457,6 +1457,26 @@ impl MainView {
         self.extract(any, window, cx);
     }
 
+    /// Extracts the picked paths, or the whole archive, into a sibling folder named after it.
+    pub fn extract_to_current_folder(&mut self, cx: &mut Context<Self>) {
+        let Some(archive) = self.current().map(|a| a.path.clone()) else {
+            return;
+        };
+        let Some(dest) = recent::archive_named_folder(&archive, &self.settings.language) else {
+            return;
+        };
+        let picked = self.picked_paths(cx);
+        let only = (!picked.is_empty()).then_some(picked);
+        let spec = JobSpec::Extract {
+            archive,
+            dest,
+            opts: self.extract_options(only),
+            smart: false,
+            encoding: self.settings.forced_encoding().map(str::to_string),
+        };
+        self.submit(spec, cx);
+    }
+
     // ----- the right-click menu of the list ------------------------------------------------
 
     // ----- picking with a rubber band ------------------------------------------------------
@@ -3500,6 +3520,15 @@ impl MainView {
                     .label(self.tool_text("toolbar_extract"))
                     .disabled(!has)
                     .on_click(cx.listener(|this, _, window, cx| this.extract_to(window, cx))),
+            )
+            .child(
+                Button::new("extract-current-folder")
+                    .ghost()
+                    .icon(IconName::FolderOpen)
+                    .tooltip(self.tool_text("toolbar_extract_current"))
+                    .accessibility_label(self.tool_text("toolbar_extract_current"))
+                    .disabled(!has)
+                    .on_click(cx.listener(|this, _, _, cx| this.extract_to_current_folder(cx))),
             )
             .child(
                 Button::new("add")
