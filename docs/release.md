@@ -65,7 +65,7 @@ Vercel build 会在部署期间自动应用 Neon Postgres migrations;检查部�
 | 系统 | 命令 | 产物 |
 |---|---|---|
 | macOS | `packaging/macos/build-app.sh dist` | `RustZIP.app` 和 `RustZIP-<版本>-macos-<架构>.dmg` |
-| Windows | `iscc /DAppVersion=0.1.0 packaging\windows\rustzip.iss`(需先安装 x64-windows vcpkg 依赖并运行 `cargo build --release -p rustzip-gui -p rz-pdf-renderer`) | `RustZIP-<版本>-windows-x86_64.exe` |
+| Windows | `iscc /DAppVersion=<Cargo.toml workspace 版本> packaging\windows\rustzip.iss`(需先安装 x64-windows vcpkg 依赖并运行 `cargo build --release -p rustzip-gui -p rz-pdf-renderer`) | `RustZIP-<版本>-windows-x86_64.exe` |
 | Linux | `packaging/linux/build-tarball.sh dist` | `RustZIP-<版本>-linux-<架构>.tar.gz`,解开后 `./install.sh` |
 
 图标由 `cargo run --release -p rustzip-gui --example make_icons -- packaging/icons` 生成(`.icns`、`.ico`、各尺寸 PNG)。

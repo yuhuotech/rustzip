@@ -234,7 +234,7 @@ mod external_drag_tests {
             std::fs::canonicalize(&dragged_path).unwrap(),
             std::fs::canonicalize(&file).unwrap()
         );
-        assert_eq!(std::fs::read(dragged_path).unwrap(), b"OLE file drag");
+        assert_eq!(std::fs::read(&dragged_path).unwrap(), b"OLE file drag");
         // SAFETY: `medium` was initialized by GetData and has not been released yet.
         unsafe { ReleaseStgMedium(&mut medium) };
         let _ = std::fs::remove_file(file);

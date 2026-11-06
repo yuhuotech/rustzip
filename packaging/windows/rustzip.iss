@@ -1,5 +1,5 @@
 ; Inno Setup script for RustZIP. Build with:
-;   iscc /DAppVersion=0.1.0 /DSourceExe=..\..\target\release\rustzip.exe /DOutDir=..\..\dist packaging\windows\rustzip.iss
+;   iscc /DAppVersion=<workspace-version> /DSourceExe=..\..\target\release\rustzip.exe /DOutDir=..\..\dist packaging\windows\rustzip.iss
 ;
 ; It installs per user (no administrator rights), registers "Open with RustZIP" for the
 ; archive types, and adds Compress / Extract here to the Explorer right-click menu.
