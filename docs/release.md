@@ -1,5 +1,11 @@
 # 发布、更新与统计
 
+## 2026-11-06：v0.1.1 发布
+
+`v0.1.1` 指向合并提交 `5cb1d5c`。三平台 CI [42143850373](https://github.com/yuhuotech/rustzip/actions/runs/42143850373) 全部通过；Release dry-run [42145616837](https://github.com/yuhuotech/rustzip/actions/runs/42145616837) 的四个平台安装包构建、签名和 manifest 汇总验签通过，按 dry-run 规则未发布。推送 `v0.1.1` tag 后正式 Release [42152646094](https://github.com/yuhuotech/rustzip/actions/runs/42152646094) 全部 job 通过，并创建[公开 Release](https://github.com/yuhuotech/rustzip/releases/tag/v0.1.1)。
+
+从公开 Release 下载的 Linux x86_64、macOS arm64 / x86_64、Windows x86_64 包及 `update.json` 均由 `rz-release verify` 验证通过；本机逐项计算的 SHA-256 与清单一致。两个 macOS DMG 的 UDIF 校验和通过 `hdiutil verify`，公证票据通过 `xcrun stapler validate`。Windows 安装器仍未做 Authenticode 代码签名。
+
 ## 2026-11-05：v0.1.0 发布
 
 `v0.1.0` 指向提交 `4bfdca7`。三平台 CI 运行 41961692634 和四平台签名、公证 dry-run 41967554628（第 2 次尝试）通过；正式构建 41974947299 的四个构建及 manifest 汇总验签通过。首次发布 job 因未指定 GitHub 仓库而失败，已在后续提交修复；维护者从该正式构建下载 `release-bundle`，验签及验证两个 DMG 公证票据后创建公开 Release。再次从公开 Release 下载的四个包与 `update.json` 均通过客户端公钥验签，两个 DMG 的公证票据验证通过。Windows 安装器尚未代码签名，默认安装包不包含 RAR。
