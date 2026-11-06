@@ -33,6 +33,7 @@ use rz_core::{CancelToken, CreateOptions, Error};
 use rz_formats::OutputFormat;
 use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
@@ -107,6 +108,12 @@ pub struct Preview {
     pub image: Option<Arc<Image>>,
     pub text: Option<String>,
     pub audio: Option<Arc<[u8]>>,
+}
+
+struct ExternalDragExport {
+    entry: String,
+    _directory: tempfile::TempDir,
+    path: PathBuf,
 }
 
 #[derive(Clone, Copy)]
@@ -286,6 +293,10 @@ pub struct MainView {
     pub preview: Option<Preview>,
     preview_request: u64,
     preview_cancel: Option<(u64, CancelToken)>,
+    external_drag_export: Option<ExternalDragExport>,
+    external_drag_key: Option<(PathBuf, String)>,
+    external_drag_cancel: Option<CancelToken>,
+    external_drag_generation: u64,
     pdf_preview_status: Option<(PathBuf, String, PdfPreviewStatus)>,
     audio_preview_status: Option<(PathBuf, String, AudioPreviewStatus)>,
     audio_player: Option<AudioPlayer>,
@@ -326,6 +337,74 @@ pub fn load_archive(path: &Path, password: Option<&str>) -> Result<(ArchiveTree,
         ArchiveTree::build(entries),
         reader.format_name().to_string(),
     ))
+}
+
+fn stage_external_drag_file(
+    archive: PathBuf,
+    entry: rz_core::Entry,
+    password: Option<String>,
+    options: rz_engine::ExtractOptions,
+    cancel: CancelToken,
+) -> Result<ExternalDragExport, Error> {
+    cancel.check()?;
+    let mut reader = rz_formats::open(&archive)?;
+    if let Some(password) = password.as_deref() {
+        reader.set_password(password)?;
+    }
+    reader.set_read_control(cancel.clone(), options.max_total);
+    reader.set_ratio_limit(options.max_ratio, options.ratio_check_above);
+    reader.set_decode_config(options.threads, options.memory_budget);
+    if entry.kind != rz_core::EntryKind::File {
+        return Err(Error::Unsupported(
+            "Only regular files can be dragged out".into(),
+        ));
+    }
+    if entry.size > options.max_total {
+        return Err(Error::LimitExceeded(
+            "Selected file exceeds the extraction limit".into(),
+        ));
+    }
+    let name = entry
+        .path
+        .rsplit('/')
+        .next()
+        .filter(|name| rz_app::modify::valid_name(name))
+        .ok_or_else(|| Error::UnsafePath("Selected archive file name".into()))?;
+    let directory = tempfile::tempdir()?;
+    let output_path = rz_engine::safe_join(directory.path(), name)?;
+    let mut output = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&output_path)?;
+    let mut input = reader.open(&entry)?;
+    let mut bytes_written = 0u64;
+    let mut buffer = [0u8; 64 * 1024];
+    loop {
+        cancel.check()?;
+        let count = input.read(&mut buffer)?;
+        if count == 0 {
+            break;
+        }
+        bytes_written = bytes_written
+            .checked_add(count as u64)
+            .ok_or_else(|| Error::LimitExceeded("Selected file size overflow".into()))?;
+        if bytes_written > entry.size || bytes_written > options.max_total {
+            return Err(Error::LimitExceeded(
+                "Selected file exceeded its declared size".into(),
+            ));
+        }
+        output.write_all(&buffer[..count])?;
+    }
+    if bytes_written != entry.size {
+        return Err(Error::Corrupt("Selected archive file was truncated".into()));
+    }
+    output.sync_all()?;
+    cancel.check()?;
+    Ok(ExternalDragExport {
+        entry: entry.path,
+        _directory: directory,
+        path: output_path,
+    })
 }
 
 /// `128402` as `128,402`.
@@ -473,6 +552,10 @@ impl MainView {
             preview: None,
             preview_request: 0,
             preview_cancel: None,
+            external_drag_export: None,
+            external_drag_key: None,
+            external_drag_cancel: None,
+            external_drag_generation: 0,
             pdf_preview_status: None,
             audio_preview_status: None,
             audio_player: None,
@@ -597,6 +680,13 @@ impl MainView {
             t.delegate_mut().show(tree, &cwd, &filter);
             t.refresh(cx);
         });
+        if self.page == Page::Archive
+            && let Some(selected) = self.current().and_then(|archive| archive.selected.clone())
+        {
+            self.prepare_external_drag(selected, cx);
+        } else {
+            self.invalidate_external_drag(cx);
+        }
         cx.notify();
     }
 
@@ -876,25 +966,64 @@ impl MainView {
         .detach();
     }
 
-    /// Files dropped on the window: archives are opened, anything else is offered for compression.
+    /// Dropped archives open as tabs; files dropped on an editable archive are added there.
     pub fn handle_drop(
         &mut self,
         paths: Vec<PathBuf>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let (archives, others): (Vec<_>, Vec<_>) = paths.into_iter().partition(|p| {
-            p.is_file()
-                && rz_formats::open(p)
-                    .map(|_| true)
-                    .unwrap_or_else(|e| matches!(e, Error::Password))
-        });
-        for a in archives {
-            self.open_path(a, None, window, cx);
+        if paths.is_empty() {
+            return;
         }
-        if !others.is_empty() {
-            self.open_compress(others, window, cx);
-        }
+        let add_target = self
+            .can_edit()
+            .then(|| {
+                self.current()
+                    .map(|archive| (archive.path.clone(), archive.cwd.clone()))
+            })
+            .flatten();
+        cx.spawn_in(window, async move |this, cx| {
+            let (archives, others): (Vec<PathBuf>, Vec<PathBuf>) = cx
+                .background_executor()
+                .spawn(async move {
+                    paths.into_iter().partition(|path| {
+                        path.is_file()
+                            && rz_formats::open(path)
+                                .map(|_| true)
+                                .unwrap_or_else(|error| matches!(error, Error::Password))
+                    })
+                })
+                .await;
+            let _ = this.update_in(cx, |this, window, cx| {
+                for archive in &archives {
+                    this.open_path(archive.clone(), None, window, cx);
+                }
+                if others.is_empty() {
+                    return;
+                }
+                if archives.is_empty()
+                    && let Some((archive, into)) = add_target
+                    && this
+                        .archives
+                        .iter()
+                        .find(|open| open.path == archive)
+                        .is_some_and(|open| rz_app::modify::edit_format(&open.format).is_some())
+                {
+                    this.submit_edit_on(
+                        archive,
+                        rz_app::modify::Edit::Add {
+                            into,
+                            sources: others,
+                        },
+                        cx,
+                    );
+                } else {
+                    this.open_compress(others, window, cx);
+                }
+            });
+        })
+        .detach();
     }
 
     // ----- browsing --------------------------------------------------------------------
@@ -934,6 +1063,7 @@ impl MainView {
 
     /// Nothing is picked, but the table keeps its own highlight (for the "back" row).
     fn pick_nothing(&mut self, cx: &mut Context<Self>) {
+        self.invalidate_external_drag(cx);
         if let Some(a) = self.current_mut() {
             a.selected = None;
         }
@@ -1083,9 +1213,10 @@ impl MainView {
                     self.table
                         .update(cx, |t, _| t.delegate_mut().mark_only(&path));
                     if let Some(a) = self.current_mut() {
-                        a.selected = Some(path);
+                        a.selected = Some(path.clone());
                     }
                     self.leave_notice();
+                    self.prepare_external_drag(path, cx);
                     self.load_preview(cx);
                     cx.notify();
                 }
@@ -1113,6 +1244,104 @@ impl MainView {
             }
             _ => {}
         }
+    }
+
+    fn invalidate_external_drag(&mut self, cx: &mut Context<Self>) {
+        self.external_drag_generation = self.external_drag_generation.wrapping_add(1);
+        if let Some(cancel) = self.external_drag_cancel.take() {
+            cancel.cancel();
+        }
+        self.external_drag_key = None;
+        self.external_drag_export = None;
+        self.table.update(cx, |table, cx| {
+            table.delegate_mut().clear_external_drag_paths();
+            cx.notify();
+        });
+    }
+
+    fn prepare_external_drag(&mut self, path: String, cx: &mut Context<Self>) {
+        let Some(archive) = self.current() else {
+            self.invalidate_external_drag(cx);
+            return;
+        };
+        let Some(row) = archive
+            .tree
+            .find(&path)
+            .filter(|row| row.kind == RowKind::File)
+        else {
+            self.invalidate_external_drag(cx);
+            return;
+        };
+        let Some(entry) = row
+            .entry
+            .and_then(|index| archive.tree.entries().get(index).cloned())
+        else {
+            self.invalidate_external_drag(cx);
+            return;
+        };
+        let archive_path = archive.path.clone();
+        let password = archive.password.clone();
+        let key = (archive_path.clone(), entry.path.clone());
+        if self.external_drag_key.as_ref() == Some(&key) {
+            if let Some(export) = &self.external_drag_export {
+                let staged = export.path.clone();
+                let entry_path = export.entry.clone();
+                self.table.update(cx, |table, cx| {
+                    table
+                        .delegate_mut()
+                        .set_external_drag_path(&entry_path, staged);
+                    cx.notify();
+                });
+            }
+            return;
+        }
+
+        self.invalidate_external_drag(cx);
+        let generation = self.external_drag_generation;
+        self.external_drag_key = Some(key);
+        let cancel = CancelToken::new();
+        self.external_drag_cancel = Some(cancel.clone());
+        let options = self.settings.extract_options(password.clone());
+        let expected_entry = entry.path.clone();
+        let expected_archive = archive_path.clone();
+        cx.spawn(async move |this, cx| {
+            let result = cx
+                .background_executor()
+                .spawn(async move {
+                    stage_external_drag_file(archive_path, entry, password, options, cancel)
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                let still_selected = this.external_drag_generation == generation
+                    && this.external_drag_key.as_ref()
+                        == Some(&(expected_archive.clone(), expected_entry.clone()))
+                    && this.current().is_some_and(|opened| {
+                        opened.path == expected_archive
+                            && opened.selected.as_deref() == Some(path.as_str())
+                    });
+                if !still_selected {
+                    return;
+                }
+                this.external_drag_cancel = None;
+                match result {
+                    Ok(export) => {
+                        this.table.update(cx, |table, cx| {
+                            table
+                                .delegate_mut()
+                                .set_external_drag_path(&export.entry, export.path.clone());
+                            cx.notify();
+                        });
+                        this.external_drag_export = Some(export);
+                        cx.notify();
+                    }
+                    Err(Error::Cancelled) => {}
+                    Err(error) => {
+                        this.say(Notice::Error(explain(&this.settings.language, &error)), cx);
+                    }
+                }
+            });
+        })
+        .detach();
     }
 
     // ----- tasks -----------------------------------------------------------------------
@@ -1318,6 +1547,7 @@ impl MainView {
 
     /// Nothing is picked: not in the list, not for the details panel.
     pub fn clear_pick(&mut self, cx: &mut Context<Self>) {
+        self.invalidate_external_drag(cx);
         if let Some(a) = self.current_mut() {
             a.selected = None;
         }
@@ -1891,6 +2121,13 @@ impl MainView {
 
     /// Reads the archive again after it was changed, keeping the folder being shown.
     fn reload_archive(&mut self, path: PathBuf, cx: &mut Context<Self>) {
+        if self
+            .external_drag_key
+            .as_ref()
+            .is_some_and(|(archive, _)| *archive == path)
+        {
+            self.invalidate_external_drag(cx);
+        }
         if self.current().is_some_and(|archive| archive.path == path) {
             self.cancel_preview_request();
         }
@@ -1947,6 +2184,7 @@ impl MainView {
     /// Unpacks the picked file to a scratch folder and opens it with the program the
     /// system uses for that kind of file.
     pub fn open_selected(&mut self, cx: &mut Context<Self>) {
+        self.invalidate_external_drag(cx);
         let Some(row) = self.selected_row() else {
             self.say(
                 Notice::Info(self.tool_text("notice_select_file").into()),

@@ -40,12 +40,17 @@ $zipBefore = if (Test-Path -LiteralPath $zipKey) { (Get-Item -LiteralPath $zipKe
 if ($RarEnabled) { $buildArgs += @("--features", "rustzip-gui/rar") }
 & cargo @buildArgs
 if ($LASTEXITCODE -ne 0) { throw "Windows GUI build failed: $LASTEXITCODE" }
-$compilerArgs = @("/DAppVersion=0.1.0", "/DSourceExe=$exe", "/DOutDir=$dist")
+$workspaceMetadataJson = cargo metadata --no-deps --format-version 1 | Out-String
+if ($LASTEXITCODE -ne 0) { throw "Unable to read workspace version from Cargo metadata" }
+$workspaceMetadata = $workspaceMetadataJson | ConvertFrom-Json
+$appVersion = ($workspaceMetadata.packages | Where-Object { $_.name -eq "rustzip-gui" } | Select-Object -First 1).version
+if ([string]::IsNullOrWhiteSpace($appVersion)) { throw "Workspace GUI version is missing from Cargo metadata" }
+$compilerArgs = @("/DAppVersion=$appVersion", "/DSourceExe=$exe", "/DOutDir=$dist")
 if ($RarEnabled) { $compilerArgs += "/DRarEnabled" }
 $compilerArgs += "packaging\windows\rustzip.iss"
 & $iscc @compilerArgs
 if ($LASTEXITCODE -ne 0) { throw "Windows installer compilation failed: $LASTEXITCODE" }
-$installer = Join-Path $dist "RustZIP-0.1.0-windows-x86_64.exe"
+$installer = Join-Path $dist "RustZIP-$appVersion-windows-x86_64.exe"
 if (-not (Test-Path $installer)) { throw "Windows installer was not created" }
 
 try {

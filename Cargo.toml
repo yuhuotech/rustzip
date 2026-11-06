@@ -17,10 +17,10 @@ members = [
     "apps/preview-budget",
     "apps/video-renderer",
 ]
-exclude = ["vendor/libchm", "vendor/pbz2", "vendor/rust_h264", "vendor/xpress-huffman", "vendor/lzxd", "vendor/nsis-bzip2", "vendor/lzms", "vendor/apfs-core"]
+exclude = ["vendor/libchm", "vendor/pbz2", "vendor/rust_h264", "vendor/xpress-huffman", "vendor/lzxd", "vendor/nsis-bzip2", "vendor/lzms", "vendor/apfs-core", "vendor/gpui-pre-windows", "vendor/gpui-pre-linux"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 rust-version = "1.93"
@@ -52,6 +52,8 @@ crc32fast = "1"
 [patch.crates-io]
 pbz2 = { path = "vendor/pbz2" }
 rust_h264 = { path = "vendor/rust_h264" }
+gpui-pre-windows = { path = "vendor/gpui-pre-windows" }
+gpui-pre-linux = { path = "vendor/gpui-pre-linux" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
