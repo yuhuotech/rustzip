@@ -94,7 +94,7 @@ status_check_failed	校验未通过	Verification failed
 status_compression_ratio	压缩率 {ratio}%	Compressed to {ratio}% of original
 status_ready	就绪	Ready
 status_new_version	新版本 {version} · 更新	Update available: {version}
-status_downloading	正在下载 {version}…	Downloading {version}…
+status_downloading	正在下载 {version}… {progress}%	Downloading {version}… {progress}%
 go_up	上一级	Go up
 recent_column_name	名称	Name
 recent_column_size	大小	Size

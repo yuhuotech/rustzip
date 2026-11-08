@@ -95,7 +95,7 @@ status_check_failed	فشل التحقق
 status_compression_ratio	تم الضغط إلى {ratio}% من الحجم الأصلي
 status_ready	جاهز
 status_new_version	يتوفر تحديث: {version}
-status_downloading	جارٍ تنزيل {version}…
+status_downloading	جارٍ تنزيل {version}… {progress}%
 go_up	للأعلى
 recent_column_name	الاسم
 recent_column_size	الحجم

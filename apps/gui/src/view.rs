@@ -5466,10 +5466,11 @@ impl MainView {
                         )
                         .on_click(cx.listener(|this, _, _, cx| this.install_update(cx))),
                 ),
-                UpdateState::Downloading(u) => d.child(
+                UpdateState::Downloading(u, progress) => d.child(
                     div().text_color(p.fg2).child(
                         self.tool_text("status_downloading")
-                            .replace("{version}", &u.version.to_string()),
+                            .replace("{version}", &u.version.to_string())
+                            .replace("{progress}", &progress.to_string()),
                     ),
                 ),
             })

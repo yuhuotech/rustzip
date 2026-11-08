@@ -7,8 +7,11 @@
 use rz_app::stats::{Report, Sender};
 use rz_app::update::Fetcher;
 use rz_core::{Error, Result};
+use std::io::Read;
 use std::time::Duration;
 use ureq::Agent;
+
+const DOWNLOAD_CHUNK_BYTES: usize = 64 * 1024;
 
 fn agent(timeout: Duration, https_only: bool) -> Agent {
     Agent::config_builder()
@@ -51,14 +54,28 @@ impl Default for HttpFetcher {
 
 impl Fetcher for HttpFetcher {
     fn get(&self, url: &str, max_bytes: u64) -> Result<Vec<u8>> {
+        self.get_with_progress(url, max_bytes, &mut |_| {})
+    }
+
+    fn get_with_progress(
+        &self,
+        url: &str,
+        max_bytes: u64,
+        progress: &mut dyn FnMut(u64),
+    ) -> Result<Vec<u8>> {
         let mut response = self.agent.get(url).call().map_err(net_error)?;
-        // The limit is enforced while reading, so a hostile server cannot make us buffer more.
-        response
-            .body_mut()
-            .with_config()
-            .limit(max_bytes)
-            .read_to_vec()
-            .map_err(net_error)
+        let mut reader = response.body_mut().with_config().limit(max_bytes).reader();
+        let mut bytes = Vec::new();
+        let mut chunk = [0; DOWNLOAD_CHUNK_BYTES];
+        loop {
+            let count = reader.read(&mut chunk).map_err(net_error)?;
+            if count == 0 {
+                break;
+            }
+            bytes.extend_from_slice(&chunk[..count]);
+            progress(bytes.len() as u64);
+        }
+        Ok(bytes)
     }
 }
 
@@ -142,6 +159,22 @@ mod tests {
         (url, handle)
     }
 
+    fn serve_body_once(body_size: usize) -> (String, thread::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/", listener.local_addr().unwrap());
+        let handle = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0; 4096];
+            let _ = stream.read(&mut request).unwrap();
+            let header = format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {body_size}\r\nConnection: close\r\n\r\n"
+            );
+            stream.write_all(header.as_bytes()).unwrap();
+            stream.write_all(&vec![b'x'; body_size]).unwrap();
+        });
+        (url, handle)
+    }
+
     #[test]
     fn fetches_a_body_and_enforces_the_size_limit() {
         let (url, h) =
@@ -157,6 +190,25 @@ mod tests {
             "a body over the limit must be refused"
         );
         h.join().unwrap();
+    }
+
+    #[test]
+    fn fetch_with_progress_reports_each_bounded_body_chunk() {
+        let body_size = DOWNLOAD_CHUNK_BYTES * 3 + 19;
+        let (url, server) = serve_body_once(body_size);
+        let mut progress = Vec::new();
+
+        let bytes = HttpFetcher::insecure_for_tests()
+            .get_with_progress(&url, (body_size + 1) as u64, &mut |received| {
+                progress.push(received);
+            })
+            .unwrap();
+
+        server.join().unwrap();
+        assert_eq!(bytes, vec![b'x'; body_size]);
+        assert!(progress.len() > 1);
+        assert!(progress.windows(2).all(|pair| pair[0] < pair[1]));
+        assert_eq!(progress.last(), Some(&(body_size as u64)));
     }
 
     #[test]

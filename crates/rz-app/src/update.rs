@@ -49,6 +49,18 @@ pub struct Update {
 /// Retrieves bytes from a URL, refusing to read more than `max_bytes`.
 pub trait Fetcher {
     fn get(&self, url: &str, max_bytes: u64) -> Result<Vec<u8>>;
+
+    /// Retrieves bytes while reporting the number received so far.
+    fn get_with_progress(
+        &self,
+        url: &str,
+        max_bytes: u64,
+        progress: &mut dyn FnMut(u64),
+    ) -> Result<Vec<u8>> {
+        let bytes = self.get(url, max_bytes)?;
+        progress(bytes.len() as u64);
+        Ok(bytes)
+    }
 }
 
 /// The platform string used in manifests.
@@ -165,11 +177,22 @@ impl<'a, F: Fetcher> Updater<'a, F> {
 
     /// Downloads the asset and returns its bytes only if they verify.
     pub fn download(&self, update: &Update) -> Result<Vec<u8>> {
-        let bytes = self.fetcher.get(
+        self.download_with_progress(update, |_, _| {})
+    }
+
+    /// Downloads and verifies an asset, reporting received bytes against its signed size.
+    pub fn download_with_progress(
+        &self,
+        update: &Update,
+        mut progress: impl FnMut(u64, u64),
+    ) -> Result<Vec<u8>> {
+        let bytes = self.fetcher.get_with_progress(
             &update.asset.url,
             update.asset.size.saturating_add(SIZE_SLACK),
+            &mut |received| progress(received, update.asset.size),
         )?;
         verify_download(&bytes, update, &self.public_key)?;
+        progress(update.asset.size, update.asset.size);
         Ok(bytes)
     }
 }
@@ -250,6 +273,32 @@ mod tests {
         assert_eq!(found.version, Version::new(0, 2, 0));
         assert_eq!(found.notes, "Faster 7z");
         assert_eq!(up.download(&found).ok(), Some(body));
+    }
+
+    #[test]
+    fn verified_download_reports_received_and_signed_total_bytes() {
+        let body = b"signed installer bytes".to_vec();
+        let net = server(&manifest("0.2.0", &body), &body);
+        let updater = Updater::new(&net, "https://example.com/update.json", pubkey());
+        let update = updater
+            .check("0.1.0", "macos-aarch64")
+            .ok()
+            .flatten()
+            .expect("an update");
+        let mut progress = Vec::new();
+
+        let downloaded = updater
+            .download_with_progress(&update, |received, total| {
+                progress.push((received, total));
+            })
+            .expect("the signed update downloads");
+
+        assert_eq!(downloaded, body);
+        assert_eq!(
+            progress.last(),
+            Some(&(body.len() as u64, body.len() as u64))
+        );
+        assert_eq!(progress.len(), 2);
     }
 
     #[test]

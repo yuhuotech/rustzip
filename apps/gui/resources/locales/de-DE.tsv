@@ -95,7 +95,7 @@ status_check_failed	Überprüfung fehlgeschlagen
 status_compression_ratio	Auf {ratio} % der Originalgröße komprimiert
 status_ready	Bereit
 status_new_version	Update verfügbar: {version}
-status_downloading	{version} wird heruntergeladen…
+status_downloading	{version} wird heruntergeladen… {progress}%
 go_up	Nach oben
 recent_column_name	Name
 recent_column_size	Größe

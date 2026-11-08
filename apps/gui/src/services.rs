@@ -3,6 +3,7 @@
 //! runs on the background executor; the window only receives the result.
 
 use crate::view::{MainView, Notice, PasswordTarget};
+use gpui_kit::base::async_util::unbounded;
 use gpui_kit::{Context, Window};
 use rz_app::passwords::{MAX_AUTO_PASSWORD_CANDIDATES, PasswordBook, find_password_with_cancel};
 use rz_app::stats::{StatsState, report_if_due};
@@ -18,7 +19,20 @@ use std::time::{SystemTime, UNIX_EPOCH};
 #[derive(Debug, Clone)]
 pub enum UpdateState {
     Available(Update),
-    Downloading(Update),
+    Downloading(Update, u8),
+}
+
+enum UpdateDownloadEvent {
+    Progress(u8),
+    Finished(std::result::Result<(), String>),
+}
+
+fn download_percent(received: u64, total: u64) -> u8 {
+    if total == 0 {
+        0
+    } else {
+        (((u128::from(received.min(total)) * 100) / u128::from(total)) as u8).min(99)
+    }
 }
 
 enum PasswordSearchFailure {
@@ -178,9 +192,12 @@ fn download_and_open_update<F: Fetcher>(
     updater: &Updater<'_, F>,
     update: &Update,
     dir: &Path,
+    mut progress: impl FnMut(u64, u64),
     open: impl FnOnce(&Path) -> std::io::Result<()>,
 ) -> Result<(), String> {
-    let bytes = updater.download(update).map_err(|e| e.to_string())?;
+    let bytes = updater
+        .download_with_progress(update, &mut progress)
+        .map_err(|e| e.to_string())?;
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     let file = dir.join(download_name(&update.asset.url));
     std::fs::write(&file, bytes).map_err(|e| e.to_string())?;
@@ -223,42 +240,80 @@ impl MainView {
         let Some(UpdateState::Available(update)) = self.update.clone() else {
             return;
         };
-        self.update = Some(UpdateState::Downloading(update.clone()));
+        self.update = Some(UpdateState::Downloading(update.clone(), 0));
         cx.notify();
+        let (progress_tx, progress_rx) = unbounded();
         cx.spawn(async move |this, cx| {
             let job = update.clone();
-            let saved = cx
-                .background_executor()
+            let sender = progress_tx;
+            cx.background_executor()
                 .spawn(async move {
                     let fetcher = HttpFetcher::new();
                     let dir = std::env::temp_dir().join(format!("RustZIP-update-{}", job.version));
-                    download_and_open_update(
+                    let mut last_percent = 0;
+                    let result = download_and_open_update(
                         &Updater::new(&fetcher, UPDATE_MANIFEST_URL, UPDATE_PUBLIC_KEY),
                         &job,
                         &dir,
+                        |received, total| {
+                            let percent = download_percent(received, total);
+                            if percent > last_percent {
+                                last_percent = percent;
+                                let _ = sender.try_send(UpdateDownloadEvent::Progress(percent));
+                            }
+                        },
                         open_with_system,
-                    )
+                    );
+                    if result.is_ok() {
+                        let _ = sender.try_send(UpdateDownloadEvent::Progress(100));
+                    }
+                    let _ = sender.try_send(UpdateDownloadEvent::Finished(result));
                 })
-                .await;
-            let _ = this.update(cx, |this, cx| match saved {
-                Ok(()) => {
-                    this.update = None;
-                    this.say(
-                        Notice::Info(
-                            this.tool_text("update_installed")
-                                .replace("{version}", &update.version.to_string()),
-                        ),
-                        cx,
-                    );
+                .detach();
+
+            while let Ok(event) = progress_rx.recv().await {
+                match event {
+                    UpdateDownloadEvent::Progress(progress) => {
+                        let update = update.clone();
+                        let _ = this.update(cx, |this, cx| {
+                            let is_current = matches!(
+                                &this.update,
+                                Some(UpdateState::Downloading(current, _))
+                                    if current.version == update.version
+                            );
+                            if is_current {
+                                this.update = Some(UpdateState::Downloading(update, progress));
+                                cx.notify();
+                            }
+                        });
+                    }
+                    UpdateDownloadEvent::Finished(result) => {
+                        let update = update.clone();
+                        let _ = this.update(cx, |this, cx| match result {
+                            Ok(()) => {
+                                this.update = None;
+                                this.say(
+                                    Notice::Info(
+                                        this.tool_text("update_installed")
+                                            .replace("{version}", &update.version.to_string()),
+                                    ),
+                                    cx,
+                                );
+                            }
+                            Err(e) => {
+                                this.update = Some(UpdateState::Available(update));
+                                this.say(
+                                    Notice::Error(
+                                        this.tool_text("update_failed").replace("{error}", &e),
+                                    ),
+                                    cx,
+                                );
+                            }
+                        });
+                        break;
+                    }
                 }
-                Err(e) => {
-                    this.update = Some(UpdateState::Available(update));
-                    this.say(
-                        Notice::Error(this.tool_text("update_failed").replace("{error}", &e)),
-                        cx,
-                    );
-                }
-            });
+            }
         })
         .detach();
     }
@@ -493,6 +548,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn download_percent_is_bounded_and_reserves_full_completion_for_verification() {
+        assert_eq!(download_percent(0, 100), 0);
+        assert_eq!(download_percent(1, 4), 25);
+        assert_eq!(download_percent(99, 100), 99);
+        assert_eq!(download_percent(100, 100), 99);
+        assert_eq!(download_percent(101, 100), 99);
+        assert_eq!(download_percent(1, 0), 0);
+    }
+
+    #[test]
     fn programs_and_scripts_are_never_previewed() {
         for name in ["setup.EXE", "run.sh", "x.command", "a.app", "m.js", "k.lnk"] {
             assert!(is_runnable(name), "{name}");
@@ -562,21 +627,33 @@ mod tests {
             key.verifying_key().to_bytes(),
         );
         let called = Cell::new(false);
-        let result = download_and_open_update(&updater, &update, dir.path(), |path| {
-            called.set(true);
-            assert_eq!(std::fs::read(path).unwrap(), b"abc");
-            Err(std::io::Error::other("launch failed"))
-        });
+        let result = download_and_open_update(
+            &updater,
+            &update,
+            dir.path(),
+            |_, _| {},
+            |path| {
+                called.set(true);
+                assert_eq!(std::fs::read(path).unwrap(), b"abc");
+                Err(std::io::Error::other("launch failed"))
+            },
+        );
         assert!(called.get());
         assert!(result.unwrap_err().contains("launch failed"));
 
         called.set(false);
         assert!(
-            download_and_open_update(&updater, &update, dir.path(), |path| {
-                called.set(true);
-                assert_eq!(std::fs::read(path).unwrap(), b"abc");
-                Ok(())
-            })
+            download_and_open_update(
+                &updater,
+                &update,
+                dir.path(),
+                |_, _| {},
+                |path| {
+                    called.set(true);
+                    assert_eq!(std::fs::read(path).unwrap(), b"abc");
+                    Ok(())
+                }
+            )
             .is_ok()
         );
         assert!(called.get());
@@ -589,10 +666,16 @@ mod tests {
         );
         called.set(false);
         assert!(
-            download_and_open_update(&updater, &update, dir.path(), |_| {
-                called.set(true);
-                Ok(())
-            })
+            download_and_open_update(
+                &updater,
+                &update,
+                dir.path(),
+                |_, _| {},
+                |_| {
+                    called.set(true);
+                    Ok(())
+                }
+            )
             .is_err()
         );
         assert!(!called.get());

@@ -95,7 +95,7 @@ status_check_failed	Проверка не пройдена
 status_compression_ratio	Сжато до {ratio}% от исходного размера
 status_ready	Готово
 status_new_version	Доступно обновление: {version}
-status_downloading	Загрузка {version}…
+status_downloading	Загрузка {version}… {progress}%
 go_up	Вверх
 recent_column_name	Имя
 recent_column_size	Размер

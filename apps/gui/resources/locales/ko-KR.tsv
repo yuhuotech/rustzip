@@ -95,7 +95,7 @@ status_check_failed	확인 실패
 status_compression_ratio	원래 크기의 {ratio}%로 압축됨
 status_ready	준비됨
 status_new_version	업데이트 사용 가능: {version}
-status_downloading	{version} 다운로드 중…
+status_downloading	{version} 다운로드 중… {progress}%
 go_up	위로
 recent_column_name	이름
 recent_column_size	크기
