@@ -20,7 +20,7 @@ members = [
 exclude = ["vendor/libchm", "vendor/pbz2", "vendor/rust_h264", "vendor/xpress-huffman", "vendor/lzxd", "vendor/nsis-bzip2", "vendor/lzms", "vendor/apfs-core", "vendor/gpui-pre-windows", "vendor/gpui-pre-linux"]
 
 [workspace.package]
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 rust-version = "1.93"

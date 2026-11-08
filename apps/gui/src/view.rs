@@ -3525,6 +3525,7 @@ impl MainView {
                 Button::new("extract-current-folder")
                     .ghost()
                     .icon(IconName::FolderOpen)
+                    .label(self.tool_text("toolbar_extract_current"))
                     .tooltip(self.tool_text("toolbar_extract_current"))
                     .accessibility_label(self.tool_text("toolbar_extract_current"))
                     .disabled(!has)
