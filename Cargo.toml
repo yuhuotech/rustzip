@@ -10,6 +10,7 @@ members = [
     "crates/rz-services",
     "apps/cli",
     "apps/release",
+    "apps/updater",
     "apps/gpui-probe",
     "apps/gui",
     "apps/audio-preview",
@@ -48,6 +49,7 @@ widestring = "1.2.1"
 pbz2 = { version = "0.2.0", default-features = false }
 zip = { version = "9.1.3", default-features = false }
 crc32fast = "1"
+sysinfo = { version = "0.31.4", default-features = false, features = ["system"] }
 
 [patch.crates-io]
 pbz2 = { path = "vendor/pbz2" }

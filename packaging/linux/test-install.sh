@@ -32,9 +32,15 @@ cp "$root"/packaging/linux/install.sh "$package/install.sh"
 printf 'test executable\n' > "$package/rustzip"
 printf 'test PDF renderer\n' > "$package/rz-pdf-renderer"
 printf 'test video renderer\n' > "$package/rz-video-renderer"
+cp "${RZ_UPDATER_TEST_BINARY:-$root/target/debug/rz-updater}" "$package/rz-updater"
+version="$(awk -F'"' '/^version *=/ {print $2; exit}' "$root/Cargo.toml")"
+printf '{"schema":1,"version":"%s","platform":"linux-%s"}\n' "$version" "$(uname -m)" > "$package/update-layout.json"
 chmod +x "$package/rustzip" "$package/rz-pdf-renderer" "$package/rz-video-renderer"
 
 PREFIX="$prefix" XDG_DATA_HOME="$xdg" sh "$package/install.sh"
+test -L "$prefix/bin/rustzip"
+test -L "$prefix/lib/rustzip/current"
+test -f "$prefix/lib/rustzip/rustzip-install.json"
 installed=(
     "$xdg/kio/servicemenus/rustzip-servicemenu.desktop"
     "$xdg/kservices5/ServiceMenus/rustzip-servicemenu.desktop"
@@ -60,7 +66,7 @@ test -f "$prefix/share/doc/rustzip/mp4-mit.txt"
 test -f "$prefix/share/doc/rustzip/rust-h264-mit.txt"
 test -f "$prefix/share/doc/rustzip/rust-h264-apache-2.0.txt"
 
-PREFIX="$prefix" XDG_DATA_HOME="$xdg" sh "$package/install.sh" --uninstall
+PREFIX="$prefix" XDG_DATA_HOME="$tmp/a different XDG directory" sh "$package/install.sh" --uninstall
 for path in "${installed[@]}"; do
     test ! -e "$path" || { printf 'menu remained after uninstall: %s\n' "$path" >&2; exit 1; }
 done

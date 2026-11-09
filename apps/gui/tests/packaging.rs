@@ -25,6 +25,8 @@ const MACOS_QUICKLOOK_INFO: &str = include_str!("../../../packaging/macos/quickl
 const MACOS_QUICKLOOK_TEST: &str = include_str!("../../../packaging/macos/test-quicklook.sh");
 const LINUX_TARBALL: &str = include_str!("../../../packaging/linux/build-tarball.sh");
 const LINUX_INSTALL: &str = include_str!("../../../packaging/linux/install.sh");
+const LINUX_MANAGED_INSTALL: &str = include_str!("../../../crates/rz-app/src/update_install.rs");
+const UPDATE_PACKAGE: &str = include_str!("../../../crates/rz-app/src/update_package.rs");
 
 #[test]
 fn windows_open_with_and_extract_support_the_same_archive_extensions() {
@@ -88,10 +90,10 @@ fn chm_is_advertised_in_linux_descriptors() {
 #[test]
 fn linux_installer_targets_modern_and_legacy_dolphin_service_menu_paths() {
     assert!(LINUX_TARBALL.contains("cp packaging/linux/install.sh \"$stage/install.sh\""));
-    assert!(LINUX_INSTALL.contains("$data_home/kio/servicemenus"));
-    assert!(LINUX_INSTALL.contains("$data_home/kservices5/ServiceMenus"));
-    assert!(LINUX_INSTALL.contains("$kde6_service_menus/rustzip-servicemenu.desktop"));
-    assert!(LINUX_INSTALL.contains("$kde5_service_menus/rustzip-servicemenu.desktop"));
+    assert!(LINUX_INSTALL.contains("rz-updater\" --install"));
+    assert!(LINUX_MANAGED_INSTALL.contains("kio/servicemenus"));
+    assert!(LINUX_MANAGED_INSTALL.contains("kservices5/ServiceMenus"));
+    assert!(LINUX_MANAGED_INSTALL.contains("rustzip-servicemenu.desktop"));
     assert!(LINUX_DOLPHIN.contains("ServiceTypes=KonqPopupMenu/Plugin"));
 }
 
@@ -191,7 +193,8 @@ fn audio_playback_licenses_are_in_every_desktop_package() {
         } else {
             file
         };
-        assert!(LINUX_INSTALL.contains(installed_name));
+        assert!(LINUX_TARBALL.contains(installed_name));
+        assert!(LINUX_MANAGED_INSTALL.contains("share/doc/rustzip"));
     }
 }
 
@@ -212,7 +215,7 @@ fn video_preview_helper_and_licenses_are_in_every_desktop_package() {
         assert!(WINDOWS_INSTALLER.contains("rz-video-renderer.exe"));
         assert!(WINDOWS_INSTALLER.contains(file));
     }
-    assert!(LINUX_INSTALL.contains("rz-video-renderer"));
+    assert!(UPDATE_PACKAGE.contains("rz-video-renderer"));
 }
 
 #[test]
@@ -319,9 +322,14 @@ fn linux_packaging_keeps_rar_features_and_descriptors_in_sync() {
         &project.join("packaging/licenses"),
         &root.join("packaging/licenses"),
     );
-    fs::write(root.join("Cargo.toml"), "version = \"0.1.0\"\n").unwrap();
+    fs::write(
+        root.join("Cargo.toml"),
+        format!("version = \"{}\"\n", env!("CARGO_PKG_VERSION")),
+    )
+    .unwrap();
     fs::create_dir_all(root.join("build-output/release")).unwrap();
     fs::write(root.join("build-output/release/rustzip"), "fixture").unwrap();
+    fs::write(root.join("build-output/release/rz-updater"), "fixture").unwrap();
     fs::write(root.join("build-output/release/rz-pdf-renderer"), "fixture").unwrap();
     fs::write(
         root.join("build-output/release/rz-video-renderer"),
@@ -375,6 +383,7 @@ fn linux_packaging_keeps_rar_features_and_descriptors_in_sync() {
         );
         assert!(arguments.lines().any(|arg| arg == "rz-pdf-renderer"));
         assert!(arguments.lines().any(|arg| arg == "rz-video-renderer"));
+        assert!(arguments.lines().any(|arg| arg == "rz-updater"));
         let archive = fs::read_dir(&output)
             .unwrap()
             .next()
@@ -435,17 +444,7 @@ fn linux_packaging_keeps_rar_features_and_descriptors_in_sync() {
             } else {
                 "default-install-xdg"
             });
-            let install = Command::new("sh")
-                .arg(package.join("install.sh"))
-                .env("PREFIX", &prefix)
-                .env("XDG_DATA_HOME", &xdg)
-                .output()
-                .unwrap();
-            assert!(
-                install.status.success(),
-                "{}",
-                String::from_utf8_lossy(&install.stderr)
-            );
+            rz_app::update_install::install_linux(&package, &prefix, &xdg, false).unwrap();
             let installed = [
                 xdg.join("kio/servicemenus/rustzip-servicemenu.desktop"),
                 xdg.join("kservices5/ServiceMenus/rustzip-servicemenu.desktop"),
@@ -485,18 +484,7 @@ fn linux_packaging_keeps_rar_features_and_descriptors_in_sync() {
                     .is_file()
             );
 
-            let uninstall = Command::new("sh")
-                .arg(package.join("install.sh"))
-                .arg("--uninstall")
-                .env("PREFIX", &prefix)
-                .env("XDG_DATA_HOME", &xdg)
-                .output()
-                .unwrap();
-            assert!(
-                uninstall.status.success(),
-                "{}",
-                String::from_utf8_lossy(&uninstall.stderr)
-            );
+            rz_app::update_install::install_linux(&package, &prefix, &xdg, true).unwrap();
             for path in installed {
                 assert!(
                     !path.exists(),

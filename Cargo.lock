@@ -7068,6 +7068,7 @@ version = "0.1.6"
 dependencies = [
  "blake3",
  "ed25519-dalek",
+ "flate2",
  "getrandom 0.4.3",
  "rz-core",
  "rz-engine",
@@ -7077,6 +7078,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.11.1",
+ "tar",
  "tempfile",
  "zeroize",
  "zip",
@@ -7171,8 +7173,11 @@ name = "rz-platform"
 version = "0.1.6"
 dependencies = [
  "dirs 6.0.0",
+ "libc",
  "reflink-copy",
+ "sysinfo",
  "tempfile",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -7203,6 +7208,19 @@ dependencies = [
  "trash",
  "ureq",
  "zeroize",
+]
+
+[[package]]
+name = "rz-updater"
+version = "0.1.6"
+dependencies = [
+ "ed25519-dalek",
+ "flate2",
+ "rz-app",
+ "serde_json",
+ "sha2 0.11.1",
+ "tar",
+ "zip",
 ]
 
 [[package]]

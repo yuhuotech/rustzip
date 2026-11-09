@@ -36,7 +36,7 @@ $exe = Join-Path $PWD "target\release\rustzip.exe"
 $zipKey = "$classes\.zip"
 $zipBefore = if (Test-Path -LiteralPath $zipKey) { (Get-Item -LiteralPath $zipKey).GetValue("") } else { $null }
 
-    $buildArgs = @("build", "--release", "-p", "rustzip-gui", "-p", "rz-pdf-renderer", "-p", "rz-video-renderer")
+    $buildArgs = @("build", "--release", "-p", "rustzip-gui", "-p", "rz-updater", "-p", "rz-pdf-renderer", "-p", "rz-video-renderer")
 if ($RarEnabled) { $buildArgs += @("--features", "rustzip-gui/rar") }
 & cargo @buildArgs
 if ($LASTEXITCODE -ne 0) { throw "Windows GUI build failed: $LASTEXITCODE" }
@@ -45,6 +45,7 @@ if ($LASTEXITCODE -ne 0) { throw "Unable to read workspace version from Cargo me
 $workspaceMetadata = $workspaceMetadataJson | ConvertFrom-Json
 $appVersion = ($workspaceMetadata.packages | Where-Object { $_.name -eq "rustzip-gui" } | Select-Object -First 1).version
 if ([string]::IsNullOrWhiteSpace($appVersion)) { throw "Workspace GUI version is missing from Cargo metadata" }
+& "$PSScriptRoot\build-update-zip.ps1" -Version $appVersion -OutputDir $dist -RarEnabled:$RarEnabled
 $compilerArgs = @("/DAppVersion=$appVersion", "/DSourceExe=$exe", "/DOutDir=$dist")
 if ($RarEnabled) { $compilerArgs += "/DRarEnabled" }
 $compilerArgs += "packaging\windows\rustzip.iss"
@@ -62,7 +63,7 @@ try {
         if (Test-Path $installLog) { Get-Content $installLog | ForEach-Object { Write-Host $_ } }
         throw "Installer failed: $($process.ExitCode)"
     }
-    $installedFiles = @("rustzip.exe", "rz-pdf-renderer.exe", "rz-video-renderer.exe", "licenses\zlib.txt", "licenses\libchm.txt", "licenses\pbz2.txt", "licenses\pbz2-notice.txt", "licenses\pdf-renderer.txt", "licenses\audio-playback.txt", "licenses\rodio-mit.txt", "licenses\rodio-apache-2.0.txt", "licenses\cpal-apache-2.0.txt", "licenses\symphonia-mpl-2.0.txt", "licenses\video-preview.txt", "licenses\mp4-mit.txt", "licenses\rust-h264-mit.txt", "licenses\rust-h264-apache-2.0.txt", "licenses\inno-chinese-translation.txt")
+    $installedFiles = @("rustzip.exe", "rz-updater.exe", "update-layout.json", "rustzip-install.json", "rz-pdf-renderer.exe", "rz-video-renderer.exe", "licenses\zlib.txt", "licenses\libchm.txt", "licenses\pbz2.txt", "licenses\pbz2-notice.txt", "licenses\pdf-renderer.txt", "licenses\audio-playback.txt", "licenses\rodio-mit.txt", "licenses\rodio-apache-2.0.txt", "licenses\cpal-apache-2.0.txt", "licenses\symphonia-mpl-2.0.txt", "licenses\video-preview.txt", "licenses\mp4-mit.txt", "licenses\rust-h264-mit.txt", "licenses\rust-h264-apache-2.0.txt", "licenses\inno-chinese-translation.txt")
     if ($RarEnabled) { $installedFiles += "unrar-license.txt" }
     foreach ($file in $installedFiles) {
         if (-not (Test-Path -LiteralPath (Join-Path $install $file))) {

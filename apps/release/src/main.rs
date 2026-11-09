@@ -10,9 +10,12 @@
 //! the repository.
 
 use ed25519_dalek::{Signer, SigningKey};
-use rz_app::update::{hex, parse_manifest, signed_message, verify_asset, Asset, Manifest};
+use rz_app::update::{
+    hex, parse_manifest, signed_message, verify_asset_reader, Asset, Manifest, MAX_UPDATE_SIZE,
+};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
+use std::io::Read;
 use std::path::Path;
 use std::process::ExitCode;
 
@@ -129,13 +132,32 @@ fn sign_with(
     file: &str,
     url: &str,
 ) -> Result<String, String> {
-    let bytes = std::fs::read(file).map_err(|e| format!("{file}: {e}"))?;
-    let sha256 = hex(&Sha256::digest(&bytes));
+    let mut input = std::fs::File::open(file).map_err(|e| format!("{file}: {e}"))?;
+    let mut digest = Sha256::new();
+    let mut size = 0u64;
+    let mut buffer = [0u8; 64 * 1024];
+    loop {
+        let count = input
+            .read(&mut buffer)
+            .map_err(|e| format!("{file}: {e}"))?;
+        if count == 0 {
+            break;
+        }
+        size += count as u64;
+        if size > MAX_UPDATE_SIZE {
+            return Err(format!("{file}: update package exceeds the client limit"));
+        }
+        digest.update(&buffer[..count]);
+    }
+    if size == 0 {
+        return Err(format!("{file}: update package is empty"));
+    }
+    let sha256 = hex(&digest.finalize());
     let signature = key.sign(&signed_message(version, platform, &sha256));
     let asset = Asset {
         platform: platform.to_string(),
         url: url.to_string(),
-        size: bytes.len() as u64,
+        size,
         sha256,
         signature: hex(&signature.to_bytes()),
     };
@@ -214,8 +236,9 @@ fn verify_manifest_assets(
         if metadata.len() != asset.size {
             return Err(format!("{} asset size does not match", asset.platform));
         }
-        let bytes = std::fs::read(&path).map_err(|e| format!("{} asset: {e}", asset.platform))?;
-        verify_asset(&bytes, &manifest.version, asset, public_key)
+        let file =
+            std::fs::File::open(&path).map_err(|e| format!("{} asset: {e}", asset.platform))?;
+        verify_asset_reader(file, &manifest.version, asset, public_key)
             .map_err(|e| format!("{} asset: {e}", asset.platform))?;
     }
     Ok(platforms.into_iter().map(str::to_string).collect())

@@ -31,6 +31,8 @@ fi
 version="$(awk -F'"' '/^version *=/ {print $2; exit}' "$root/Cargo.toml")"
 
 cd "$root"
+python3 -c 'import re,sys; rust,swift=(open(p,encoding="utf-8").read() for p in sys.argv[1:]); key="".join(re.findall(r"0x([0-9a-fA-F]{2})",rust)).lower(); keys=re.findall(r"let keyHex = \"([0-9a-f]{64})\"",swift); assert len(keys)==2 and keys[-1]==key, "macOS helper update key differs from the Rust client"' \
+    crates/rz-services/src/update_key.in packaging/macos/update-helper.swift
 if [ -n "$target" ]; then
     cargo build --release -p rustzip-gui -p rz-pdf-renderer -p rz-video-renderer --target "$target" "$@"
     bin="$build_root/$target/release/rustzip"

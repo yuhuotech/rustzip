@@ -16,6 +16,12 @@
 #ifndef VideoRendererExe
   #define VideoRendererExe "..\..\target\release\rz-video-renderer.exe"
 #endif
+#ifndef UpdaterExe
+  #define UpdaterExe "..\..\target\release\rz-updater.exe"
+#endif
+#ifndef LayoutFile
+  #define LayoutFile "..\..\target\release\update-layout.json"
+#endif
 #ifndef OutDir
   #define OutDir "..\..\dist"
 #endif
@@ -62,6 +68,8 @@ Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: 
 Source: "{#SourceExe}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PdfRendererExe}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#VideoRendererExe}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#UpdaterExe}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#LayoutFile}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\licenses\pbz2.txt"; DestDir: "{app}\licenses"; DestName: "pbz2.txt"; Flags: ignoreversion
 Source: "..\licenses\pbz2-notice.txt"; DestDir: "{app}\licenses"; DestName: "pbz2-notice.txt"; Flags: ignoreversion
 Source: "{#VcpkgShare}\zlib\copyright"; DestDir: "{app}\licenses"; DestName: "zlib.txt"; Flags: ignoreversion
@@ -93,6 +101,7 @@ Name: "{group}\RustZIP"; Filename: "{app}\rustzip.exe"
 Name: "{autodesktop}\RustZIP"; Filename: "{app}\rustzip.exe"; Tasks: desktopicon
 
 [Registry]
+Root: HKA; Subkey: "Software\Yuhuo\RustZIP"; ValueType: string; ValueName: "InstallDir"; ValueData: "{app}"; Flags: uninsdeletekey
 ; The program itself, so Windows can list it under "Open with".
 Root: HKCU; Subkey: "Software\Classes\Applications\rustzip.exe\shell\open\command"; ValueType: string; ValueData: """{app}\rustzip.exe"" ""%1"""; Tasks: openwith; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Classes\Applications\rustzip.exe"; ValueType: string; ValueName: "FriendlyAppName"; ValueData: "RustZIP"; Tasks: openwith; Flags: uninsdeletekey
@@ -191,3 +200,31 @@ Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.dmg\shell\RustZIP.
 
 [Run]
 Filename: "{app}\rustzip.exe"; Description: "启动 RustZIP"; Flags: nowait postinstall skipifsilent
+
+[UninstallDelete]
+Type: files; Name: "{app}\rustzip-install.json"
+
+[Code]
+function JsonString(Value: String): String;
+begin
+  StringChangeEx(Value, '\', '\\', True);
+  StringChangeEx(Value, '"', '\"', True);
+  Result := '"' + Value + '"';
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  MachineValue: String;
+  RecordValue: String;
+  RecordLines: TArrayOfString;
+begin
+  if CurStep = ssPostInstall then
+  begin
+    if IsAdminInstallMode then MachineValue := 'true' else MachineValue := 'false';
+    RecordValue := '{"schema":1,"kind":"windows","root":' + JsonString(ExpandConstant('{app}')) + ',"machine":' + MachineValue + '}';
+    SetArrayLength(RecordLines, 1);
+    RecordLines[0] := RecordValue;
+    if not SaveStringsToUTF8FileWithoutBOM(ExpandConstant('{app}\rustzip-install.json'), RecordLines, False) then
+      RaiseException('Could not record the RustZIP installation.');
+  end;
+end;

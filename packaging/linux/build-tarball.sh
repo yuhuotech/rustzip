@@ -22,11 +22,12 @@ set --
 if [ "${RZ_WITH_RAR:-0}" = "1" ]; then
     set -- --features rustzip-gui/rar
 fi
-cargo build --release -p rustzip-gui -p rz-pdf-renderer -p rz-video-renderer "$@"
+cargo build --release -p rustzip-gui -p rz-updater -p rz-pdf-renderer -p rz-video-renderer "$@"
 
 stage="$(mktemp -d)/$name"
 mkdir -p "$stage/icons"
 cp "$build_root/release/rustzip" "$stage/"
+cp "$build_root/release/rz-updater" "$stage/"
 cp "$build_root/release/rz-pdf-renderer" "$stage/"
 cp "$build_root/release/rz-video-renderer" "$stage/"
 cp packaging/linux/*.desktop packaging/linux/*.nemo_action packaging/linux/rustzip-nautilus-* "$stage/"
@@ -56,9 +57,11 @@ if [ "${RZ_WITH_RAR:-0}" = "1" ]; then
     cp packaging/licenses/unrar.txt "$stage/unrar-license.txt"
 fi
 cp packaging/icons/hicolor/*.png "$stage/icons/"
-chmod +x "$stage/install.sh" "$stage/rustzip" "$stage/rz-pdf-renderer" "$stage/rz-video-renderer"
+printf '{"schema":1,"version":"%s","platform":"linux-%s"}\n' "$version" "$arch" > "$stage/update-layout.json"
+chmod +x "$stage/install.sh" "$stage/rustzip" "$stage/rz-updater" "$stage/rz-pdf-renderer" "$stage/rz-video-renderer"
+chmod +x "$stage/rustzip-servicemenu.desktop" "$stage/rustzip-nautilus-compress" "$stage/rustzip-nautilus-extract-here"
 
 mkdir -p "$out"
-tar -C "$(dirname "$stage")" -czf "$out/$name.tar.gz" "$name"
+tar --format=ustar -C "$(dirname "$stage")" -czf "$out/$name.tar.gz" "$name"
 rm -rf "$(dirname "$stage")"
 echo "$out/$name.tar.gz"

@@ -32,7 +32,9 @@ jobs:
         run: packaging/macos/test-homebrew-library-bundling.sh
       - name: Smoke test Linux desktop integration installer
         if: runner.os == 'Linux'
-        run: bash packaging/linux/test-install.sh
+        run: |
+          cargo build -p rz-updater
+          bash packaging/linux/test-install.sh
       - name: Save vcpkg binary packages before tests
         if: runner.os == 'Windows'
         uses: actions/cache/save@v4
@@ -46,6 +48,13 @@ jobs:
       # The optional RAR reader builds the unRAR C++ sources.
       - run: cargo clippy --workspace --exclude rustzip-gui --exclude gpui-probe --all-targets --all-features -- -D warnings
       - run: cargo test --workspace --exclude rustzip-gui --exclude gpui-probe --all-features
+      - name: Test Linux update and rollback transactions
+        if: runner.os == 'Linux'
+        run: bash packaging/linux/test-update.sh
+      - name: Test Windows update and rollback transactions
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./packaging/windows/test-update.ps1
       - name: Smoke test Windows system keychain
         if: runner.os == 'Windows'
         run: cargo test -p rz-services --all-features keychain::tests::round_trip_through_the_real_keychain -- --ignored --exact

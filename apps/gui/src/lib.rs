@@ -149,6 +149,21 @@ struct MainRef {
 
 impl Global for MainRef {}
 
+#[derive(Default)]
+struct MainWindows(Vec<WeakEntity<MainView>>);
+impl Global for MainWindows {}
+
+pub(crate) fn other_windows_busy(current: EntityId, cx: &App) -> bool {
+    cx.try_global::<MainWindows>().is_some_and(|windows| {
+        windows
+            .0
+            .iter()
+            .filter(|view| view.entity_id() != current)
+            .filter_map(WeakEntity::upgrade)
+            .any(|view| view.read(cx).has_pending_work())
+    })
+}
+
 /// Hands a launch action to the window that is already open; false when there is none yet.
 pub fn open_in_running_window(paths: Vec<PathBuf>, cx: &mut App) -> bool {
     open_launch_in_running_window(
@@ -205,6 +220,9 @@ pub fn forward_open_urls(rx: std::sync::mpsc::Receiver<launch::Launch>, cx: &mut
             cx.background_executor()
                 .timer(std::time::Duration::from_millis(200))
                 .await;
+            if rz_app::update_runtime::startup_pending() {
+                continue;
+            }
             while let Ok(request) = rx.try_recv() {
                 cx.update(|cx| {
                     if !open_launch_in_running_window(&request, cx) {
@@ -240,6 +258,13 @@ pub fn open_main_window(launch: launch::Launch, cx: &mut App) {
         let path = settings_path();
         let settings = path.as_deref().map(Settings::load).unwrap_or_default();
         let main = cx.new(|cx| MainView::new(settings, path, window, cx));
+        if !cx.has_global::<MainWindows>() {
+            cx.set_global(MainWindows::default());
+        }
+        cx.global_mut::<MainWindows>()
+            .0
+            .retain(|view| view.upgrade().is_some());
+        cx.global_mut::<MainWindows>().0.push(main.downgrade());
         main.update(cx, |m, _| {
             m.history_path = history::history_path();
             if let Some(p) = &m.history_path {
