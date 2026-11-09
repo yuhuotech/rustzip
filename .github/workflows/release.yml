@@ -271,12 +271,27 @@ jobs:
             "$bin" check-key
           fi
           "$bin" sign "${{ steps.v.outputs.version }}" "${{ matrix.platform }}" "$file" "$url" > "dist/${{ matrix.platform }}.asset.json"
+          if [[ "${{ matrix.platform }}" == macos-* ]]; then
+            shopt -s nullglob
+            zip_packages=( dist/RustZIP-*.zip )
+            shopt -u nullglob
+            if [[ ${#zip_packages[@]} -ne 1 ]]; then
+              echo "Expected one macOS update ZIP, found ${#zip_packages[@]}" >&2
+              exit 1
+            fi
+            zip_file="${zip_packages[0]}"
+            zip_name="$(basename "$zip_file")"
+            zip_url="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/$zip_name"
+            "$bin" sign "${{ steps.v.outputs.version }}" "${{ matrix.platform }}-zip" \
+              "$zip_file" "$zip_url" > "dist/${{ matrix.platform }}-zip.asset.json"
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.platform }}
           path: |
             dist/RustZIP-*.dmg
+            dist/RustZIP-*.zip
             dist/RustZIP-*.exe
             dist/RustZIP-*.tar.gz
             dist/*.asset.json
@@ -425,7 +440,7 @@ jobs:
             fi
             version="$tag_version"
           fi
-          expected_platforms="$(printf '%s\n' linux-x86_64 macos-aarch64 macos-x86_64 windows-x86_64 | sort)"
+          expected_platforms="$(printf '%s\n' linux-x86_64 macos-aarch64 macos-aarch64-zip macos-x86_64 macos-x86_64-zip windows-x86_64 | sort)"
           actual_platforms="$(jq -r '.platform' artifacts/*.asset.json | sort)"
           if [[ "$actual_platforms" != "$expected_platforms" ]]; then
             echo "Expected exactly these release platforms:" >&2

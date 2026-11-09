@@ -29,7 +29,7 @@
 1. 改根 `Cargo.toml` 里 `[workspace.package] version`,提交。
 2. 先在 `main` 上手动触发 Release workflow，保留默认 `dry_run=true`；它会生成一次性测试密钥、构建四个平台产物、签名并校验平台集合和实际文件，保存名为 `release-dry-run-bundle` 的 14 天 artifact。测试签名不匹配应用公钥，dry-run 包不能用于更新安装。
 3. 检查三平台 CI 和 dry-run artifact 后创建并推送对应的 `v*` tag，推送会自动触发正式 Release。也可以从已有 tag 手动触发并将 `dry_run` 设为 `false`；不要同时运行两次。workflow 会再次检查 tag 与 `Cargo.toml` 版本一致，只有四个平台资产全部存在且客户端公钥验签通过才会发布。
-4. 发布后 `.github/workflows/release.yml` 创建 GitHub Release 并上传四个平台安装包和 `update.json`。
+4. 发布后 `.github/workflows/release.yml` 创建 GitHub Release，上传四个平台安装包、两个 macOS 更新 ZIP 和 `update.json`。
 5. 已安装的用户下次启动时,从 `https://github.com/yuhuotech/rustzip/releases/latest/download/update.json` 读到新版本,状态栏出现"新版本 x.y.z · 更新"。
 
 Dry-run 默认不创建 GitHub Release，也不提交 Apple notarization 请求。其一次性私钥只在 1 天有效的单独 workflow artifact 中供 matrix jobs 共享，最终 dry-run bundle 不包含该密钥。正式发布使用已经安全保管的 `RZ_UPDATE_KEY`，并以应用内置公钥验签；生产私钥不会写入仓库或任何 workflow artifact。
@@ -47,9 +47,10 @@ GitHub macOS runner 上 `notarytool store-credentials` 可能异常退出，CI �
 - `update.json` 每个条目带 SHA-256 和 Ed25519 签名,签名内容是"版本 + 平台 + 文件哈希"。
 - 客户端只信内置公钥,不信 GitHub、TLS 或重定向:大小、哈希、签名任何一项不对,下载直接丢弃。
 - 只接受 https;不会降级到旧版本;稳定版用户不会被推送预发布版。
-- 下载后 macOS 由已签名 helper 只读挂载 DMG，核对 app 的 Bundle ID、版本和 Developer ID Team；GUI 会等当前任务结束后退出，再替换并重启。目录不可写时会显示 macOS 管理员授权。helper 保留旧 app 直到 Launch Services 接受新 app 启动，替换或启动失败时回滚并打开旧版本。
+- macOS 的 DMG 用于手动安装，ZIP 用于新客户端更新。helper 在普通用户上下文中验证文件哈希并解包 ZIP 或只读挂载兼容用 DMG，核对 app 的 Bundle ID、版本和 Developer ID Team；GUI 会等当前任务结束后退出，再替换并重启。目录不可写时会显示 macOS 管理员授权；授权进程不解包，重新校验暂存 app 后才替换。helper 保留旧 app 直到 Launch Services 接受新 app 启动，替换或启动失败时回滚并打开旧版本。
 - Windows 仍打开已验签的安装程序；Linux 仍打开已验签 tarball 所在文件夹。
-- 已发布的 v0.1.4 不含更新 helper，升级到 v0.1.5 需要按现有流程手动安装一次；之后 macOS 更新会在应用内自动替换并重启。
+- 已发布的 v0.1.4 不含更新 helper，需要手动安装新版本；v0.1.5 只支持 DMG，因此更新到 v0.1.6 仍使用 DMG 自动安装。v0.1.6 及以上客户端优先选择清单中独立签名的 `macos-<架构>-zip` 条目；旧版使用原有 DMG 条目，两者都保留在清单中。
+- 正式包先公证 DMG 并将票据分别附着到 DMG 和 app，再用 `ditto` 将已附票据的 app 打成 ZIP；发布前重新解包 ZIP，验证 app 签名及公证票据。
 
 ## 匿名统计
 
@@ -72,7 +73,7 @@ Vercel build 会在部署期间自动应用 Neon Postgres migrations;检查部�
 
 | 系统 | 命令 | 产物 |
 |---|---|---|
-| macOS | `packaging/macos/build-app.sh dist` | `RustZIP.app` 和 `RustZIP-<版本>-macos-<架构>.dmg` |
+| macOS | `packaging/macos/build-app.sh dist` | `RustZIP.app`、手动安装 DMG 和自动更新 ZIP |
 | Windows | `iscc /DAppVersion=<Cargo.toml workspace 版本> packaging\windows\rustzip.iss`(需先安装 x64-windows vcpkg 依赖并运行 `cargo build --release -p rustzip-gui -p rz-pdf-renderer`) | `RustZIP-<版本>-windows-x86_64.exe` |
 | Linux | `packaging/linux/build-tarball.sh dist` | `RustZIP-<版本>-linux-<架构>.tar.gz`,解开后 `./install.sh` |
 

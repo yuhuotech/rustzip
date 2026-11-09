@@ -352,4 +352,57 @@ mod tests {
         };
         assert!(verify_manifest_assets(&duplicate, dir.path(), &public_key).is_err());
     }
+
+    #[test]
+    fn macos_release_verifies_both_assets_and_keeps_legacy_dmg_compatible() {
+        let dir = tempfile::tempdir().unwrap();
+        let key = SigningKey::from_bytes(&[7; 32]);
+        let version = "0.2.0";
+        let mut assets = Vec::new();
+        for (suffix, platform, contents) in [
+            ("dmg", "macos-aarch64", b"dmg bytes".as_slice()),
+            ("zip", "macos-aarch64-zip", b"zip bytes".as_slice()),
+        ] {
+            let name = format!("RustZIP-{version}-macos-aarch64.{suffix}");
+            let path = dir.path().join(&name);
+            std::fs::write(&path, contents).unwrap();
+            let json = sign_with(
+                &key,
+                version,
+                platform,
+                path.to_str().unwrap(),
+                &format!("https://example.com/{name}"),
+            )
+            .unwrap();
+            assets.push(serde_json::from_str::<Asset>(&json).unwrap());
+        }
+        let manifest = Manifest {
+            version: version.into(),
+            notes: String::new(),
+            assets,
+        };
+        let public_key = key.verifying_key().to_bytes();
+        assert_eq!(
+            verify_manifest_assets(&manifest, dir.path(), &public_key).unwrap(),
+            ["macos-aarch64", "macos-aarch64-zip"]
+        );
+        let legacy = manifest
+            .assets
+            .iter()
+            .find(|asset| asset.platform == "macos-aarch64")
+            .unwrap();
+        assert!(legacy.url.ends_with(".dmg"));
+        let update = select_update(&manifest, "0.1.5", "macos-aarch64")
+            .unwrap()
+            .unwrap();
+        assert!(update.asset.url.ends_with(".zip"));
+        assert!(verify_download(b"zip bytes", &update, &public_key).is_ok());
+
+        std::fs::write(
+            dir.path().join("RustZIP-0.2.0-macos-aarch64.zip"),
+            b"tampered",
+        )
+        .unwrap();
+        assert!(verify_manifest_assets(&manifest, dir.path(), &public_key).is_err());
+    }
 }

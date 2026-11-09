@@ -102,7 +102,7 @@ cargo run --release -p rustzip-gui -- 某个压缩包.zip
 cargo run --release -p rz -- l 某个压缩包.zip
 ```
 
-macOS 的 `.app / .dmg`、Windows 安装脚本和 Linux 压缩包的打包文件在 [`packaging/`](packaging/)，发布流程见 [`docs/release.md`](docs/release.md)。
+macOS 的 `.app / .dmg / .zip`、Windows 安装脚本和 Linux 压缩包的打包文件在 [`packaging/`](packaging/)，发布流程见 [`docs/release.md`](docs/release.md)。
 
 ## 使用说明
 

@@ -86,7 +86,13 @@ fn app_bundle_from_executable(executable: &Path) -> Option<PathBuf> {
 }
 
 #[cfg(target_os = "macos")]
-fn install_macos_update(path: &Path, version: &str, language: &str) -> std::io::Result<()> {
+fn install_macos_update(
+    path: &Path,
+    version: &str,
+    language: &str,
+    format: &str,
+    sha256: &str,
+) -> std::io::Result<()> {
     use std::os::unix::process::CommandExt;
     use std::process::Stdio;
 
@@ -105,9 +111,19 @@ fn install_macos_update(path: &Path, version: &str, language: &str) -> std::io::
     Command::new(helper)
         .args(["--app"])
         .arg(app)
-        .args(["--dmg"])
+        .args(["--archive"])
         .arg(path)
-        .args(["--version", version, "--language", language, "--pid"])
+        .args([
+            "--format",
+            format,
+            "--sha256",
+            sha256,
+            "--version",
+            version,
+            "--language",
+            language,
+            "--pid",
+        ])
         .arg(std::process::id().to_string())
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -118,7 +134,13 @@ fn install_macos_update(path: &Path, version: &str, language: &str) -> std::io::
 }
 
 #[cfg(not(target_os = "macos"))]
-fn install_macos_update(path: &Path, _version: &str, _language: &str) -> std::io::Result<()> {
+fn install_macos_update(
+    path: &Path,
+    _version: &str,
+    _language: &str,
+    _format: &str,
+    _sha256: &str,
+) -> std::io::Result<()> {
     open_with_system(path)
 }
 
@@ -328,7 +350,20 @@ impl MainView {
                                 let _ = sender.try_send(UpdateDownloadEvent::Progress(percent));
                             }
                         },
-                        |path, version| install_macos_update(path, version, &update_language),
+                        |path, version| {
+                            let format = if job.asset.platform.ends_with("-zip") {
+                                "zip"
+                            } else {
+                                "dmg"
+                            };
+                            install_macos_update(
+                                path,
+                                version,
+                                &update_language,
+                                format,
+                                &job.asset.sha256,
+                            )
+                        },
                     );
                     if result.is_ok() {
                         let _ = sender.try_send(UpdateDownloadEvent::Progress(100));

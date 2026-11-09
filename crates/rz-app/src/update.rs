@@ -20,7 +20,7 @@ const SIZE_SLACK: u64 = 4096;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Asset {
-    /// `os-arch`, for example `macos-aarch64` or `windows-x86_64`.
+    /// `os-arch`, or `macos-arch-zip` for a macOS update ZIP.
     pub platform: String,
     pub url: String,
     pub size: u64,
@@ -95,7 +95,8 @@ pub fn parse_manifest(json: &[u8]) -> Result<Manifest> {
 /// Picks the update for this platform, if it is newer than `current`.
 ///
 /// Pre-releases are only offered to users already on a pre-release, so stable
-/// users are never moved onto a beta by a release-channel mistake.
+/// users are never moved onto a beta by a release-channel mistake. macOS prefers
+/// the ZIP asset while retaining the original platform key as a DMG fallback.
 pub fn select_update(manifest: &Manifest, current: &str, platform: &str) -> Result<Option<Update>> {
     let bad = |what: &str, v: &str| Error::Corrupt(format!("update manifest: bad {what} {v:?}"));
     let current = Version::parse(current).map_err(|_| bad("current version", current))?;
@@ -104,7 +105,20 @@ pub fn select_update(manifest: &Manifest, current: &str, platform: &str) -> Resu
     if offered <= current || (!offered.pre.is_empty() && current.pre.is_empty()) {
         return Ok(None);
     }
-    let Some(asset) = manifest.assets.iter().find(|a| a.platform == platform) else {
+    // Older clients look up the original platform key and therefore keep receiving DMGs.
+    let zip_platform = platform
+        .starts_with("macos-")
+        .then(|| format!("{platform}-zip"));
+    let asset = zip_platform
+        .as_ref()
+        .and_then(|key| manifest.assets.iter().find(|asset| &asset.platform == key))
+        .or_else(|| {
+            manifest
+                .assets
+                .iter()
+                .find(|asset| asset.platform == platform)
+        });
+    let Some(asset) = asset else {
         return Ok(None);
     };
     if !asset.url.starts_with("https://") {
@@ -307,6 +321,41 @@ mod tests {
         assert_eq!(select_update(&m, "0.2.0", "macos-aarch64").ok(), Some(None));
         assert_eq!(select_update(&m, "0.3.0", "macos-aarch64").ok(), Some(None));
         assert_eq!(select_update(&m, "0.1.0", "linux-riscv64").ok(), Some(None));
+    }
+
+    #[test]
+    fn macos_prefers_zip_and_legacy_clients_can_still_choose_dmg() {
+        for platform in ["macos-aarch64", "macos-x86_64"] {
+            let dmg = asset("0.2.0", platform, b"legacy dmg");
+            let zip = asset("0.2.0", &format!("{platform}-zip"), b"new zip");
+            let manifest = Manifest {
+                version: "0.2.0".into(),
+                notes: String::new(),
+                assets: vec![dmg.clone(), zip.clone()],
+            };
+            let selected = select_update(&manifest, "0.1.5", platform)
+                .expect("valid manifest")
+                .expect("update available");
+            assert_eq!(selected.asset, zip);
+            assert!(verify_download(b"new zip", &selected, &pubkey()).is_ok());
+            assert!(verify_download(b"legacy dmg", &selected, &pubkey()).is_err());
+            assert_eq!(
+                manifest.assets.iter().find(|a| a.platform == platform),
+                Some(&dmg)
+            );
+
+            let legacy = Manifest {
+                assets: vec![dmg.clone()],
+                ..manifest
+            };
+            assert_eq!(
+                select_update(&legacy, "0.1.5", platform)
+                    .expect("valid manifest")
+                    .expect("fallback update")
+                    .asset,
+                dmg
+            );
+        }
     }
 
     #[test]

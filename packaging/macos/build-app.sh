@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds RustZIP.app and a disk image.
+# Builds RustZIP.app, an installer disk image, and an update ZIP.
 #
 #   packaging/macos/build-app.sh [output-dir]
 #
@@ -144,6 +144,7 @@ codesign --verify --deep --strict "$app"
 bash packaging/macos/verify-portable-libraries.sh "$app"
 
 dmg="$out/RustZIP-$version-macos-$arch.dmg"
+zip="$out/RustZIP-$version-macos-$arch.zip"
 stage="$(mktemp -d)"
 cp -R "$app" "$stage/"
 ln -s /Applications "$stage/Applications"
@@ -189,5 +190,34 @@ if [ "$identity" != "-" ] && { [ -n "${NOTARY_PROFILE:-}" ] || [ "${NOTARY_DIREC
         echo "Could not validate the notarization ticket after five attempts." >&2
         exit 1
     fi
+
+    # The update ZIP contains the app itself, so its ticket must be stapled before archiving.
+    stapled=0
+    for attempt in 1 2 3 4 5; do
+        if xcrun stapler staple "$app"; then
+            stapled=1
+            break
+        fi
+        if [ "$attempt" -lt 5 ]; then
+            echo "App ticket delivery failed (attempt $attempt); retrying." >&2
+            sleep 10
+        fi
+    done
+    if [ "$stapled" != 1 ]; then
+        echo "Could not attach the app notarization ticket after five attempts." >&2
+        exit 1
+    fi
+    xcrun stapler validate "$app"
+    codesign --verify --deep --strict "$app"
 fi
+
+rm -f "$zip"
+ditto -c -k --sequesterRsrc --keepParent "$app" "$zip"
+zip_check="$(mktemp -d)"
+ditto -x -k "$zip" "$zip_check"
+codesign --verify --deep --strict "$zip_check/RustZIP.app"
+if [ "$identity" != "-" ] && { [ -n "${NOTARY_PROFILE:-}" ] || [ "${NOTARY_DIRECT:-0}" = "1" ]; }; then
+    xcrun stapler validate "$zip_check/RustZIP.app"
+fi
+rm -rf "$zip_check"
 echo "$dmg"

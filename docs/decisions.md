@@ -475,5 +475,11 @@
 ## D68 macOS 应用内自动更新
 
 - macOS 下载并完成 Ed25519、SHA-256 验证后，由应用包内签名的 `RustZIPUpdateHelper` 等待主程序退出；helper 只接受 Bundle ID 为 `com.yuhuotech.rustzip`、版本与清单一致且 Developer ID Team 与当前应用一致的签名包。
-- GUI 等当前任务和音频播放结束后退出；helper 从只读挂载的 DMG 暂存新 `.app`，通过同卷改名替换旧应用，保留备份直到新应用可由 Launch Services 启动；失败时恢复旧应用并重新打开。更新目标目录不可写时使用 macOS 管理员授权提示，不执行静默提权。
+- GUI 等当前任务和音频播放结束后退出；helper 暂存新 `.app`，通过同卷改名替换旧应用，保留备份直到新应用可由 Launch Services 启动；失败时恢复旧应用并重新打开。更新目标目录不可写时使用 macOS 管理员授权提示，不执行静默提权。更新包格式见 D69。
 - 已发布的 v0.1.4 不含 helper，无法通过其旧代码直接获得此行为；升级到 v0.1.5 仍需按旧流程安装一次，之后才能应用内自动替换并重启。Windows 安装器和 Linux tarball 更新流程不变。
+
+## D69 macOS 安装镜像与更新 ZIP
+
+- 每种 macOS 架构同时发布 DMG 和由 `ditto` 生成的应用 ZIP。DMG 供手动安装；ZIP 供 v0.1.6 及以上版本的应用内更新。正式发布先公证 DMG，再将同一已公证 app 的票据附着到 app，最后生成 ZIP 并验证解包后的签名与票据。
+- 清单保留 `macos-aarch64` / `macos-x86_64` DMG 条目，以兼容只识别 DMG 的 v0.1.5；新增分别独立验签的 `macos-aarch64-zip` / `macos-x86_64-zip` 条目，新客户端优先选择 ZIP，缺失时回退 DMG。因此 v0.1.5 更新到 v0.1.6 使用 DMG，v0.1.6 以后的客户端优先下载 ZIP。
+- helper 重新核验下载文件的 SHA-256 后在普通用户上下文解包 ZIP 或挂载 DMG；需要管理员权限时仅将验证过的 app 交给授权进程，授权进程再次验证签名、Team、Bundle ID 和版本及目标位置中的暂存副本，再执行替换和回滚。
