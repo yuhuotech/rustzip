@@ -4,7 +4,7 @@ use std::fs::{self, File};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
-use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
+use sysinfo::{Pid, ProcessRefreshKind, ProcessStatus, ProcessesToUpdate, System, UpdateKind};
 
 #[cfg(windows)]
 #[allow(unsafe_code)]
@@ -66,7 +66,16 @@ pub fn is_link_or_reparse(metadata: &fs::Metadata) -> bool {
 }
 
 pub fn same_process(pid: u32, started: u64) -> bool {
-    process(pid).is_some_and(|p| p.started == started)
+    // Ordinary users can read a privileged process's start time even when its
+    // executable path is hidden; path access must not imply that it has exited.
+    let mut system = System::new();
+    system.refresh_processes_specifics(
+        ProcessesToUpdate::Some(&[Pid::from_u32(pid)]),
+        ProcessRefreshKind::new(),
+    );
+    system.process(Pid::from_u32(pid)).is_some_and(|process| {
+        process.start_time() == started && process.status() != ProcessStatus::Zombie
+    })
 }
 
 pub fn other_instances(executable: &Path, except: u32) -> bool {
@@ -455,6 +464,23 @@ pub fn record_windows_version(machine: bool, version: &str) -> io::Result<()> {
     #[cfg(not(windows))]
     {
         let _ = (machine, version);
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn process_liveness_checks_start_time_and_does_not_accept_a_reused_pid() -> io::Result<()> {
+        let identity = process(std::process::id())
+            .ok_or_else(|| io::Error::other("current process must be observable"))?;
+        assert!(same_process(identity.pid, identity.started));
+        assert!(!same_process(
+            identity.pid,
+            identity.started.saturating_add(1)
+        ));
         Ok(())
     }
 }

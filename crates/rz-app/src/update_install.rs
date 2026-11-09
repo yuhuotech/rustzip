@@ -189,6 +189,10 @@ impl Installation {
 
 pub fn copy_tree(source: &Path, target: &Path, cancel: &CancelToken) -> Result<()> {
     rz_platform::update::installation_directory(target)?;
+    copy_tree_into(source, target, cancel)
+}
+
+fn copy_tree_into(source: &Path, target: &Path, cancel: &CancelToken) -> Result<()> {
     let mut budget = CopyBudget {
         entries: 0,
         bytes: 0,
@@ -375,6 +379,7 @@ impl Transaction {
             next_licenses: Vec::new(),
         };
         let next = transaction.next(installation);
+        rz_platform::update::installation_directory(&next)?;
         let mut guard = PreparationGuard {
             path: next.clone(),
             retained: false,
@@ -391,11 +396,11 @@ impl Transaction {
                 if !valid_release(&transaction.previous) {
                     return Err(Error::UnsafePath("invalid current release link".into()));
                 }
-                copy_tree(staged, &next, cancel)?;
+                copy_tree_into(staged, &next, cancel)?;
                 rz_platform::apply_mode(&next, 0o755)?;
             }
             InstallKind::Windows => {
-                copy_tree(&installation.root, &next, cancel)?;
+                copy_tree_into(&installation.root, &next, cancel)?;
                 for entry in fs::read_dir(staged)? {
                     let entry = entry?;
                     let destination = next.join(entry.file_name());
@@ -934,6 +939,28 @@ mod tests {
         assert!(installation.lock().is_err());
         drop(first);
         assert!(installation.lock().is_ok());
+    }
+
+    #[test]
+    fn failed_preparation_never_deletes_a_preexisting_staging_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let installation = windows_install(temp.path());
+        let id = transaction_id().unwrap();
+        let existing = temp.path().join(format!(".RustZIP-next-{id}"));
+        fs::create_dir(&existing).unwrap();
+        fs::write(existing.join("retain.txt"), b"preexisting data").unwrap();
+        assert!(Transaction::prepare(
+            &installation,
+            &new_files(temp.path()),
+            "0.2.0",
+            &id,
+            &CancelToken::new()
+        )
+        .is_err());
+        assert_eq!(
+            fs::read(existing.join("retain.txt")).unwrap(),
+            b"preexisting data"
+        );
     }
 
     #[cfg(windows)]
