@@ -17,7 +17,7 @@ cp "$root"/packaging/icons/hicolor/*.png "$source/icons/"
 cp "$root/packaging/licenses/format-readers.txt" "$source/format-readers-licenses.txt"
 version="$(awk -F'"' '/^version *=/ {print $2; exit}' "$root/Cargo.toml")"
 printf '{"schema":1,"version":"%s","platform":"linux-%s"}\n' "$version" "$(uname -m)" > "$source/update-layout.json"
-for mode in success fail; do
+for mode in success fail interrupted; do
     prefix="$work/$mode prefix 中文
 with newline"
     xdg="$work/$mode data 中文
@@ -27,8 +27,19 @@ with newline"
     PREFIX="$prefix" XDG_DATA_HOME="$xdg" sh "$source/install.sh"
     printf 'user settings' > "$work/settings-$mode"
     result="$work/result-$mode"
-    RZ_UPDATE_FIXTURE_RESULT="$result" RZ_UPDATE_FIXTURE_MODE="$mode" \
+    fault=""
+    [[ "$mode" != interrupted ]] || fault=published
+    RZ_UPDATE_FIXTURE_FAULT="$fault" RZ_UPDATE_FIXTURE_RESULT="$result" RZ_UPDATE_FIXTURE_MODE="$mode" \
         "$prefix/bin/rustzip" --fixture-update "$source" "$download/update.tar.gz"
+    if [[ "$mode" == interrupted ]]; then
+        for attempt in {1..100}; do
+            if [[ -f "$prefix/lib/rustzip/transaction.json" ]] && grep -q Published "$prefix/lib/rustzip/transaction.json"; then break; fi
+            sleep 0.1
+        done
+        sleep 0.2
+        [[ ! -e "$result" ]]
+        RZ_UPDATE_FIXTURE_RESULT="$result" "$prefix/bin/rustzip"
+    fi
     for attempt in {1..600}; do [[ ! -f "$result" ]] || break; sleep 0.1; done
     [[ -f "$result" ]]
     if [[ "$mode" == success ]]; then

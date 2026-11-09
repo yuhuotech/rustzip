@@ -29,7 +29,10 @@ pub struct Installation {
 
 pub fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T> {
     let metadata = fs::symlink_metadata(path)?;
-    if !metadata.is_file() || metadata.file_type().is_symlink() || metadata.len() > 65536 {
+    if !metadata.is_file()
+        || rz_platform::update::is_link_or_reparse(&metadata)
+        || metadata.len() > 65536
+    {
         return Err(Error::Corrupt("invalid update record".into()));
     }
     let mut bytes = Vec::new();
@@ -223,7 +226,7 @@ fn copy_contents(
         let entry = entry?;
         let metadata = fs::symlink_metadata(entry.path())?;
         let destination = target.join(entry.file_name());
-        if metadata.file_type().is_symlink() {
+        if rz_platform::update::is_link_or_reparse(&metadata) {
             return Err(Error::UnsafePath(
                 "installation contains an unexpected link".into(),
             ));
@@ -232,7 +235,7 @@ fn copy_contents(
             rz_platform::update::installation_directory(&destination)?;
             copy_contents(&entry.path(), &destination, cancel, depth + 1, budget)?;
         } else if metadata.is_file() {
-            let mut input = File::open(entry.path())?;
+            let mut input = rz_platform::update::open_regular(&entry.path())?;
             let mut output = rz_platform::update::create_update_file(&destination, true)?;
             let mut buffer = [0u8; 65536];
             loop {
@@ -821,6 +824,29 @@ mod tests {
         assert!(installation.lock().is_err());
         drop(first);
         assert!(installation.lock().is_ok());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn installation_copy_rejects_directory_junctions() {
+        let temp = tempfile::tempdir().unwrap();
+        let source = temp.path().join("source");
+        let outside = temp.path().join("outside");
+        fs::create_dir(&source).unwrap();
+        fs::create_dir(&outside).unwrap();
+        fs::write(outside.join("private.txt"), b"must not be copied").unwrap();
+        let junction = source.join("junction");
+        let status = std::process::Command::new("cmd.exe")
+            .args(["/C", "mklink", "/J"])
+            .arg(&junction)
+            .arg(&outside)
+            .stdout(std::process::Stdio::null())
+            .status()
+            .unwrap();
+        assert!(status.success());
+        assert!(copy_tree(&source, &temp.path().join("target"), &CancelToken::new()).is_err());
+        assert!(!temp.path().join("target/junction/private.txt").exists());
+        fs::remove_dir(junction).unwrap();
     }
 
     #[cfg(unix)]

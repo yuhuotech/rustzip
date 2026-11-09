@@ -60,6 +60,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
     let restarting = args.iter().any(|a| a == "--rustzip-update-start");
+    if !restarting && rz_app::update_runtime::recover_before_startup()? {
+        return Ok(());
+    }
     if restarting {
         let version = if config.is_object() {
             args.last()

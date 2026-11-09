@@ -672,6 +672,10 @@ fn worker(
         let _ = transaction.rollback(installation);
         return Err(error);
     }
+    #[cfg(feature = "updater-test-hooks")]
+    if std::env::var("RZ_UPDATE_FIXTURE_FAULT").ok().as_deref() == Some("published") {
+        std::process::exit(86);
+    }
     if privileged {
         send(controller, &Message::Published)?;
         controller.set_read_timeout(Some(Duration::from_secs(120)))?;
@@ -967,6 +971,7 @@ fn startup_recovery(root: &Path, pid: u32, started: u64, address: &str, token: &
     let mut gui = connect(address, token)?;
     let result = (|| {
         let installation = Installation::read(root)?;
+        let rolled_back = Transaction::read(&installation)?.phase != Phase::Confirmed;
         installation.verify_registration()?;
         let parent = rz_platform::update::process(pid)
             .ok_or_else(|| Error::Corrupt("recovery parent is not running".into()))?;
@@ -1012,10 +1017,13 @@ fn startup_recovery(root: &Path, pid: u32, started: u64, address: &str, token: &
             }
             recover(&installation)?;
         }
-        Command::new(installation.executable())
-            .arg("--rustzip-update-error")
-            .arg("An interrupted update was recovered. The previous version is available.")
-            .spawn()?;
+        let mut command = Command::new(installation.executable());
+        if rolled_back {
+            command
+                .arg("--rustzip-update-error")
+                .arg("An interrupted update was rolled back. You can try updating again.");
+        }
+        command.spawn()?;
         Ok(())
     })();
     if let Err(error) = &result {

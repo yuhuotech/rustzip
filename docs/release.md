@@ -79,6 +79,10 @@ Vercel build 会在部署期间自动应用 Neon Postgres migrations;检查部�
 | Windows | `iscc /DAppVersion=<Cargo.toml workspace 版本> packaging\windows\rustzip.iss`(需先安装 x64-windows vcpkg 依赖并运行 `cargo build --release -p rustzip-gui -p rz-pdf-renderer`) | `RustZIP-<版本>-windows-x86_64.exe` |
 | Linux | `packaging/linux/build-tarball.sh dist` | `RustZIP-<版本>-linux-<架构>.tar.gz`,解开后 `./install.sh` |
 
+Windows 本地打包需先构建 `rustzip-gui`、`rz-updater`、`rz-pdf-renderer`、`rz-video-renderer`，再运行 `packaging/windows/build-update-zip.ps1 -Version <版本>` 生成同批程序的更新 ZIP 和 `target/release/update-layout.json`，最后调用 Inno Setup。Release workflow 已按此顺序执行；EXE 和更新 ZIP 必须来自同一批构建，分别签名。
+
+Linux 安装器现在委托包内 `rz-updater --install` 创建版本化目录和稳定链接，卸载时使用安装记录中的 XDG 数据位置。系统前缀的后续自更新需要 `/usr/bin/pkexec` 和桌面授权代理；缺失或用户取消时，更新准备失败并保留原程序。测试脚本仅使用隔离前缀。
+
 图标由 `cargo run --release -p rustzip-gui --example make_icons -- packaging/icons` 生成(`.icns`、`.ico`、各尺寸 PNG)。
 
 默认包不启用 RAR，也不注册 RAR 专属关联。macOS / Linux 可设置 `RZ_WITH_RAR=1` 打包测试版；Windows 需用 `cargo build --release -p rustzip-gui -p rz-pdf-renderer --features rustzip-gui/rar` 构建，并给 Inno Setup 增加 `/DRarEnabled`。启用时安装包附带 unRAR 许可证。RAR 解码现由 `rz-ffi` 逐块执行并受选中输出总量、条目声明大小和取消控制；四平台 opt-in 包、许可证和 Windows 安装 / 卸载关联已在 Release dry-run [41012225195](https://github.com/yuhuotech/rustzip/actions/runs/41012225195) 验证，正式签名 Release 仍待验收，见 D36 / D38。

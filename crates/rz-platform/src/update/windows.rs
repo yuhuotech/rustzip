@@ -392,9 +392,20 @@ pub fn validate_protected_installation(root: &Path, parent_pid: u32) -> io::Resu
         return Err(io::Error::last_os_error());
     }
     let impersonation = Handle(impersonation);
-    let helper = root.join("rz-updater.exe");
-    for path in std::iter::once(helper.as_path()).chain(root.ancestors()) {
-        if std::fs::symlink_metadata(path)?.file_type().is_symlink() {
+    let mut paths: Vec<_> = root
+        .ancestors()
+        .map(|path| (path.to_owned(), path == root))
+        .collect();
+    let mut checked = 0usize;
+    while let Some((path, check_contents)) = paths.pop() {
+        checked += 1;
+        if checked > 100000 || path.components().count() > root.components().count() + 32 {
+            return Err(io::Error::other(
+                "protected installation exceeds its inspection limit",
+            ));
+        }
+        let metadata = std::fs::symlink_metadata(&path)?;
+        if super::is_link_or_reparse(&metadata) {
             return Err(io::Error::other("protected installation contains a link"));
         }
         let name = wide(path.as_os_str())?;
@@ -447,7 +458,7 @@ pub fn validate_protected_installation(root: &Path, parent_pid: u32) -> io::Resu
             return Err(error);
         }
         let mut forbidden = WRITE_DAC | WRITE_OWNER | FILE_DELETE_CHILD | DELETE;
-        if path == root || path == helper {
+        if check_contents {
             forbidden |=
                 FILE_WRITE_DATA | FILE_APPEND_DATA | FILE_WRITE_ATTRIBUTES | FILE_WRITE_EA | DELETE;
         }
@@ -456,6 +467,16 @@ pub fn validate_protected_installation(root: &Path, parent_pid: u32) -> io::Resu
                 io::ErrorKind::PermissionDenied,
                 "installation can be modified without administrator authorization",
             ));
+        }
+        if check_contents && metadata.is_dir() {
+            for entry in std::fs::read_dir(&path)? {
+                if paths.len() + checked > 100000 {
+                    return Err(io::Error::other(
+                        "protected installation exceeds its inspection limit",
+                    ));
+                }
+                paths.push((entry?.path(), true));
+            }
         }
     }
     Ok(())

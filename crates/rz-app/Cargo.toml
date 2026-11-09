@@ -29,6 +29,7 @@ workspace = true
 
 [features]
 rar = ["rz-formats/rar", "rz-engine/rar"]
+updater-test-hooks = []
 
 [[bench]]
 name = "zip_edit"

@@ -15,7 +15,7 @@ try {
     $version = ((& cargo metadata --manifest-path "$root\Cargo.toml" --no-deps --format-version 1 | ConvertFrom-Json).packages | Where-Object name -eq "rz-updater").version
     if ($LASTEXITCODE -ne 0) { throw "Metadata failed" }
     [IO.File]::WriteAllText("$source\update-layout.json", (@{schema=1;version=$version;platform="windows-x86_64-zip"}|ConvertTo-Json -Compress))
-    foreach ($mode in @("success", "fail")) {
+    foreach ($mode in @("success", "fail", "interrupted")) {
         $install = Join-Path $work "$mode app 中文"
         Copy-Item -LiteralPath $source -Destination $install -Recurse
         [IO.File]::WriteAllText("$install\rustzip-install.json", (@{schema=1;kind="windows";root=$install;machine=$false}|ConvertTo-Json -Compress))
@@ -28,8 +28,22 @@ try {
         $result = Join-Path $work "result-$mode.txt"
         $env:RZ_UPDATE_FIXTURE_RESULT = $result
         $env:RZ_UPDATE_FIXTURE_MODE = $mode
+        $env:RZ_UPDATE_FIXTURE_FAULT = if ($mode -eq "interrupted") { "published" } else { "" }
         & "$install\rustzip.exe" --fixture-update $source "$download\update.zip"
         if ($LASTEXITCODE -ne 0) { throw "Fixture handoff failed" }
+        if ($mode -eq "interrupted") {
+            for ($attempt=0; $attempt -lt 100; $attempt++) {
+                $journals = @(Get-ChildItem -LiteralPath $work -Filter ".rustzip-*.json" -File | Where-Object { (Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json).phase -eq "Published" })
+                if ($journals.Count -gt 0) { break }
+                Start-Sleep -Milliseconds 100
+            }
+            if ($journals.Count -ne 1) { throw "Interrupted transaction was not persisted" }
+            Start-Sleep -Milliseconds 300
+            if (Test-Path -LiteralPath $result) { throw "Interrupted updater unexpectedly restarted the program" }
+            Remove-Item Env:RZ_UPDATE_FIXTURE_FAULT -ErrorAction SilentlyContinue
+            & "$install\rustzip.exe"
+            if ($LASTEXITCODE -ne 0) { throw "Startup recovery handoff failed" }
+        }
         for ($attempt=0; $attempt -lt 600 -and -not (Test-Path -LiteralPath $result); $attempt++) { Start-Sleep -Milliseconds 100 }
         if (-not (Test-Path -LiteralPath $result)) { throw "Updater did not restart the fixture" }
         $expected = if ($mode -eq "success") { "updated" } else { "rolled-back" }
@@ -45,6 +59,7 @@ try {
 } finally {
     Remove-Item Env:RZ_UPDATE_FIXTURE_RESULT -ErrorAction SilentlyContinue
     Remove-Item Env:RZ_UPDATE_FIXTURE_MODE -ErrorAction SilentlyContinue
+    Remove-Item Env:RZ_UPDATE_FIXTURE_FAULT -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $registration -Recurse -Force -ErrorAction SilentlyContinue
     Start-Sleep -Milliseconds 500
     Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue

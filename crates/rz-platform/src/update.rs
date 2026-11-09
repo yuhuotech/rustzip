@@ -47,10 +47,22 @@ pub fn open_regular(path: &Path) -> io::Result<File> {
     }
     let file = options.open(path)?;
     let metadata = file.metadata()?;
-    if !metadata.is_file() || metadata.file_type().is_symlink() {
+    if !metadata.is_file() || is_link_or_reparse(&metadata) {
         return Err(io::Error::other("update input is not a regular file"));
     }
     Ok(file)
+}
+
+pub fn is_link_or_reparse(metadata: &fs::Metadata) -> bool {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        metadata.file_attributes() & 0x400 != 0
+    }
+    #[cfg(not(windows))]
+    {
+        metadata.file_type().is_symlink()
+    }
 }
 
 pub fn same_process(pid: u32, started: u64) -> bool {
@@ -279,6 +291,51 @@ pub fn validate_protected_installation(root: &Path, parent_pid: u32) -> io::Resu
                     io::ErrorKind::PermissionDenied,
                     "the system installation is not protected",
                 ));
+            }
+        }
+        let mut paths = vec![root.to_owned()];
+        let mut checked = 0usize;
+        while let Some(path) = paths.pop() {
+            checked += 1;
+            if checked > 100000 || path.components().count() > root.components().count() + 32 {
+                return Err(io::Error::other(
+                    "system installation exceeds its inspection budget",
+                ));
+            }
+            let metadata = fs::symlink_metadata(&path)?;
+            if metadata.file_type().is_symlink() && path == root.join("current") {
+                let target = fs::read_link(&path)?;
+                let parts: Vec<_> = target.components().collect();
+                if parts.len() != 2
+                    || parts[0].as_os_str() != "releases"
+                    || !parts[1].as_os_str().to_str().is_some_and(|id| {
+                        id.len() == 32 && id.bytes().all(|b| b.is_ascii_hexdigit())
+                    })
+                {
+                    return Err(io::Error::other(
+                        "system installation has an invalid current version",
+                    ));
+                }
+                continue;
+            }
+            if metadata.uid() != 0
+                || metadata.mode() & 0o022 != 0
+                || (!metadata.is_dir() && !metadata.is_file())
+            {
+                return Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "system installation contains an unprotected file",
+                ));
+            }
+            if metadata.is_dir() {
+                for entry in fs::read_dir(&path)? {
+                    if paths.len() + checked > 100000 {
+                        return Err(io::Error::other(
+                            "system installation exceeds its inspection budget",
+                        ));
+                    }
+                    paths.push(entry?.path());
+                }
             }
         }
         Ok(())
