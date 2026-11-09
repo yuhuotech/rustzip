@@ -96,6 +96,7 @@ status_compression_ratio	Compressé à {ratio} % de la taille d’origine
 status_ready	Prêt
 status_new_version	Mise à jour disponible : {version}
 status_downloading	Téléchargement de {version}… {progress}%
+status_installing	Mise à jour vers {version} et redémarrage après la fin des tâches en cours…
 go_up	Remonter
 recent_column_name	Nom
 recent_column_size	Taille

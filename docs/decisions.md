@@ -58,7 +58,7 @@
 
 - 联网与系统钥匙串放在独立 crate `rz-services`(HTTP 用 `ureq` + rustls,钥匙串用 `keyring`),`rz-app` 只定义 trait 并用假实现测试;GUI 通过它接入,核心 crate 不碰网络。
 - 更新源:GitHub Release 里的 `update.json`(`releases/latest/download/update.json`),安装包也放在同一个 Release。信任来自内置 Ed25519 公钥,不来自 GitHub 或 TLS;私钥只存在维护者本机和仓库 Secret `RZ_UPDATE_KEY`。
-- 更新只做到"下载、验签、交给系统打开安装",不静默替换运行中的程序。
+- 更新需先下载并验签。macOS 安装与重启行为见 D68；Windows 仍交给安装程序，Linux 打开下载文件夹。
 - 统计:只有设置了 `RZ_STATS_URL`(构建期或运行期)才会上报,且必须在用户看过首次启动提示之后。服务端自建,GitHub 不能接收上报。
 - 记住密码默认关闭,开启后存进系统钥匙串,条目名只用压缩包文件名。
 - 文件关联用"备选"优先级,不抢用户已选的默认程序。
@@ -471,3 +471,9 @@
 - 临时副本由 GUI 持有，换选中项、浏览列表变化或程序退出时删除。选择条目后开始准备，只有准备完成才启动窗口外的原生文件拖放，避免目标应用读取未完成文件；拖动过快于准备完成时可稍候重试。
 - macOS 与 Linux Wayland 使用 GPUI 上游实现；Windows 使用 Shell OLE `IDataObject` / `CF_HDROP`；Linux X11 使用 XDND v2-v5 `text/uri-list` selection。Windows 和 Linux X11 的平台后端在 Apache-2.0 GPUI 0.3.9 快照上本地补丁维护。X11 source 支持目标能力和接受区域协商、selection 请求/失败通知、取消和超时清理。
 - Windows OLE 和 X11 在发起 GPUI 输入回调退出后投递完成事件，避免回调重入时丢失 drag 结束状态。平台初始化失败时不发结束事件，由 GPUI 保留内部拖动状态。
+
+## D68 macOS 应用内自动更新
+
+- macOS 下载并完成 Ed25519、SHA-256 验证后，由应用包内签名的 `RustZIPUpdateHelper` 等待主程序退出；helper 只接受 Bundle ID 为 `com.yuhuotech.rustzip`、版本与清单一致且 Developer ID Team 与当前应用一致的签名包。
+- GUI 等当前任务和音频播放结束后退出；helper 从只读挂载的 DMG 暂存新 `.app`，通过同卷改名替换旧应用，保留备份直到新应用可由 Launch Services 启动；失败时恢复旧应用并重新打开。更新目标目录不可写时使用 macOS 管理员授权提示，不执行静默提权。
+- 已发布的 v0.1.4 不含 helper，无法通过其旧代码直接获得此行为；升级到 v0.1.5 仍需按旧流程安装一次，之后才能应用内自动替换并重启。Windows 安装器和 Linux tarball 更新流程不变。

@@ -1,0 +1,10 @@
+zh-CN	RustZIP 需要获得权限才能更新“应用程序”文件夹中的版本。	RustZIP 无法完成更新：{detail}
+en-US	RustZIP needs permission to update its copy in Applications.	RustZIP could not complete the update: {detail}
+es-ES	RustZIP necesita permiso para actualizar su copia en Aplicaciones.	RustZIP no pudo completar la actualización: {detail}
+fr-FR	RustZIP a besoin d’une autorisation pour mettre à jour sa copie dans Applications.	RustZIP n’a pas pu terminer la mise à jour : {detail}
+de-DE	RustZIP benötigt eine Berechtigung, um seine Version in „Programme“ zu aktualisieren.	RustZIP konnte das Update nicht abschließen: {detail}
+ja-JP	RustZIPが「アプリケーション」内のアプリを更新するには許可が必要です。	RustZIPのアップデートを完了できませんでした：{detail}
+ko-KR	RustZIP이 응용 프로그램 폴더의 앱을 업데이트하려면 권한이 필요합니다.	RustZIP 업데이트를 완료하지 못했습니다: {detail}
+ar	يحتاج RustZIP إلى إذن لتحديث نسخته في مجلد التطبيقات.	تعذر على RustZIP إكمال التحديث: {detail}
+pt-BR	O RustZIP precisa de permissão para atualizar sua cópia em Aplicativos.	O RustZIP não conseguiu concluir a atualização: {detail}
+ru-RU	RustZIP требуется разрешение для обновления копии в папке «Программы».	Не удалось завершить обновление RustZIP: {detail}

@@ -47,7 +47,9 @@ GitHub macOS runner 上 `notarytool store-credentials` 可能异常退出，CI �
 - `update.json` 每个条目带 SHA-256 和 Ed25519 签名,签名内容是"版本 + 平台 + 文件哈希"。
 - 客户端只信内置公钥,不信 GitHub、TLS 或重定向:大小、哈希、签名任何一项不对,下载直接丢弃。
 - 只接受 https;不会降级到旧版本;稳定版用户不会被推送预发布版。
-- 下载后只是"保存到临时目录并交给系统打开"(macOS 打开 dmg,Windows 运行安装程序,Linux 打开所在文件夹),**不会静默替换正在运行的程序**。
+- 下载后 macOS 由已签名 helper 只读挂载 DMG，核对 app 的 Bundle ID、版本和 Developer ID Team；GUI 会等当前任务结束后退出，再替换并重启。目录不可写时会显示 macOS 管理员授权。helper 保留旧 app 直到 Launch Services 接受新 app 启动，替换或启动失败时回滚并打开旧版本。
+- Windows 仍打开已验签的安装程序；Linux 仍打开已验签 tarball 所在文件夹。
+- 已发布的 v0.1.4 不含更新 helper，升级到 v0.1.5 需要按现有流程手动安装一次；之后 macOS 更新会在应用内自动替换并重启。
 
 ## 匿名统计
 

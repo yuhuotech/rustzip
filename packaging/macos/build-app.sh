@@ -51,6 +51,7 @@ rm -rf "$app"
 finder_extension="$app/Contents/PlugIns/RustZIPFinderSync.appex"
 quicklook_extension="$app/Contents/PlugIns/RustZIPQuickLook.appex"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources" "$app/Contents/Frameworks" \
+    "$app/Contents/Helpers" \
     "$finder_extension/Contents/MacOS" "$finder_extension/Contents/Resources" \
     "$quicklook_extension/Contents/MacOS" "$quicklook_extension/Contents/Resources"
 cp "$bin" "$app/Contents/MacOS/rustzip"
@@ -72,6 +73,7 @@ cp packaging/licenses/reflink-copy-mit.txt "$app/Contents/Resources/reflink-copy
 cp packaging/licenses/mp4-mit.txt "$app/Contents/Resources/mp4-mit.txt"
 cp packaging/licenses/rust-h264-mit.txt "$app/Contents/Resources/rust-h264-mit.txt"
 cp packaging/licenses/rust-h264-apache-2.0.txt "$app/Contents/Resources/rust-h264-apache-2.0.txt"
+cp packaging/macos/update-helper-strings.tsv "$app/Contents/Resources/update-helper-strings.tsv"
 if [ "${RZ_WITH_RAR:-0}" = "1" ]; then
     cp packaging/licenses/unrar.txt "$app/Contents/Resources/unrar-license.txt"
 fi
@@ -107,10 +109,13 @@ xcrun swiftc -application-extension -parse-as-library -O \
     -Xlinker -e -Xlinker _NSExtensionMain \
     -o "$quicklook_extension/Contents/MacOS/RustZIPQuickLook" \
     packaging/macos/quicklook-preview.swift
+xcrun swiftc -O -target "$swift_target" -sdk "$sdk" \
+    -o "$app/Contents/Helpers/RustZIPUpdateHelper" packaging/macos/update-helper.swift
 
 identity="${MACOS_SIGN_IDENTITY:--}"
 bash packaging/macos/bundle-homebrew-libraries.sh "$app" "$identity"
 if [ "$identity" = "-" ]; then
+    codesign --force --sign - "$app/Contents/Helpers/RustZIPUpdateHelper"
     codesign --force --sign - "$app/Contents/MacOS/rz-pdf-renderer"
     codesign --force --sign - "$app/Contents/MacOS/rz-video-renderer"
     codesign --force --entitlements packaging/macos/finder-sync.entitlements \
@@ -119,6 +124,8 @@ if [ "$identity" = "-" ]; then
         --sign - "$quicklook_extension"
     codesign --force --sign - "$app"
 else
+    codesign --force --options runtime --timestamp \
+        --sign "$identity" "$app/Contents/Helpers/RustZIPUpdateHelper"
     codesign --force --options runtime --timestamp \
         --sign "$identity" "$app/Contents/MacOS/rz-pdf-renderer"
     codesign --force --options runtime --timestamp \

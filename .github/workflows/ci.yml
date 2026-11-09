@@ -106,6 +106,9 @@ jobs:
       - name: Quick Look ZIP safety smoke (macOS)
         if: runner.os == 'macOS'
         run: packaging/macos/test-quicklook.sh
+      - name: Smoke test macOS automatic updates
+        if: runner.os == 'macOS'
+        run: packaging/macos/test-update-helper.sh
       - name: Windows installer smoke test
         if: runner.os == 'Windows'
         timeout-minutes: 30

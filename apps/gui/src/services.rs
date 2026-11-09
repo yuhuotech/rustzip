@@ -20,6 +20,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub enum UpdateState {
     Available(Update),
     Downloading(Update, u8),
+    Installing(Update),
 }
 
 enum UpdateDownloadEvent {
@@ -54,7 +55,8 @@ fn today() -> i64 {
         .map_or(0, |d| i64::try_from(d.as_secs() / 86_400).unwrap_or(0))
 }
 
-/// Hands a downloaded installer to the operating system.
+/// Opens a downloaded installer with the system on platforms that still use one.
+#[cfg(not(target_os = "macos"))]
 fn open_with_system(path: &Path) -> std::io::Result<()> {
     let (program, target): (&str, PathBuf) = match std::env::consts::OS {
         "macos" => ("open", path.to_path_buf()),
@@ -67,6 +69,57 @@ fn open_with_system(path: &Path) -> std::io::Result<()> {
         ),
     };
     Command::new(program).arg(target).spawn().map(|_| ())
+}
+
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn app_bundle_from_executable(executable: &Path) -> Option<PathBuf> {
+    let macos = executable.parent()?;
+    if macos.file_name()?.to_string_lossy() != "MacOS" {
+        return None;
+    }
+    let contents = macos.parent()?;
+    if contents.file_name()?.to_string_lossy() != "Contents" {
+        return None;
+    }
+    let app = contents.parent()?;
+    (app.extension()?.to_string_lossy() == "app").then(|| app.to_path_buf())
+}
+
+#[cfg(target_os = "macos")]
+fn install_macos_update(path: &Path, version: &str, language: &str) -> std::io::Result<()> {
+    use std::os::unix::process::CommandExt;
+    use std::process::Stdio;
+
+    let executable = std::env::current_exe()?;
+    let app = app_bundle_from_executable(&executable).ok_or_else(|| {
+        std::io::Error::other("RustZIP must be running from an installed macOS app bundle")
+    })?;
+    let helper = app.join("Contents/Helpers/RustZIPUpdateHelper");
+    if !helper.is_file() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "This RustZIP version does not include the macOS update helper",
+        ));
+    }
+
+    Command::new(helper)
+        .args(["--app"])
+        .arg(app)
+        .args(["--dmg"])
+        .arg(path)
+        .args(["--version", version, "--language", language, "--pid"])
+        .arg(std::process::id().to_string())
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .process_group(0)
+        .spawn()
+        .map(|_| ())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn install_macos_update(path: &Path, _version: &str, _language: &str) -> std::io::Result<()> {
+    open_with_system(path)
 }
 
 /// The largest file unpacked just to be opened for a look.
@@ -188,20 +241,30 @@ fn download_name(url: &str) -> String {
     }
 }
 
-fn download_and_open_update<F: Fetcher>(
+fn download_and_handoff_update<F: Fetcher>(
     updater: &Updater<'_, F>,
     update: &Update,
     dir: &Path,
     mut progress: impl FnMut(u64, u64),
-    open: impl FnOnce(&Path) -> std::io::Result<()>,
+    handoff: impl FnOnce(&Path, &str) -> std::io::Result<()>,
 ) -> Result<(), String> {
     let bytes = updater
         .download_with_progress(update, &mut progress)
         .map_err(|e| e.to_string())?;
-    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-    let file = dir.join(download_name(&update.asset.url));
+    let download_dir = tempfile::Builder::new()
+        .prefix("RustZIP-update-")
+        .tempdir_in(dir)
+        .map_err(|e| e.to_string())?;
+    let file = download_dir.path().join(download_name(&update.asset.url));
     std::fs::write(&file, bytes).map_err(|e| e.to_string())?;
-    open(&file).map_err(|e| e.to_string())
+    let download_dir = download_dir.keep();
+    match handoff(&file, &update.version.to_string()) {
+        Ok(()) => Ok(()),
+        Err(error) => {
+            let _ = std::fs::remove_dir_all(download_dir);
+            Err(error.to_string())
+        }
+    }
 }
 
 impl MainView {
@@ -235,13 +298,16 @@ impl MainView {
         .detach();
     }
 
-    /// Downloads, verifies and opens the new version. Nothing is installed by us.
+    /// Downloads and verifies the new version, then starts the platform update handoff.
     pub fn install_update(&mut self, cx: &mut Context<Self>) {
         let Some(UpdateState::Available(update)) = self.update.clone() else {
             return;
         };
         self.update = Some(UpdateState::Downloading(update.clone(), 0));
         cx.notify();
+        let update_language = crate::text::language_choice_for(&self.settings.language)
+            .tag
+            .to_string();
         let (progress_tx, progress_rx) = unbounded();
         cx.spawn(async move |this, cx| {
             let job = update.clone();
@@ -249,9 +315,9 @@ impl MainView {
             cx.background_executor()
                 .spawn(async move {
                     let fetcher = HttpFetcher::new();
-                    let dir = std::env::temp_dir().join(format!("RustZIP-update-{}", job.version));
+                    let dir = std::env::temp_dir();
                     let mut last_percent = 0;
-                    let result = download_and_open_update(
+                    let result = download_and_handoff_update(
                         &Updater::new(&fetcher, UPDATE_MANIFEST_URL, UPDATE_PUBLIC_KEY),
                         &job,
                         &dir,
@@ -262,7 +328,7 @@ impl MainView {
                                 let _ = sender.try_send(UpdateDownloadEvent::Progress(percent));
                             }
                         },
-                        open_with_system,
+                        |path, version| install_macos_update(path, version, &update_language),
                     );
                     if result.is_ok() {
                         let _ = sender.try_send(UpdateDownloadEvent::Progress(100));
@@ -291,14 +357,23 @@ impl MainView {
                         let update = update.clone();
                         let _ = this.update(cx, |this, cx| match result {
                             Ok(()) => {
-                                this.update = None;
-                                this.say(
-                                    Notice::Info(
-                                        this.tool_text("update_installed")
-                                            .replace("{version}", &update.version.to_string()),
-                                    ),
-                                    cx,
-                                );
+                                #[cfg(target_os = "macos")]
+                                {
+                                    this.update = Some(UpdateState::Installing(update.clone()));
+                                    cx.notify();
+                                    this.ensure_polling(cx);
+                                }
+                                #[cfg(not(target_os = "macos"))]
+                                {
+                                    this.update = None;
+                                    this.say(
+                                        Notice::Info(
+                                            this.tool_text("update_installed")
+                                                .replace("{version}", &update.version.to_string()),
+                                        ),
+                                        cx,
+                                    );
+                                }
                             }
                             Err(e) => {
                                 this.update = Some(UpdateState::Available(update));
@@ -592,6 +667,24 @@ mod tests {
     }
 
     #[test]
+    fn macos_app_bundle_is_derived_only_from_a_bundle_executable_path() {
+        assert_eq!(
+            app_bundle_from_executable(Path::new(
+                "/Applications/RustZIP.app/Contents/MacOS/rustzip"
+            )),
+            Some(PathBuf::from("/Applications/RustZIP.app"))
+        );
+        assert_eq!(
+            app_bundle_from_executable(Path::new("/usr/local/bin/rustzip")),
+            None
+        );
+        assert_eq!(
+            app_bundle_from_executable(Path::new("/Applications/Other.app/Contents/Resources/x")),
+            None
+        );
+    }
+
+    #[test]
     fn update_handoff_verifies_before_opening_and_propagates_launch_failure() {
         use ed25519_dalek::{Signer, SigningKey};
         use rz_app::update::{Asset, hex, signed_message};
@@ -627,12 +720,12 @@ mod tests {
             key.verifying_key().to_bytes(),
         );
         let called = Cell::new(false);
-        let result = download_and_open_update(
+        let result = download_and_handoff_update(
             &updater,
             &update,
             dir.path(),
             |_, _| {},
-            |path| {
+            |path, _version| {
                 called.set(true);
                 assert_eq!(std::fs::read(path).unwrap(), b"abc");
                 Err(std::io::Error::other("launch failed"))
@@ -643,12 +736,12 @@ mod tests {
 
         called.set(false);
         assert!(
-            download_and_open_update(
+            download_and_handoff_update(
                 &updater,
                 &update,
                 dir.path(),
                 |_, _| {},
-                |path| {
+                |path, _version| {
                     called.set(true);
                     assert_eq!(std::fs::read(path).unwrap(), b"abc");
                     Ok(())
@@ -666,12 +759,12 @@ mod tests {
         );
         called.set(false);
         assert!(
-            download_and_open_update(
+            download_and_handoff_update(
                 &updater,
                 &update,
                 dir.path(),
                 |_, _| {},
-                |_| {
+                |_, _version| {
                     called.set(true);
                     Ok(())
                 }

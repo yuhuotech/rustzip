@@ -96,6 +96,7 @@ status_compression_ratio	Compactado para {ratio}% do tamanho original
 status_ready	Pronto
 status_new_version	Atualização disponível: {version}
 status_downloading	Baixando {version}… {progress}%
+status_installing	A atualização para {version} e a reinicialização ocorrerão após as tarefas atuais…
 go_up	Subir
 recent_column_name	Nome
 recent_column_size	Tamanho

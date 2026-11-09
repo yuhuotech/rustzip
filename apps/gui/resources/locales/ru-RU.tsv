@@ -96,6 +96,7 @@ status_compression_ratio	Сжато до {ratio}% от исходного раз
 status_ready	Готово
 status_new_version	Доступно обновление: {version}
 status_downloading	Загрузка {version}… {progress}%
+status_installing	После завершения текущих задач RustZIP обновится до {version} и перезапустится…
 go_up	Вверх
 recent_column_name	Имя
 recent_column_size	Размер

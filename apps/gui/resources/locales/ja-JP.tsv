@@ -96,6 +96,7 @@ status_compression_ratio	元のサイズの{ratio}%に圧縮
 status_ready	準備完了
 status_new_version	アップデートがあります: {version}
 status_downloading	{version}をダウンロード中… {progress}%
+status_installing	現在のタスク完了後に{version}へ更新して再起動します…
 go_up	上へ
 recent_column_name	名前
 recent_column_size	サイズ

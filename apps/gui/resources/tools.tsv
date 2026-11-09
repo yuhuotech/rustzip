@@ -95,6 +95,7 @@ status_compression_ratio	压缩率 {ratio}%	Compressed to {ratio}% of original
 status_ready	就绪	Ready
 status_new_version	新版本 {version} · 更新	Update available: {version}
 status_downloading	正在下载 {version}… {progress}%	Downloading {version}… {progress}%
+status_installing	当前任务完成后将更新并重启到 {version}…	Updating and restarting to {version} after current work finishes…
 go_up	上一级	Go up
 recent_column_name	名称	Name
 recent_column_size	大小	Size

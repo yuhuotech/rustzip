@@ -2804,6 +2804,11 @@ impl MainView {
                         this.refresh_tasks(cx);
                         let busy = this.task_view.iter().any(|t| !t.state.is_finished())
                             || this.audio_playing.is_some();
+                        if !busy && matches!(&this.update, Some(UpdateState::Installing(_))) {
+                            this.polling = false;
+                            cx.quit();
+                            return false;
+                        }
                         if !busy {
                             this.polling = false;
                         }
@@ -5471,6 +5476,12 @@ impl MainView {
                         self.tool_text("status_downloading")
                             .replace("{version}", &u.version.to_string())
                             .replace("{progress}", &progress.to_string()),
+                    ),
+                ),
+                UpdateState::Installing(u) => d.child(
+                    div().text_color(p.fg2).child(
+                        self.tool_text("status_installing")
+                            .replace("{version}", &u.version.to_string()),
                     ),
                 ),
             })
