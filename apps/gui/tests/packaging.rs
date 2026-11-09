@@ -413,6 +413,8 @@ fn linux_packaging_keeps_rar_features_and_descriptors_in_sync() {
             .unwrap()
             .path();
         assert!(package.join("install.sh").is_file());
+        assert!(package.join("rz-updater").is_file());
+        assert!(package.join("updater-licenses.txt").is_file());
         assert!(package.join("rz-pdf-renderer").is_file());
         assert!(package.join("rz-video-renderer").is_file());
         assert!(package.join("pdf-renderer-licenses.txt").is_file());

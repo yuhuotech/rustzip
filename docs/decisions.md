@@ -494,6 +494,7 @@
 - 实现 D70：Windows 新客户端优先 `windows-x86_64-zip`，保留原 EXE 键供旧客户端；Linux 官方 tar 安装记录 PREFIX / XDG 数据路径，采用 `lib/rustzip/releases/<随机标识>` 与 `current` 原子切换。包管理器、Flatpak、Snap 和 AppImage 安装不由此更新器覆盖。
 - Windows 独立 `rz-updater` 保留卸载器和非更新文件，在同卷暂存完整目录并记录每次切换；管理员安装由受保护安装位置的 helper 发起 UAC，复制到管理员专用目录后退出释放旧 helper，工作进程再次验签。普通用户控制进程重启 GUI，管理员进程不启动 GUI。
 - 新 GUI 创建窗口后通过回环 IPC 回执，再等待事务提交确认后开放操作；一次性能力令牌存于仅当前用户或管理员可读的目录，命令行仅携带令牌文件位置。PID、启动时间、预期可执行路径与令牌一起核验。进程异常退出时保留持久事务，下一次启动先恢复；超时且新进程不能正常退出时保留备份。
+- 提交确认绑定事务 ID，必须在释放安装锁后送达新窗口，避免刚启动的软件与尚未退出的更新器竞争安装锁。已提交事务的备份清理失败可留待重试，不能阻断已确认的新版本启动。Linux 许可证集合变化随事务维护稳定链接，提交和回滚都仅修改 RustZIP 自有链接。
 - macOS helper 独立使用 CryptoKit 验证原 Ed25519 消息；同卷 `RENAME_SWAP` 避免 `.app` 不存在的中间窗口。签名、Team、Bundle ID、版本、内部链接、ZIP 展开预算均校验，启动回执替代 Launch Services 接受启动作为成功标准。
 - 重用依赖树中的 `sysinfo` 0.31.4（MIT）、`windows-sys` / `libc`（MIT OR Apache-2.0）、`tar` / `flate2`（MIT OR Apache-2.0）与 `zip`（MIT）；不引入外部安装框架或 GPL/LGPL 静态依赖。平台 API 封装在 `rz-platform`，独立 updater 和 GUI 只经 `rz-app` 调用。
 - 开发与平台验收状态统一记录在 `cross-platform-auto-update-design.md`，代码完成不等于正式签名发布或交互式授权验收完成。

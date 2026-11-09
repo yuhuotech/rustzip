@@ -79,6 +79,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             std::process::exit(86);
         }
         rz_app::update_runtime::complete_startup()?;
+        if !cfg!(target_os = "macos") {
+            let installation =
+                rz_app::update_install::Installation::locate(&std::env::current_exe()?)?;
+            let _lock = installation.lock()?;
+        }
     }
     if let Some(path) = config["pid_file"].as_str() {
         fs::write(path, std::process::id().to_string())?;
@@ -109,7 +114,11 @@ fn make_package(
                 .to_str()
                 .ok_or("non UTF-8 fixture name")?
                 .replace('\\', "/");
-            writer.start_file(relative.clone(), zip::write::SimpleFileOptions::default())?;
+            writer.start_file(
+                relative.clone(),
+                zip::write::SimpleFileOptions::default()
+                    .compression_method(zip::CompressionMethod::Stored),
+            )?;
             if relative == "update-layout.json" {
                 writer.write_all(
                     serde_json::to_string(
@@ -129,6 +138,9 @@ fn make_package(
         let root = format!("RustZIP-{version}-{platform}");
         for file in files(source)? {
             let relative = file.strip_prefix(source)?;
+            if relative == Path::new("legacy-license.txt") {
+                continue;
+            }
             let mut bytes = Vec::new();
             if relative == Path::new("update-layout.json") {
                 bytes = serde_json::to_vec(
@@ -143,6 +155,16 @@ fn make_package(
             header.set_cksum();
             tar.append_data(&mut header, Path::new(&root).join(relative), &bytes[..])?;
         }
+        let license = b"new component license";
+        let mut header = tar::Header::new_gnu();
+        header.set_size(license.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        tar.append_data(
+            &mut header,
+            Path::new(&root).join("new-component-license.txt"),
+            &license[..],
+        )?;
         tar.into_inner()?.finish()?;
     }
     Ok(())

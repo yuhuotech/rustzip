@@ -342,6 +342,32 @@ pub fn validate_protected_installation(root: &Path, parent_pid: u32) -> io::Resu
     }
 }
 
+pub fn validate_system_directory(directory: &Path) -> io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        for path in directory.ancestors() {
+            let metadata = fs::symlink_metadata(path)?;
+            if !metadata.is_dir()
+                || metadata.file_type().is_symlink()
+                || metadata.uid() != 0
+                || metadata.mode() & 0o022 != 0
+            {
+                return Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "system resource directory is not protected",
+                ));
+            }
+        }
+        Ok(())
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = directory;
+        Err(io::Error::other("not a Unix system installation"))
+    }
+}
+
 pub fn registered_windows_root(machine: bool) -> io::Result<PathBuf> {
     #[cfg(windows)]
     {

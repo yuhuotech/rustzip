@@ -27,6 +27,8 @@ enum Message {
         token: String,
         pid: u32,
         started: u64,
+        #[serde(default)]
+        transaction: Option<String>,
     },
     Ready,
     Armed,
@@ -74,6 +76,7 @@ fn accept(
     token: &str,
     timeout: Duration,
     expected: Option<&Path>,
+    expected_transaction: Option<&str>,
 ) -> Result<(TcpStream, u32)> {
     let deadline = Instant::now() + timeout;
     while Instant::now() < deadline {
@@ -89,6 +92,7 @@ fn accept(
                     token: actual,
                     pid,
                     started,
+                    transaction,
                 }) = receive(&mut stream)
                 {
                     let identity_matches = if let Some(executable) = expected {
@@ -99,7 +103,10 @@ fn accept(
                     } else {
                         pid != 0 && started != 0
                     };
-                    if actual == token && identity_matches {
+                    if actual == token
+                        && identity_matches
+                        && expected_transaction.is_none_or(|id| transaction.as_deref() == Some(id))
+                    {
                         stream.set_read_timeout(Some(PREPARE_TIMEOUT))?;
                         return Ok((stream, pid));
                     }
@@ -118,6 +125,10 @@ fn accept(
 }
 
 fn connect(address: &str, token: &str) -> Result<TcpStream> {
+    connect_identity(address, token, None)
+}
+
+fn connect_identity(address: &str, token: &str, transaction: Option<&str>) -> Result<TcpStream> {
     let token = resolve_token(token)?;
     let address: SocketAddr = address
         .parse()
@@ -139,6 +150,7 @@ fn connect(address: &str, token: &str) -> Result<TcpStream> {
             token,
             pid: p.pid,
             started: p.started,
+            transaction: transaction.map(str::to_owned),
         },
     )?;
     Ok(stream)
@@ -196,9 +208,9 @@ fn expected(message: Message, wanted: &str) -> Result<()> {
 pub fn launch_update(update: &Update, archive: &Path, key: &[u8; 32]) -> Result<()> {
     let installation = Installation::locate(&std::env::current_exe()?)?;
     installation.verify_registration()?;
-    if installation.machine && rz_platform::update::elevated() {
+    if rz_platform::update::elevated() && !cfg!(feature = "updater-test-hooks") {
         return Err(Error::Unsupported(
-            "Start RustZIP as a normal user before updating a system installation.".into(),
+            "Start RustZIP as a normal user before updating.".into(),
         ));
     }
     let p = rz_platform::update::process(std::process::id())
@@ -241,15 +253,16 @@ pub fn launch_update(update: &Update, archive: &Path, key: &[u8; 32]) -> Result<
             .stdout(Stdio::null())
             .stderr(Stdio::null()),
     )?;
-    let response =
-        accept(&server, &token, PREPARE_TIMEOUT, Some(&helper)).and_then(|(mut stream, pid)| {
+    let response = accept(&server, &token, PREPARE_TIMEOUT, Some(&helper), None).and_then(
+        |(mut stream, pid)| {
             if pid != child.id() {
                 return Err(Error::Corrupt("unexpected updater process".into()));
             }
             expected(receive(&mut stream)?, "ready")?;
             send(&mut stream, &Message::Armed)?;
             expected(receive(&mut stream)?, "armed")
-        });
+        },
+    );
     if response.is_err() {
         let _ = child.try_wait();
     }
@@ -279,7 +292,7 @@ pub fn launch_macos_helper(helper: &Path, arguments: &[OsString]) -> Result<()> 
             .stdout(Stdio::null())
             .stderr(Stdio::null()),
     )?;
-    let (mut stream, pid) = accept(&server, &token, PREPARE_TIMEOUT, Some(helper))?;
+    let (mut stream, pid) = accept(&server, &token, PREPARE_TIMEOUT, Some(helper), None)?;
     if pid != child.id() {
         return Err(Error::Corrupt("unexpected macOS updater process".into()));
     }
@@ -328,7 +341,7 @@ pub fn begin_startup(arguments: &mut Vec<OsString>, current_version: &str) -> Re
         ));
     }
     let session = StartupSession {
-        stream: connect(text(1)?, text(2)?)?,
+        stream: connect_identity(text(1)?, text(2)?, Some(text(3)?))?,
     };
     let mut slot = STARTUP
         .get_or_init(|| Mutex::new(None))
@@ -363,6 +376,18 @@ pub fn recover_before_startup() -> Result<bool> {
                 app.file_name().unwrap_or_default().to_string_lossy()
             ));
         if journal.exists() {
+            if install::read_json::<serde_json::Value>(&journal)
+                .ok()
+                .and_then(|value| {
+                    value
+                        .get("phase")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_owned)
+                })
+                .is_some_and(|phase| phase == "confirmed")
+            {
+                return Ok(false);
+            }
             rz_platform::update::detached(
                 Command::new(app.join("Contents/Helpers/RustZIPUpdateHelper"))
                     .arg("--recover")
@@ -388,6 +413,14 @@ pub fn recover_before_startup() -> Result<bool> {
         return Ok(false);
     }
     let transaction = Transaction::read(&installation)?;
+    if transaction.phase == Phase::Confirmed {
+        return Ok(false);
+    }
+    if rz_platform::update::elevated() && !cfg!(feature = "updater-test-hooks") {
+        return Err(Error::Unsupported(
+            "Start RustZIP as a normal user to recover the update.".into(),
+        ));
+    }
     if rz_platform::update::same_process(transaction.updater_pid, transaction.updater_started) {
         return Ok(true);
     }
@@ -418,7 +451,7 @@ pub fn recover_before_startup() -> Result<bool> {
             .stdout(Stdio::null())
             .stderr(Stdio::null()),
     )?;
-    let (mut stream, _) = accept(&server, &token, PREPARE_TIMEOUT, Some(&helper))?;
+    let (mut stream, _) = accept(&server, &token, PREPARE_TIMEOUT, Some(&helper), None)?;
     expected(receive(&mut stream)?, "ready")?;
     send(&mut stream, &Message::Armed)?;
     expected(receive(&mut stream)?, "armed")?;
@@ -484,6 +517,7 @@ fn restart(
             &token,
             Duration::from_millis(250),
             Some(&executable),
+            Some(id),
         ) {
             Ok(value) => {
                 receipt = Some(value);
@@ -571,36 +605,15 @@ fn stage(
             &CancelToken::new(),
             |_, _| {},
         ),
-        InstallKind::Linux => {
-            let staging = crate::update_package::stage_linux_update(
-                archive,
-                &parent,
-                &task.version,
-                &task.asset,
-                key,
-                &CancelToken::new(),
-                |_, _| {},
-            )?;
-            let current = installation.root.join("current");
-            let mut old = std::collections::BTreeSet::new();
-            let mut new = std::collections::BTreeSet::new();
-            for (directory, files) in [(current.as_path(), &mut old), (staging.path(), &mut new)] {
-                for entry in fs::read_dir(directory)? {
-                    let entry = entry?;
-                    if entry
-                        .file_name()
-                        .to_str()
-                        .is_some_and(|name| name.ends_with(".txt"))
-                    {
-                        files.insert(entry.file_name());
-                    }
-                }
-            }
-            if old != new {
-                return Err(Error::Unsupported("This update changes the installation's license or optional component set. Install the official package once to update the desktop integration.".into()));
-            }
-            Ok(staging)
-        }
+        InstallKind::Linux => crate::update_package::stage_linux_update(
+            archive,
+            &parent,
+            &task.version,
+            &task.asset,
+            key,
+            &CancelToken::new(),
+            |_, _| {},
+        ),
     }
 }
 
@@ -633,7 +646,9 @@ fn committed(installation: &Installation, version: &str) {
     if installation.kind == InstallKind::Windows {
         let _ = rz_platform::update::record_windows_version(installation.machine, version);
     }
-    let _ = rz_platform::update::clear_recovery(installation.machine);
+    if !installation.journal().exists() {
+        let _ = rz_platform::update::clear_recovery(installation.machine);
+    }
 }
 
 fn worker(
@@ -643,7 +658,7 @@ fn worker(
     controller: &mut TcpStream,
     privileged: bool,
 ) -> Result<()> {
-    let _lock = installation.lock()?;
+    let mut lock = Some(installation.lock()?);
     recover(installation)?;
     let staged = stage(task, installation, key)?;
     let mut transaction = Transaction::prepare(
@@ -682,21 +697,23 @@ fn worker(
         match receive(controller)? {
             Message::Commit => {
                 transaction.confirm(installation)?;
+                let _ = transaction.cleanup(installation);
                 committed(installation, &task.version);
+                drop(lock.take());
                 send(controller, &Message::Committed)?;
-                transaction.cleanup(installation)?;
             }
             Message::Rollback => {
                 transaction.rollback(installation)?;
                 let _ = rz_platform::update::clear_recovery(installation.machine);
+                drop(lock.take());
                 send(controller, &Message::Committed)?;
             }
             Message::Deferred => {}
             _ => return Err(Error::Corrupt("invalid privileged update control".into())),
         }
     } else {
-        match restart(installation, &task.version, &task.transaction_id, || { transaction.confirm(installation)?; committed(installation, &task.version); Ok(()) })? {
-            RestartResult::Confirmed => { transaction.cleanup(installation)?; }
+        match restart(installation, &task.version, &task.transaction_id, || { transaction.confirm(installation)?; let _ = transaction.cleanup(installation); committed(installation, &task.version); drop(lock.take()); Ok(()) })? {
+            RestartResult::Confirmed => {}
             RestartResult::Failed => { transaction.rollback(installation)?; let _ = rz_platform::update::clear_recovery(installation.machine); return Err(Error::Unsupported("The updated program did not start. The previous version was restored.".into())); }
             RestartResult::Deferred => return Err(Error::Unsupported("Startup was not confirmed. The backup was retained; close RustZIP and launch it again to recover.".into())),
         }
@@ -833,6 +850,11 @@ fn cleanup_protected_workers(installation: &Installation, key: &[u8; 32]) {
 }
 
 fn normal(task_path: &Path, address: &str, token: &str, key: &[u8; 32]) -> Result<()> {
+    if rz_platform::update::elevated() && !cfg!(feature = "updater-test-hooks") {
+        return Err(Error::Unsupported(
+            "Start RustZIP as a normal user before updating.".into(),
+        ));
+    }
     let mut gui = connect(address, token)?;
     if let Some(directory) = task_path.parent() {
         install::write_json(
@@ -859,7 +881,7 @@ fn normal(task_path: &Path, address: &str, token: &str, key: &[u8; 32]) -> Resul
                 reference.into(),
             ];
             rz_platform::update::authorize(&installation.helper(), &arguments)?;
-            let (mut elevated, _) = accept(&server, &secret, PREPARE_TIMEOUT, None)?;
+            let (mut elevated, _) = accept(&server, &secret, PREPARE_TIMEOUT, None, None)?;
             expected(receive(&mut elevated)?, "ready")?;
             send(&mut gui, &Message::Ready)?;
             expected(receive(&mut gui)?, "armed")?;
@@ -958,6 +980,9 @@ pub fn cleanup_previous_downloads(key: &[u8; 32]) {
         {
             continue;
         }
+        if Installation::read(&task.installation).is_ok_and(|i| i.journal().exists()) {
+            continue;
+        }
         if let Ok(identity) = install::read_json::<(u32, u64)>(&directory.join("runner.json")) {
             if rz_platform::update::same_process(identity.0, identity.1) {
                 continue;
@@ -999,7 +1024,7 @@ fn startup_recovery(root: &Path, pid: u32, started: u64, address: &str, token: &
                     reference.into(),
                 ],
             )?;
-            let (mut controller, _) = accept(&server, &secret, PREPARE_TIMEOUT, None)?;
+            let (mut controller, _) = accept(&server, &secret, PREPARE_TIMEOUT, None, None)?;
             expected(receive(&mut controller)?, "ready")?;
             send(&mut gui, &Message::Ready)?;
             expected(receive(&mut gui)?, "armed")?;
@@ -1208,7 +1233,7 @@ pub fn helper_main(arguments: impl IntoIterator<Item = OsString>, key: &[u8; 32]
                 return Err(Error::UnsafePath("untrusted recovery worker".into()));
             }
             let mut controller = connect(text(4)?, text(5)?)?;
-            let _lock = installation.lock()?;
+            let lock = installation.lock()?;
             send(&mut controller, &Message::Ready)?;
             expected(receive(&mut controller)?, "armed")?;
             send(&mut controller, &Message::Armed)?;
@@ -1216,6 +1241,7 @@ pub fn helper_main(arguments: impl IntoIterator<Item = OsString>, key: &[u8; 32]
                 std::thread::sleep(Duration::from_millis(100));
             }
             recover(&installation)?;
+            drop(lock);
             send(&mut controller, &Message::Committed)
         }
         "--recover" if args.len() == 2 => recover_journal(Path::new(&args[1])),
@@ -1302,12 +1328,22 @@ mod tests {
         let client = std::thread::spawn(move || {
             let bad = connect(&endpoint, &"0".repeat(64)).unwrap();
             drop(bad);
-            let mut good = connect(&endpoint, &valid).unwrap();
+            let wrong_transaction =
+                connect_identity(&endpoint, &valid, Some("different-transaction")).unwrap();
+            drop(wrong_transaction);
+            let mut good =
+                connect_identity(&endpoint, &valid, Some("expected-transaction")).unwrap();
             expected(receive(&mut good).unwrap(), "ready").unwrap();
             send(&mut good, &Message::Armed).unwrap();
         });
-        let (mut peer, pid) =
-            accept(&server, &token, Duration::from_secs(5), Some(&executable)).unwrap();
+        let (mut peer, pid) = accept(
+            &server,
+            &token,
+            Duration::from_secs(5),
+            Some(&executable),
+            Some("expected-transaction"),
+        )
+        .unwrap();
         assert_eq!(pid, std::process::id());
         send(&mut peer, &Message::Ready).unwrap();
         expected(receive(&mut peer).unwrap(), "armed").unwrap();

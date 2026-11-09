@@ -12,6 +12,7 @@ foreach ($name in @("rustzip.exe", "rz-updater.exe", "rz-pdf-renderer.exe", "rz-
     Copy-Item -LiteralPath (Join-Path $BinaryDir $name) -Destination $payload
 }
 $licenses = @{
+    "updater.txt"="updater.txt";
     "pbz2.txt"="pbz2.txt"; "pbz2-notice.txt"="pbz2-notice.txt"; "libchm.txt"="libchm.txt";
     "format-readers.txt"="format-readers.txt"; "pdf-renderer.txt"="pdf-renderer.txt";
     "audio-playback.txt"="audio-playback.txt"; "rodio-mit.txt"="rodio-mit.txt";

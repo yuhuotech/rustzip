@@ -286,6 +286,8 @@ pub struct Transaction {
     pub previous: String,
     pub updater_pid: u32,
     pub updater_started: u64,
+    pub previous_licenses: Vec<String>,
+    pub next_licenses: Vec<String>,
 }
 
 struct PreparationGuard {
@@ -311,6 +313,16 @@ impl Transaction {
         }
         if installation.kind == InstallKind::Linux && !valid_release(&record.previous) {
             return Err(Error::UnsafePath("invalid previous release".into()));
+        }
+        if record.previous_licenses.len() > 256
+            || record.next_licenses.len() > 256
+            || record
+                .previous_licenses
+                .iter()
+                .chain(&record.next_licenses)
+                .any(|name| !valid_license(name))
+        {
+            return Err(Error::UnsafePath("invalid update license records".into()));
         }
         Ok(record)
     }
@@ -359,6 +371,8 @@ impl Transaction {
             previous: String::new(),
             updater_pid: identity.pid,
             updater_started: identity.started,
+            previous_licenses: Vec::new(),
+            next_licenses: Vec::new(),
         };
         let next = transaction.next(installation);
         let mut guard = PreparationGuard {
@@ -367,6 +381,9 @@ impl Transaction {
         };
         match installation.kind {
             InstallKind::Linux => {
+                transaction.previous_licenses = license_names(&installation.root.join("current"))?;
+                transaction.next_licenses = license_names(staged)?;
+                transaction.validate_license_links(installation)?;
                 transaction.previous = fs::read_link(installation.root.join("current"))?
                     .to_str()
                     .ok_or_else(|| Error::Corrupt("invalid current release".into()))?
@@ -421,6 +438,7 @@ impl Transaction {
             InstallKind::Linux => {
                 self.phase = Phase::BackedUp;
                 self.persist(installation)?;
+                self.publish_license_links(installation)?;
                 switch_linux(installation, &format!("releases/{}", self.id))?;
             }
             InstallKind::Windows => {
@@ -471,6 +489,24 @@ impl Transaction {
     }
 
     pub fn cleanup(&self, installation: &Installation) -> Result<()> {
+        if installation.kind == InstallKind::Linux {
+            let (remove, keep) = if self.phase == Phase::Confirmed {
+                (&self.previous_licenses, &self.next_licenses)
+            } else {
+                (&self.next_licenses, &self.previous_licenses)
+            };
+            let documents = license_directory(installation)?;
+            for name in remove.iter().filter(|name| !keep.contains(name)) {
+                let path = documents.join(name);
+                let target = installation.root.join("current").join(name);
+                if fs::read_link(&path).ok().as_ref() == Some(&target) {
+                    fs::remove_file(path)?;
+                }
+            }
+            if documents.exists() {
+                rz_platform::update::sync_directory(&documents)?;
+            }
+        }
         let disposable = match installation.kind {
             InstallKind::Linux => {
                 if self.phase == Phase::Confirmed {
@@ -495,6 +531,80 @@ impl Transaction {
         }
         Ok(())
     }
+
+    fn validate_license_links(&self, installation: &Installation) -> Result<()> {
+        let directory = license_directory(installation)?;
+        if installation.machine {
+            rz_platform::update::validate_system_directory(&directory)?;
+        }
+        for name in &self.next_licenses {
+            let path = directory.join(name);
+            if fs::symlink_metadata(&path).is_ok()
+                && fs::read_link(&path).ok() != Some(installation.root.join("current").join(name))
+            {
+                return Err(Error::UnsafePath(
+                    "a license destination belongs to another file".into(),
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn publish_license_links(&self, installation: &Installation) -> Result<()> {
+        if self.next_licenses.is_empty() && self.previous_licenses.is_empty() {
+            return Ok(());
+        }
+        self.validate_license_links(installation)?;
+        let directory = license_directory(installation)?;
+        for name in &self.next_licenses {
+            let path = directory.join(name);
+            if fs::symlink_metadata(&path).is_err() {
+                rz_platform::update::link_file(
+                    &installation.root.join("current").join(name),
+                    &path,
+                )?;
+            }
+        }
+        rz_platform::update::sync_directory(&directory)?;
+        Ok(())
+    }
+}
+
+fn valid_license(name: &str) -> bool {
+    name.len() <= 120
+        && name.ends_with(".txt")
+        && !name.starts_with('.')
+        && !name.contains("..")
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_'))
+}
+
+fn license_names(directory: &Path) -> Result<Vec<String>> {
+    let mut names = Vec::new();
+    for entry in fs::read_dir(directory)? {
+        let entry = entry?;
+        if let Some(name) = entry
+            .file_name()
+            .to_str()
+            .filter(|name| valid_license(name))
+        {
+            names.push(name.to_owned());
+        }
+    }
+    if names.len() > 256 {
+        return Err(Error::LimitExceeded("too many license files".into()));
+    }
+    names.sort();
+    Ok(names)
+}
+
+fn license_directory(installation: &Installation) -> Result<PathBuf> {
+    Ok(installation
+        .prefix
+        .as_ref()
+        .ok_or_else(|| Error::Corrupt("missing Linux installation prefix".into()))?
+        .join("share/doc/rustzip"))
 }
 
 fn valid_release(value: &str) -> bool {
@@ -906,8 +1016,74 @@ mod tests {
             previous: "../../victim".into(),
             updater_pid: 0,
             updater_started: 0,
+            previous_licenses: Vec::new(),
+            next_licenses: Vec::new(),
         };
         transaction.persist(&installation).unwrap();
         assert!(Transaction::read(&installation).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn linux_license_links_follow_commit_and_rollback_without_touching_user_files() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("lib/rustzip");
+        let old = transaction_id().unwrap();
+        fs::create_dir_all(root.join("releases").join(&old)).unwrap();
+        fs::write(
+            root.join("releases").join(&old).join("old-license.txt"),
+            b"old license",
+        )
+        .unwrap();
+        std::os::unix::fs::symlink(format!("releases/{old}"), root.join("current")).unwrap();
+        let installation = Installation {
+            schema: 1,
+            kind: InstallKind::Linux,
+            root,
+            machine: false,
+            prefix: Some(temp.path().to_owned()),
+            data_home: Some(temp.path().join("share")),
+        };
+        let documents = license_directory(&installation).unwrap();
+        fs::create_dir_all(&documents).unwrap();
+        std::os::unix::fs::symlink(
+            installation.root.join("current/old-license.txt"),
+            documents.join("old-license.txt"),
+        )
+        .unwrap();
+        fs::write(documents.join("my-notes.txt"), b"keep my notes").unwrap();
+        let staged = temp.path().join("staged");
+        fs::create_dir(&staged).unwrap();
+        fs::write(staged.join("new-license.txt"), b"new license").unwrap();
+        let mut first = Transaction::prepare(
+            &installation,
+            &staged,
+            "0.2.0",
+            &transaction_id().unwrap(),
+            &CancelToken::new(),
+        )
+        .unwrap();
+        first.publish(&installation).unwrap();
+        assert!(documents.join("new-license.txt").is_file());
+        first.rollback(&installation).unwrap();
+        assert!(documents.join("old-license.txt").is_file());
+        assert!(fs::symlink_metadata(documents.join("new-license.txt")).is_err());
+        let mut second = Transaction::prepare(
+            &installation,
+            &staged,
+            "0.2.0",
+            &transaction_id().unwrap(),
+            &CancelToken::new(),
+        )
+        .unwrap();
+        second.publish(&installation).unwrap();
+        second.confirm(&installation).unwrap();
+        second.cleanup(&installation).unwrap();
+        assert!(documents.join("new-license.txt").is_file());
+        assert!(fs::symlink_metadata(documents.join("old-license.txt")).is_err());
+        assert_eq!(
+            fs::read(documents.join("my-notes.txt")).unwrap(),
+            b"keep my notes"
+        );
     }
 }

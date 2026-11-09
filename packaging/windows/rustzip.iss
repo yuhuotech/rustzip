@@ -71,6 +71,7 @@ Source: "{#VideoRendererExe}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#UpdaterExe}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#LayoutFile}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\licenses\pbz2.txt"; DestDir: "{app}\licenses"; DestName: "pbz2.txt"; Flags: ignoreversion
+Source: "..\licenses\updater.txt"; DestDir: "{app}\licenses"; DestName: "updater.txt"; Flags: ignoreversion
 Source: "..\licenses\pbz2-notice.txt"; DestDir: "{app}\licenses"; DestName: "pbz2-notice.txt"; Flags: ignoreversion
 Source: "{#VcpkgShare}\zlib\copyright"; DestDir: "{app}\licenses"; DestName: "zlib.txt"; Flags: ignoreversion
 Source: "{#VcpkgShare}\bzip2\copyright"; DestDir: "{app}\licenses"; DestName: "bzip2.txt"; Flags: ignoreversion

@@ -181,13 +181,14 @@ func rollbackTransaction(_ journal: UpdateJournal, app: URL, expectedTeam: Strin
 }
 
 final class UpdateLock {
-    let fd: Int32
+    private var fd: Int32
     init(app: URL) throws {
         fd = open(journalURL(app).appendingPathExtension("lock").path, O_RDWR | O_CREAT | O_NOFOLLOW, 0o600)
         guard fd >= 0 else { throw fail("Could not open the update lock.") }
-        guard flock(fd, LOCK_EX | LOCK_NB) == 0 else { close(fd); throw fail("Another RustZIP update is already in progress.") }
+        guard flock(fd, LOCK_EX | LOCK_NB) == 0 else { close(fd); fd = -1; throw fail("Another RustZIP update is already in progress.") }
     }
-    deinit { close(fd) }
+    func release() { if fd >= 0 { close(fd); fd = -1 } }
+    deinit { release() }
 }
 
 struct UpdateFailure: Error, LocalizedError {
@@ -320,6 +321,24 @@ func helperText(_ key: Int, app: URL, language: String) -> String {
 
 func isWritable(_ directory: URL) -> Bool {
     access(directory.path, W_OK) == 0
+}
+
+func canManageAppWithoutAuthorization(_ app: URL) -> Bool {
+    guard isWritable(app.deletingLastPathComponent()), isWritable(app) else { return false }
+    guard let files = FileManager.default.enumerator(at: app, includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey]) else { return false }
+    let deadline = Date().addingTimeInterval(30)
+    var count = 0
+    for case let file as URL in files {
+        count += 1
+        guard count <= 100000, Date() < deadline, let values = try? file.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]) else { return false }
+        if values.isSymbolicLink == true { files.skipDescendants() }
+        else if values.isDirectory == true && !isWritable(file) { return false }
+    }
+    if FileManager.default.fileExists(atPath: journalURL(app).path) {
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: journalURL(app).path),
+              let owner = attributes[.ownerAccountID] as? NSNumber, owner.uint32Value == geteuid() else { return false }
+    }
+    return true
 }
 
 func elevate(helper: URL, app: URL, archive: URL, format: String, sha256: String,
@@ -543,6 +562,7 @@ func awaitStartup(_ app: URL, journal: UpdateJournal, uid: uid_t, elevated: Bool
             let channel = try UpdateSocket(accepted)
             let hello = try channel.read()
             guard hello["type"] as? String == "Hello", hello["token"] as? String == token,
+                  hello["transaction"] as? String == journal.id,
                   let pid = (hello["pid"] as? NSNumber)?.int32Value,
                   let started = (hello["started"] as? NSNumber)?.uint64Value,
                   processStart(pid) == started else { continue }
@@ -605,8 +625,9 @@ func installPreparedApp(_ source: URL, app: URL, bundleID: String, expectedTeam:
         let receipt = try awaitStartup(app, journal: journal, uid: uid, elevated: elevated)
         journal.phase = "confirmed"
         try persistJournal(journal, app: app)
-        try receipt.write(["type": "Committed"])
         try? cleanupJournal(journal, app: app)
+        lock.release()
+        try receipt.write(["type": "Committed"])
     } catch {
         if !(error is StartupUnconfirmed) && journal.phase != "confirmed" {
             if FileManager.default.fileExists(atPath: journalURL(app).path) { try rollbackTransaction(journal, app: app, expectedTeam: expectedTeam) }
@@ -657,7 +678,7 @@ func install(app originalApp: URL, archive originalArchive: URL, format: String,
             throw fail("The downloaded app version does not match the signed update manifest.")
         }
         try validateSignature(source, expectedTeam: expectedTeam)
-        if !isWritable(app.deletingLastPathComponent()) {
+        if !canManageAppWithoutAuthorization(app) {
             let helper = URL(fileURLWithPath: CommandLine.arguments[0]).standardizedFileURL
             try elevate(helper: helper, app: app, archive: archive, format: format,
                         sha256: sha256, source: source, version: version, platform: platform,
@@ -701,7 +722,7 @@ func recoveryMode() throws {
     let journal = try readJournal(app)
     if processStart(journal.updaterPID) == journal.updaterStart { return }
     try waitForExit(pid, started: argument("--pid-start").flatMap(UInt64.init))
-    if !isWritable(app.deletingLastPathComponent()) && !elevated {
+    if !canManageAppWithoutAuthorization(app) && !elevated {
         let helper = app.appendingPathComponent("Contents/Helpers/RustZIPUpdateHelper")
         let command = [helper.path, "--recover", "--elevated", "--app", app.path, "--pid", "0", "--uid", String(uid)].map(shellQuote).joined(separator: " ")
         try run("/usr/bin/osascript", ["-e", "do shell script \"\(appleScriptQuote(command))\" with administrator privileges"])
@@ -710,6 +731,7 @@ func recoveryMode() throws {
         defer { withExtendedLifetime(lock) {} }
         guard runningApps(app).isEmpty else { throw fail("Close RustZIP before recovering an interrupted update.") }
         try recoverTransaction(app, expectedTeam: team)
+        lock.release()
         try openInstalledApp(app, uid: uid, elevated: elevated)
     }
 }
