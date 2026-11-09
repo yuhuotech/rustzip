@@ -38,6 +38,7 @@ rustzip/
 │  ├─ cli            # rz 命令
 │  ├─ gui            # 桌面应用
 │  ├─ pdf-renderer   # 隔离的 PDF 首屏渲染子进程
+│  ├─ updater        # 独立签名更新事务、平台安装交接与启动回执
 │  └─ shell-ext/     # windows(COM) / macos(Finder Sync + Quick Look) / linux(Nautilus、Dolphin)
 ├─ docs/             # 产品、架构、技术规范、UI 规范、决策记录
 ├─ benches/          # 性能基准
@@ -106,6 +107,8 @@ APFS 的 decmpfs 数据按原文 64 KiB 分块读取和解码，目录、extent 
 - GUI 与引擎通过 `rz-app` 的事件流通信;进度事件批量合并推送,避免高频刷新。
 
 ## 7. 平台集成
+
+应用内更新由 `rz-app::update` 下载验签、`update_package` 受限解包、`update_install` 管理安装记录和事务、`update_runtime` 处理独立 helper 与启动回执；OS 进程、授权、权限、链接及持久改名封装于 `rz-platform::update`。`apps/updater` 仅为命令行入口；macOS 保留包内签名 Swift helper，通过同一启动回执协议与 GUI 通信。详细状态见 `cross-platform-auto-update-design.md`。
 
 - **Windows**:Win11 新式右键菜单用 `IExplorerCommand`(COM,MSIX 签名),并兼容旧菜单;MSI 或 MSIX 安装。长路径使用 `\\?\` 前缀。
 - **macOS**:Finder Sync 扩展通过本地 `rustzip://` 动作 URL 调用宿主 GUI;Quick Look ZIP 目录扩展通过原生 `NSTableView` 只读有限中央目录并限制元数据;安装包把非系统 dylib 放入 `Contents/Frameworks` 并以宿主 Developer ID 签名,发布校验拒绝 Homebrew / MacPorts 的绝对加载路径;签名和公证;拖到 Dock 图标压缩。

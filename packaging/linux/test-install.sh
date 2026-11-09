@@ -13,6 +13,7 @@ cp "$root"/packaging/linux/*.desktop \
     "$root"/packaging/linux/*.nemo_action \
     "$root"/packaging/linux/rustzip-nautilus-* "$package/"
 cp "$root"/packaging/licenses/libchm.txt "$package/libchm-license.txt"
+cp "$root"/packaging/licenses/updater.txt "$package/updater-licenses.txt"
 cp "$root"/packaging/licenses/format-readers.txt "$package/format-readers-licenses.txt"
 cp "$root"/packaging/licenses/pbz2.txt "$package/pbz2-license.txt"
 cp "$root"/packaging/licenses/pbz2-notice.txt "$package/pbz2-notice.txt"
@@ -32,9 +33,15 @@ cp "$root"/packaging/linux/install.sh "$package/install.sh"
 printf 'test executable\n' > "$package/rustzip"
 printf 'test PDF renderer\n' > "$package/rz-pdf-renderer"
 printf 'test video renderer\n' > "$package/rz-video-renderer"
+cp "${RZ_UPDATER_TEST_BINARY:-$root/target/debug/rz-updater}" "$package/rz-updater"
+version="$(awk -F'"' '/^version *=/ {print $2; exit}' "$root/Cargo.toml")"
+printf '{"schema":1,"version":"%s","platform":"linux-%s"}\n' "$version" "$(uname -m)" > "$package/update-layout.json"
 chmod +x "$package/rustzip" "$package/rz-pdf-renderer" "$package/rz-video-renderer"
 
 PREFIX="$prefix" XDG_DATA_HOME="$xdg" sh "$package/install.sh"
+test -L "$prefix/bin/rustzip"
+test -L "$prefix/lib/rustzip/current"
+test -f "$prefix/lib/rustzip/rustzip-install.json"
 installed=(
     "$xdg/kio/servicemenus/rustzip-servicemenu.desktop"
     "$xdg/kservices5/ServiceMenus/rustzip-servicemenu.desktop"
@@ -48,6 +55,7 @@ test -L "$xdg/nautilus/scripts/.rustzip/rustzip"
 test -x "$prefix/bin/rz-pdf-renderer"
 test -x "$prefix/bin/rz-video-renderer"
 test -f "$prefix/share/doc/rustzip/pdf-renderer-licenses.txt"
+test -f "$prefix/share/doc/rustzip/updater-licenses.txt"
 test -f "$prefix/share/doc/rustzip/audio-playback-licenses.txt"
 test -f "$prefix/share/doc/rustzip/rodio-mit.txt"
 test -f "$prefix/share/doc/rustzip/rodio-apache-2.0.txt"
@@ -60,11 +68,12 @@ test -f "$prefix/share/doc/rustzip/mp4-mit.txt"
 test -f "$prefix/share/doc/rustzip/rust-h264-mit.txt"
 test -f "$prefix/share/doc/rustzip/rust-h264-apache-2.0.txt"
 
-PREFIX="$prefix" XDG_DATA_HOME="$xdg" sh "$package/install.sh" --uninstall
+PREFIX="$prefix" XDG_DATA_HOME="$tmp/a different XDG directory" sh "$package/install.sh" --uninstall
 for path in "${installed[@]}"; do
     test ! -e "$path" || { printf 'menu remained after uninstall: %s\n' "$path" >&2; exit 1; }
 done
 test ! -e "$prefix/bin/rustzip"
+test ! -e "$prefix/share/doc/rustzip/updater-licenses.txt"
 test ! -e "$prefix/share/doc/rustzip/format-readers-licenses.txt"
 test ! -e "$prefix/bin/rz-pdf-renderer"
 test ! -e "$prefix/bin/rz-video-renderer"

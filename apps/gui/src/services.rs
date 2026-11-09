@@ -55,22 +55,6 @@ fn today() -> i64 {
         .map_or(0, |d| i64::try_from(d.as_secs() / 86_400).unwrap_or(0))
 }
 
-/// Opens a downloaded installer with the system on platforms that still use one.
-#[cfg(not(target_os = "macos"))]
-fn open_with_system(path: &Path) -> std::io::Result<()> {
-    let (program, target): (&str, PathBuf) = match std::env::consts::OS {
-        "macos" => ("open", path.to_path_buf()),
-        "windows" => ("explorer", path.to_path_buf()),
-        // A tarball is not an installer: show the folder it was saved in.
-        _ => (
-            "xdg-open",
-            path.parent()
-                .map_or_else(|| path.to_path_buf(), Path::to_path_buf),
-        ),
-    };
-    Command::new(program).arg(target).spawn().map(|_| ())
-}
-
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 fn app_bundle_from_executable(executable: &Path) -> Option<PathBuf> {
     let macos = executable.parent()?;
@@ -92,10 +76,9 @@ fn install_macos_update(
     language: &str,
     format: &str,
     sha256: &str,
+    platform: &str,
+    signature: &str,
 ) -> std::io::Result<()> {
-    use std::os::unix::process::CommandExt;
-    use std::process::Stdio;
-
     let executable = std::env::current_exe()?;
     let app = app_bundle_from_executable(&executable).ok_or_else(|| {
         std::io::Error::other("RustZIP must be running from an installed macOS app bundle")
@@ -108,40 +91,32 @@ fn install_macos_update(
         ));
     }
 
-    Command::new(helper)
-        .args(["--app"])
-        .arg(app)
-        .args(["--archive"])
-        .arg(path)
-        .args([
-            "--format",
-            format,
-            "--sha256",
-            sha256,
-            "--version",
-            version,
-            "--language",
-            language,
-            "--pid",
-        ])
-        .arg(std::process::id().to_string())
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .process_group(0)
-        .spawn()
-        .map(|_| ())
-}
-
-#[cfg(not(target_os = "macos"))]
-fn install_macos_update(
-    path: &Path,
-    _version: &str,
-    _language: &str,
-    _format: &str,
-    _sha256: &str,
-) -> std::io::Result<()> {
-    open_with_system(path)
+    let arguments: Vec<std::ffi::OsString> = vec![
+        "--app".into(),
+        app.into_os_string(),
+        "--archive".into(),
+        path.as_os_str().to_owned(),
+        "--format".into(),
+        format.into(),
+        "--sha256".into(),
+        sha256.into(),
+        "--platform".into(),
+        platform.into(),
+        "--signature".into(),
+        signature.into(),
+        "--version".into(),
+        version.into(),
+        "--language".into(),
+        language.into(),
+        "--pid".into(),
+        std::process::id().to_string().into(),
+        "--pid-start".into(),
+        rz_app::update_runtime::current_process_started()
+            .map_err(std::io::Error::other)?
+            .to_string()
+            .into(),
+    ];
+    rz_app::update_runtime::launch_macos_helper(&helper, &arguments).map_err(std::io::Error::other)
 }
 
 /// The largest file unpacked just to be opened for a look.
@@ -270,15 +245,19 @@ fn download_and_handoff_update<F: Fetcher>(
     mut progress: impl FnMut(u64, u64),
     handoff: impl FnOnce(&Path, &str) -> std::io::Result<()>,
 ) -> Result<(), String> {
-    let bytes = updater
-        .download_with_progress(update, &mut progress)
-        .map_err(|e| e.to_string())?;
-    let download_dir = tempfile::Builder::new()
-        .prefix("RustZIP-update-")
-        .tempdir_in(dir)
+    let download_dir = rz_app::update_package::StagingDirectory::create(dir, "RustZIP-update-")
         .map_err(|e| e.to_string())?;
     let file = download_dir.path().join(download_name(&update.asset.url));
-    std::fs::write(&file, bytes).map_err(|e| e.to_string())?;
+    let mut output = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create_new(true)
+        .open(&file)
+        .map_err(|e| e.to_string())?;
+    updater
+        .download_to_file(update, &mut output, &mut progress)
+        .map_err(|e| e.to_string())?;
+    drop(output);
     let download_dir = download_dir.keep();
     match handoff(&file, &update.version.to_string()) {
         Ok(()) => Ok(()),
@@ -292,6 +271,35 @@ fn download_and_handoff_update<F: Fetcher>(
 impl MainView {
     /// Called once after the window is up. Neither check may delay or break startup.
     pub fn start_background_services(&mut self, cx: &mut Context<Self>) {
+        if rz_app::update_runtime::startup_pending() {
+            cx.spawn(async move |this, cx| {
+                let result = cx
+                    .background_executor()
+                    .spawn(async { rz_app::update_runtime::complete_startup() })
+                    .await;
+                let _ = this.update(cx, |this, cx| {
+                    if result.is_ok() {
+                        this.start_background_services(cx);
+                        cx.notify();
+                    } else {
+                        cx.quit();
+                    }
+                });
+            })
+            .detach();
+            return;
+        }
+        if let Some(error) = rz_app::update_runtime::take_startup_error() {
+            self.say(
+                Notice::Error(self.tool_text("update_failed").replace("{error}", &error)),
+                cx,
+            );
+        }
+        cx.background_executor()
+            .spawn(async {
+                rz_app::update_runtime::cleanup_previous_downloads(&UPDATE_PUBLIC_KEY);
+            })
+            .detach();
         self.check_for_update(cx);
         self.report_install(cx);
     }
@@ -351,18 +359,34 @@ impl MainView {
                             }
                         },
                         |path, version| {
+                            #[cfg(target_os = "macos")]
                             let format = if job.asset.platform.ends_with("-zip") {
                                 "zip"
                             } else {
                                 "dmg"
                             };
-                            install_macos_update(
-                                path,
-                                version,
-                                &update_language,
-                                format,
-                                &job.asset.sha256,
-                            )
+                            #[cfg(target_os = "macos")]
+                            {
+                                install_macos_update(
+                                    path,
+                                    version,
+                                    &update_language,
+                                    format,
+                                    &job.asset.sha256,
+                                    &job.asset.platform,
+                                    &job.asset.signature,
+                                )
+                            }
+                            #[cfg(not(target_os = "macos"))]
+                            {
+                                let _ = (version, &update_language);
+                                rz_app::update_runtime::launch_update(
+                                    &job,
+                                    path,
+                                    &UPDATE_PUBLIC_KEY,
+                                )
+                                .map_err(std::io::Error::other)
+                            }
                         },
                     );
                     if result.is_ok() {
@@ -392,23 +416,9 @@ impl MainView {
                         let update = update.clone();
                         let _ = this.update(cx, |this, cx| match result {
                             Ok(()) => {
-                                #[cfg(target_os = "macos")]
-                                {
-                                    this.update = Some(UpdateState::Installing(update.clone()));
-                                    cx.notify();
-                                    this.ensure_polling(cx);
-                                }
-                                #[cfg(not(target_os = "macos"))]
-                                {
-                                    this.update = None;
-                                    this.say(
-                                        Notice::Info(
-                                            this.tool_text("update_installed")
-                                                .replace("{version}", &update.version.to_string()),
-                                        ),
-                                        cx,
-                                    );
-                                }
+                                this.update = Some(UpdateState::Installing(update.clone()));
+                                cx.notify();
+                                this.ensure_polling(cx);
                             }
                             Err(e) => {
                                 this.update = Some(UpdateState::Available(update));

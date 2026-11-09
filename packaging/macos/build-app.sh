@@ -31,6 +31,8 @@ fi
 version="$(awk -F'"' '/^version *=/ {print $2; exit}' "$root/Cargo.toml")"
 
 cd "$root"
+python3 -c 'import re,sys; rust,swift=(open(p,encoding="utf-8").read() for p in sys.argv[1:]); key="".join(re.findall(r"0x([0-9a-fA-F]{2})",rust)).lower(); keys=re.findall(r"let keyHex = \"([0-9a-f]{64})\"",swift); assert len(keys)==2 and keys[-1]==key, "macOS helper update key differs from the Rust client"' \
+    crates/rz-services/src/update_key.in packaging/macos/update-helper.swift
 if [ -n "$target" ]; then
     cargo build --release -p rustzip-gui -p rz-pdf-renderer -p rz-video-renderer --target "$target" "$@"
     bin="$build_root/$target/release/rustzip"
@@ -59,6 +61,7 @@ cp "$pdf_renderer" "$app/Contents/MacOS/rz-pdf-renderer"
 cp "$video_renderer" "$app/Contents/MacOS/rz-video-renderer"
 cp packaging/icons/RustZIP.icns "$app/Contents/Resources/RustZIP.icns"
 cp packaging/licenses/libchm.txt "$app/Contents/Resources/libchm-license.txt"
+cp packaging/licenses/updater.txt "$app/Contents/Resources/updater-licenses.txt"
 cp packaging/licenses/format-readers.txt "$app/Contents/Resources/format-readers-licenses.txt"
 cp packaging/licenses/pbz2.txt "$app/Contents/Resources/pbz2-license.txt"
 cp packaging/licenses/pbz2-notice.txt "$app/Contents/Resources/pbz2-notice.txt"

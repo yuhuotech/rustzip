@@ -20,6 +20,9 @@ pub mod smart;
 pub mod stats;
 pub mod tasks;
 pub mod update;
+pub mod update_install;
+pub mod update_package;
+pub mod update_runtime;
 
 pub use rz_engine::{TransformOptions, TransformReport};
 pub use rz_formats::OutputFormat;

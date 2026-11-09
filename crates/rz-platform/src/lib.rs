@@ -1,5 +1,6 @@
 //! Platform differences live here so the core crates stay platform-independent.
 
+pub mod update;
 mod user_dirs;
 pub use user_dirs::{user_directories, UserDirectory};
 

@@ -219,7 +219,8 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          cargo build --release -p rustzip-gui -p rz-pdf-renderer -p rz-video-renderer
+          cargo build --release -p rustzip-gui -p rz-updater -p rz-pdf-renderer -p rz-video-renderer
+          ./packaging/windows/build-update-zip.ps1 -Version '${{ steps.v.outputs.version }}'
           choco install innosetup -y --no-progress
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=${{ steps.v.outputs.version }}" `
             "/DSourceExe=$PWD\target\release\rustzip.exe" "/DOutDir=$PWD\dist" packaging\windows\rustzip.iss
@@ -271,12 +272,12 @@ jobs:
             "$bin" check-key
           fi
           "$bin" sign "${{ steps.v.outputs.version }}" "${{ matrix.platform }}" "$file" "$url" > "dist/${{ matrix.platform }}.asset.json"
-          if [[ "${{ matrix.platform }}" == macos-* ]]; then
+          if [[ "${{ matrix.platform }}" == macos-* || "${{ matrix.platform }}" == windows-* ]]; then
             shopt -s nullglob
             zip_packages=( dist/RustZIP-*.zip )
             shopt -u nullglob
             if [[ ${#zip_packages[@]} -ne 1 ]]; then
-              echo "Expected one macOS update ZIP, found ${#zip_packages[@]}" >&2
+              echo "Expected one update ZIP, found ${#zip_packages[@]}" >&2
               exit 1
             fi
             zip_file="${zip_packages[0]}"
@@ -440,7 +441,7 @@ jobs:
             fi
             version="$tag_version"
           fi
-          expected_platforms="$(printf '%s\n' linux-x86_64 macos-aarch64 macos-aarch64-zip macos-x86_64 macos-x86_64-zip windows-x86_64 | sort)"
+          expected_platforms="$(printf '%s\n' linux-x86_64 macos-aarch64 macos-aarch64-zip macos-x86_64 macos-x86_64-zip windows-x86_64 windows-x86_64-zip | sort)"
           actual_platforms="$(jq -r '.platform' artifacts/*.asset.json | sort)"
           if [[ "$actual_platforms" != "$expected_platforms" ]]; then
             echo "Expected exactly these release platforms:" >&2

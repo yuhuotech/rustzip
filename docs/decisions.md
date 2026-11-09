@@ -483,3 +483,19 @@
 - 每种 macOS 架构同时发布 DMG 和由 `ditto` 生成的应用 ZIP。DMG 供手动安装；ZIP 供 v0.1.6 及以上版本的应用内更新。正式发布先公证 DMG，再将同一已公证 app 的票据附着到 app，最后生成 ZIP 并验证解包后的签名与票据。
 - 清单保留 `macos-aarch64` / `macos-x86_64` DMG 条目，以兼容只识别 DMG 的 v0.1.5；新增分别独立验签的 `macos-aarch64-zip` / `macos-x86_64-zip` 条目，新客户端优先选择 ZIP，缺失时回退 DMG。因此 v0.1.5 更新到 v0.1.6 使用 DMG，v0.1.6 以后的客户端优先下载 ZIP。
 - helper 重新核验下载文件的 SHA-256 后在普通用户上下文解包 ZIP 或挂载 DMG；需要管理员权限时仅将验证过的 app 交给授权进程，授权进程再次验证签名、Team、Bundle ID 和版本及目标位置中的暂存副本，再执行替换和回滚。
+
+## D70 Windows 与 Linux 应用内自动更新目标
+
+- 用户确认三平台统一为“下载、验签、等待当前任务、自动安装并重启”的体验。Windows 保留 EXE 并新增独立签名的更新 ZIP；Linux 官方 tar 安装采用可恢复的用户级版本化布局。授权、回滚、旧版兼容和包管理器边界见[跨平台自动更新设计](cross-platform-auto-update-design.md)。
+- 这是已确认的目标设计；在 Windows / Linux 更新器及原生平台测试完成前，D8 中记录的现有手动交接行为仍是实际实现。
+
+## D71 独立更新器、事务恢复和启动回执
+
+- 实现 D70：Windows 新客户端优先 `windows-x86_64-zip`，保留原 EXE 键供旧客户端；Linux 官方 tar 安装记录 PREFIX / XDG 数据路径，采用 `lib/rustzip/releases/<随机标识>` 与 `current` 原子切换。包管理器、Flatpak、Snap 和 AppImage 安装不由此更新器覆盖。
+- Windows 独立 `rz-updater` 保留卸载器和非更新文件，在同卷暂存完整目录并记录每次切换；管理员安装由受保护安装位置的 helper 发起 UAC，复制到管理员专用目录后退出释放旧 helper，工作进程再次验签。普通用户控制进程重启 GUI，管理员进程不启动 GUI。
+- 新 GUI 创建窗口后通过回环 IPC 回执，再等待事务提交确认后开放操作；一次性能力令牌存于仅当前用户或管理员可读的目录，命令行仅携带令牌文件位置。PID、启动时间、预期可执行路径与令牌一起核验。进程异常退出时保留持久事务，下一次启动先恢复；超时且新进程不能正常退出时保留备份。
+- 提交确认绑定事务 ID，必须在释放安装锁后送达新窗口，避免刚启动的软件与尚未退出的更新器竞争安装锁。已提交事务的备份清理失败可留待重试，不能阻断已确认的新版本启动。Linux 许可证集合变化随事务维护稳定链接，提交和回滚都仅修改 RustZIP 自有链接。
+- 暂存回收只处理本事务成功创建的目录；同名路径已存在时应直接拒绝，不能在创建失败后删除既有目录。进程存活判断独立于可执行路径读取权限，并以启动时间区分 PID 复用。
+- macOS helper 独立使用 CryptoKit 验证原 Ed25519 消息；同卷 `RENAME_SWAP` 避免 `.app` 不存在的中间窗口。签名、Team、Bundle ID、版本、内部链接、ZIP 展开预算均校验，启动回执替代 Launch Services 接受启动作为成功标准。
+- 重用依赖树中的 `sysinfo` 0.31.4（MIT）、`windows-sys` / `libc`（MIT OR Apache-2.0）、`tar` / `flate2`（MIT OR Apache-2.0）与 `zip`（MIT）；不引入外部安装框架或 GPL/LGPL 静态依赖。平台 API 封装在 `rz-platform`，独立 updater 和 GUI 只经 `rz-app` 调用。
+- 开发与平台验收状态统一记录在 `cross-platform-auto-update-design.md`，代码完成不等于正式签名发布或交互式授权验收完成。

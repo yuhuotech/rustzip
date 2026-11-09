@@ -2802,8 +2802,9 @@ impl MainView {
                 let keep = this
                     .update(cx, |this, cx| {
                         this.refresh_tasks(cx);
-                        let busy = this.task_view.iter().any(|t| !t.state.is_finished())
-                            || this.audio_playing.is_some();
+                        let busy = this.has_pending_work()
+                            || (matches!(&this.update, Some(UpdateState::Installing(_)))
+                                && crate::other_windows_busy(cx.entity_id(), cx));
                         if !busy && matches!(&this.update, Some(UpdateState::Installing(_))) {
                             this.polling = false;
                             cx.quit();
@@ -2821,6 +2822,10 @@ impl MainView {
             }
         })
         .detach();
+    }
+
+    pub(crate) fn has_pending_work(&self) -> bool {
+        self.tasks.snapshot().iter().any(|t| !t.state.is_finished()) || self.audio_playing.is_some()
     }
 
     pub fn cancel_task(&mut self, id: TaskId, cx: &mut Context<Self>) {
@@ -3254,6 +3259,19 @@ impl Render for MainView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = palette(cx);
         let has_archive = self.current().is_some();
+        if rz_app::update_runtime::startup_pending() {
+            return v_flex()
+                .size_full()
+                .items_center()
+                .justify_center()
+                .bg(p.win)
+                .text_color(p.fg2)
+                .child(
+                    self.tool_text("status_installing")
+                        .replace("{version}", env!("CARGO_PKG_VERSION")),
+                )
+                .into_any_element();
+        }
         v_flex()
             .id("main")
             .size_full()
@@ -3344,6 +3362,7 @@ impl Render for MainView {
             .child(self.render_status(cx))
             .when_some(self.render_overlay(window, cx), |d, o| d.child(o))
             .when_some(self.render_toast(cx), |d, t| d.child(t))
+            .into_any_element()
     }
 }
 
@@ -3353,6 +3372,7 @@ impl MainView {
         h_flex()
             .id("empty-titlebar")
             .h(px(TITLEBAR_HEIGHT))
+            .items_center()
             .flex_none()
             .pl(px(84.))
             .pr_2()
@@ -3400,8 +3420,14 @@ impl MainView {
                 ),
             )
             .child(div().flex_1())
-            .child(self.language_picker(cx, "language-picker-titlebar", false))
-            .child(self.settings_button(cx))
+            .child(
+                h_flex()
+                    .h_full()
+                    .items_center()
+                    .gap_1()
+                    .child(self.language_picker(cx, "language-picker-titlebar", false))
+                    .child(self.settings_button(cx)),
+            )
     }
 
     /// A tab for an archive that is open: click to switch, × to close.

@@ -3,7 +3,22 @@
 
 fn main() {
     // Archives named on the command line, or the file manager's Extract here / Compress.
-    let launch = rustzip_gui::launch::parse_args(std::env::args_os().skip(1));
+    let mut arguments: Vec<_> = std::env::args_os().skip(1).collect();
+    if let Err(error) =
+        rz_app::update_runtime::begin_startup(&mut arguments, env!("CARGO_PKG_VERSION"))
+    {
+        eprintln!("RustZIP could not confirm update startup: {error}");
+        std::process::exit(1);
+    }
+    match rz_app::update_runtime::recover_before_startup() {
+        Ok(true) => return,
+        Ok(false) => {}
+        Err(error) => {
+            eprintln!("RustZIP could not recover an interrupted update: {error}");
+            return;
+        }
+    }
+    let launch = rustzip_gui::launch::parse_args(arguments);
     // Without the icon assets every icon in the kit's controls is silently blank.
     let app = gpui_kit::application().with_assets(rustzip_gui::assets::AppAssets);
     let opened_by_system = rustzip_gui::listen_for_open_urls(&app);

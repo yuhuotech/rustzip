@@ -2866,28 +2866,40 @@ fn language_and_settings_controls_stay_in_the_top_row_after_opening_an_archive(
         "empty"
     };
     cx.update_window(handle.into(), |_, window, _| {
-        assert!(window.within(empty_header).find("open-settings").visible());
-        assert!(
-            window
-                .within(empty_header)
-                .find("language-picker-titlebar")
-                .visible()
-        );
+        assert_titlebar_controls_centered(window, empty_header);
     })
     .unwrap();
 
     open_sync(cx, handle, &view, &archive, None);
     cx.update_window(handle.into(), |_, window, _| {
-        assert!(window.within("tabs").find("open-settings").visible());
-        assert!(
-            window
-                .within("tabs")
-                .find("language-picker-titlebar")
-                .visible()
-        );
+        assert_titlebar_controls_centered(window, "tabs");
         assert!(window.within("toolbar").try_find("open-settings").is_none());
     })
     .unwrap();
+}
+
+fn assert_titlebar_controls_centered(window: &mut gpui_kit::Window, titlebar: &'static str) {
+    if !rustzip_gui::view::TABS_IN_TITLEBAR {
+        assert!(window.within(titlebar).find("open-settings").visible());
+        assert!(
+            window
+                .within(titlebar)
+                .find("language-picker-titlebar")
+                .visible()
+        );
+        return;
+    }
+    // The 38pt title bar reserves its final point for the bottom separator.
+    let center_y = window.bounds().origin.y + gpui_kit::px(18.5);
+    for control in ["language-picker-titlebar", "open-settings"] {
+        let inspector = window.within(titlebar).find(control);
+        assert!(inspector.visible(), "{control} is not visible");
+        let bounds = inspector.bounds();
+        assert!(
+            (bounds.center().y - center_y).abs() <= gpui_kit::px(0.5),
+            "{control} is not vertically centered in {titlebar}: {bounds:?}"
+        );
+    }
 }
 
 #[gpui_kit::test]

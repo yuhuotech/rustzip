@@ -7,7 +7,7 @@
 use rz_app::stats::{Report, Sender};
 use rz_app::update::Fetcher;
 use rz_core::{Error, Result};
-use std::io::Read;
+use std::io::{Read, Write};
 use std::time::Duration;
 use ureq::Agent;
 
@@ -63,19 +63,32 @@ impl Fetcher for HttpFetcher {
         max_bytes: u64,
         progress: &mut dyn FnMut(u64),
     ) -> Result<Vec<u8>> {
+        let mut bytes = Vec::new();
+        self.get_to_writer(url, max_bytes, &mut bytes, progress)?;
+        Ok(bytes)
+    }
+
+    fn get_to_writer(
+        &self,
+        url: &str,
+        max_bytes: u64,
+        output: &mut dyn Write,
+        progress: &mut dyn FnMut(u64),
+    ) -> Result<()> {
         let mut response = self.agent.get(url).call().map_err(net_error)?;
         let mut reader = response.body_mut().with_config().limit(max_bytes).reader();
-        let mut bytes = Vec::new();
+        let mut total = 0u64;
         let mut chunk = [0; DOWNLOAD_CHUNK_BYTES];
         loop {
             let count = reader.read(&mut chunk).map_err(net_error)?;
             if count == 0 {
                 break;
             }
-            bytes.extend_from_slice(&chunk[..count]);
-            progress(bytes.len() as u64);
+            output.write_all(&chunk[..count]).map_err(Error::Io)?;
+            total += count as u64;
+            progress(total);
         }
-        Ok(bytes)
+        Ok(())
     }
 }
 
